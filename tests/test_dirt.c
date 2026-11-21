@@ -9,8 +9,8 @@ static bool init_world(Map *map, Dirt *dirt)
     if (!map_init(map, 16, 16, 1) || !dirt_init(dirt, 16, 16, 1)) {
         return false;
     }
-    map->terrain[map_index(map, 0, 0, 0)] = TERRAIN_SHALLOW_WATER;
-    map->terrain[map_index(map, 1, 0, 0)] = TERRAIN_DEEP_WATER;
+    map->water[map_index(map, 0, 0, 0)] = WATER_SHALLOWS_MM;
+    map->water[map_index(map, 1, 0, 0)] = WATER_DEEP_MM;
     map->rock[map_index(map, 2, 0, 0)] = ROCK_GRANITE;
     return true;
 }

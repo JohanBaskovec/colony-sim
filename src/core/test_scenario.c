@@ -17,10 +17,11 @@ const char *test_scenario_name_key(TestScenario scenario)
     return (unsigned)scenario < TEST_SCENARIO_COUNT ? NAME_KEYS[scenario] : NULL;
 }
 
-/* The whole world level is bare soil, open air above it. */
+/* The whole world level is bare dry soil, open air above it. */
 static void flatten(Game *game)
 {
     Map *map = &game->map;
+    memset(map->water, 0, map_tile_count(map) * sizeof(*map->water));
     for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_OPEN;
         map->rock[i] = ROCK_NONE;

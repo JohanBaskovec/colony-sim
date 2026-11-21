@@ -11,8 +11,6 @@ format.decimal_separator = ,
 game.title = Thawmoor
 
 # Terrain
-terrain.deep_water = Eau profonde
-terrain.shallow_water = Eau peu profonde
 terrain.sand = Sable
 terrain.soil = Terre
 terrain.rich_soil = Terre fertile
@@ -22,6 +20,13 @@ terrain.open = Vide
 terrain.foliage = Branchages
 terrain.foliage_medium = Branchages fins
 terrain.foliage_sparse = Branchages épars
+terrain.silt = Vase
+water.class.dry = sèche
+water.class.wet = une pellicule
+water.class.puddle = une flaque
+water.class.shallows = peu profonde
+water.class.wading = jusqu’à la taille
+water.class.deep = profonde
 
 # Roche naturelle
 rock.granite = Granite
@@ -442,6 +447,7 @@ hud.seen.hours.other = il y a {0} heures
 hud.seen.days.one = il y a {0} jour
 hud.seen.days.other = il y a {0} jours
 hud.tile.terrain = Terrain : {0}
+hud.tile.water = Eau : {0} cm ({1})
 hud.tile.slope = Pente : mène au niveau du dessus
 hud.tile.rock = Paroi rocheuse : {0}
 hud.tile.plant = Plante : {0} ({1} % de croissance)

@@ -139,6 +139,7 @@ static bool init_bare_game(Game *game, uint64_t seed)
     }
     for (size_t i = 0; i < map_level_tile_count(&game->map); i++) {
         game->map.terrain[i] = TERRAIN_SOIL;
+        game->map.water[i] = 0;
         memset(&game->map.plants[i], 0, sizeof(game->map.plants[i]));
     }
     /* No rock anywhere: none left hanging over the cleared level to cave in. */

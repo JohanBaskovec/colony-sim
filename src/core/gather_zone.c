@@ -262,8 +262,9 @@ bool gather_zone_can_cover(const Map *map, int x, int y, int z)
     Terrain terrain = (Terrain)map->terrain[index];
     /* The foot of a trunk (ground under the wood) is felled from beside it. */
     RockType rock = (RockType)map->rock[index];
-    return (rock == ROCK_NONE || rock == ROCK_WOOD) && terrain != TERRAIN_DEEP_WATER &&
-           terrain != TERRAIN_OPEN && !structure_blocks((StructureType)map->structure[index]);
+    return (rock == ROCK_NONE || rock == ROCK_WOOD) &&
+           water_class_of(map_water_depth_at(map, index)) < WATER_DEEP && terrain != TERRAIN_OPEN &&
+           !structure_blocks((StructureType)map->structure[index]);
 }
 
 bool gather_stone_ground(const Map *map, int x, int y, int z)

@@ -6,7 +6,7 @@
  * width + x, see map_index()).
  *
  * A tile is solid (rock: a wall, or the inside of a hill), open with a floor
- * (its terrain: soil, sand, water...) or open without a floor
+ * (its terrain: soil, sand, silt...) or open without a floor
  * (TERRAIN_OPEN: the air above lower ground, where nobody can stand). One
  * walks on floors; natural slopes lead up to the level above (see
  * map_can_climb()). A floor or rock anywhere above a tile covers it (a
@@ -17,6 +17,11 @@
  * its own (ROCK_WOOD), their foliage a floor of branches (TERRAIN_FOLIAGE)
  * around the trunk, walked on, that one climbs up to along the trunk (see
  * map_can_climb_tree()).
+ *
+ * Water is a quantity, never a terrain (docs/WATER.md): every open tile holds
+ * a depth of free water (`Map.water`, in mm), a lake being a hollow full of
+ * it over a floor of silt. The rest of the simulation reads depth classes
+ * (WaterClass, map_water_class()).
  */
 #ifndef COLONY_CORE_MAP_H
 #define COLONY_CORE_MAP_H
@@ -34,8 +39,7 @@
 #define MAP_MAX_LEVELS 48
 
 typedef enum Terrain {
-    TERRAIN_DEEP_WATER,
-    TERRAIN_SHALLOW_WATER,
+    TERRAIN_SILT, /* The bed of lakes and rivers: fine mud, under water or left by it. */
     TERRAIN_SAND,
     TERRAIN_SOIL,
     TERRAIN_RICH_SOIL,
@@ -447,6 +451,11 @@ typedef struct Map {
     /* Natural slopes: non-zero where the ground rises to the level above
      * (see map_can_climb()). */
     uint8_t *slope;
+    /* Free water per tile, in mm over its square metre (docs/WATER.md §2):
+     * 0 to WATER_CELL_FULL in an open tile, held by its floor (or by the
+     * full tile under it when it has none). Change it with map_set_water()
+     * once a game runs. */
+    uint16_t *water;
     int slope_count; /* Slope tiles. */
     Plant *plants;
     /* Stones lying about each tile, that gathering takes one by one: cobbles
@@ -529,10 +538,10 @@ typedef struct Map {
      * the latest such change. Not part of map_hash(). */
     uint32_t *light_solid_stamps;
     uint32_t light_solid_revision;
-    /* Bumped whenever a tile turns into water or out of it (map_set_terrain()),
-     * or the layers were written directly (map_topology_changed()): the
-     * distance to open water (core/soil.h) compares this. Not part of
-     * map_hash(). */
+    /* Bumped whenever a tile turns into open water or out of it
+     * (map_is_water(), map_set_water()), or the layers were written directly
+     * (map_topology_changed()): the distance to open water (core/soil.h)
+     * compares this. Not part of map_hash(). */
     uint32_t water_revision;
     /* How bare the crowns of the deciduous trees are, 0 (in full leaf) to
      * MAP_BARE_STEPS (bare branches), set by the game from the climate (see
@@ -1148,11 +1157,50 @@ void map_set_stones_at(Map *map, size_t index, int cobbles, int flint);
  * (their trunks and foliage). */
 int map_ground_level(const Map *map, int x, int y);
 
-/* Shallow or deep water (false out of bounds). */
+/* Water (docs/WATER.md §2). A tile full of water holds WATER_CELL_FULL mm;
+ * the classes of the depth over a floor start at these depths. */
+#define WATER_CELL_FULL 2000
+#define WATER_WET_MM 3
+#define WATER_PUDDLE_MM 20
+#define WATER_SHALLOWS_MM 100
+#define WATER_WADING_MM 500
+#define WATER_DEEP_MM 1200
+
+typedef enum WaterClass {
+    WATER_DRY,
+    WATER_WET,      /* A film: the ground is soaked. */
+    WATER_PUDDLE,   /* Drunk from, walked through a little slower. */
+    WATER_SHALLOWS, /* Open water: what animals drink, walked at ×3. */
+    WATER_WADING,   /* Up to the waist: walked at ×6. */
+    WATER_DEEP,     /* Over a settler's chest: nobody walks there. */
+    WATER_CLASS_COUNT
+} WaterClass;
+
+/* The class of a depth in mm. */
+WaterClass water_class_of(uint32_t depth);
+/* The walking cost multiplier of a class (0: impassable). */
+float water_move_factor(WaterClass water);
+/* Translation key of a class's name ("Shallows"...). */
+const char *water_class_key(WaterClass water);
+
+/* The free water of a tile, in mm (0 out of bounds). */
+int map_water(const Map *map, int x, int y, int z);
+/* The depth of water over the tile: its own water, and that of the tiles
+ * above while the one under is full (a lake deeper than a level). */
+uint32_t map_water_depth(const Map *map, int x, int y, int z);
+uint32_t map_water_depth_at(const Map *map, size_t index);
+WaterClass map_water_class(const Map *map, int x, int y, int z);
+/* Sets the free water of a tile (clamped to 0 .. WATER_CELL_FULL; nothing on
+ * rock), keeping the revisions up to date: where one can walk, where open
+ * water is. */
+void map_set_water(Map *map, int x, int y, int z, int mm);
+
+/* Open water: Shallows or deeper (false out of bounds). */
 bool map_is_water(const Map *map, int x, int y, int z);
+bool map_is_water_at(const Map *map, size_t index);
 
 /* Whether a settler standing on this tile can drink: the tile is passable and
- * is shallow water or touches water (4-neighborhood). */
+ * is open water or touches it (4-neighborhood). */
 bool map_is_drinking_spot(const Map *map, int x, int y, int z);
 
 #endif /* COLONY_CORE_MAP_H */

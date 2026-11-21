@@ -14,8 +14,8 @@ coming out again (a water table, springs, wells, damp galleries); and a
 moisture of their own for items (grass that dries into hay, wood that
 seasons, a bundle of twigs that gets soaked in the rain).
 
-Status: design. Nothing of it is built yet. Values marked *(tuning)* are
-first guesses.
+Status: step W1 is built (the water layer at rest, §10); the rest is
+design. Values marked *(tuning)* are first guesses.
 
 ## 1. Principles
 
@@ -95,12 +95,15 @@ depth wavering at a boundary does not change the paths every tick
 | Puddle | 2 to 10 cm | ×1.5 | yes | |
 | Shallows | 10 to 50 cm | ×3 (today's shallow water) | yes | settlers and items get wet |
 | Wading | 50 to 120 cm | ×6 | yes | wet to the waist, nothing carried gets dry |
-| Deep | ≥ 120 cm (leaves at < 100) | impassable (swimming later, §8) | from the bank | |
+| Deep | ≥ 120 cm (leaves at < 100 from W2) | impassable (swimming later, §8) | from the bank | |
 
-`map_is_water()` becomes "Shallows or deeper": what animals drink, what the
-temperature counts as open water, what the banks of the soil look for until
-step W4 replaces them (§5.4). Puddles can be drunk too (a thirsty settler
-in a storm), but searches for water prefer the Shallows *(tuning)*.
+`map_is_water()` becomes "Shallows or deeper": what animals and settlers
+drink, what the temperature counts as open water, what the banks of the soil
+look for until step W4 replaces them (§5.4). From W3, when rain leaves
+puddles, puddles can be drunk too (a thirsty settler in a storm), but
+searches for water prefer the Shallows *(tuning)*. The hysteresis of the
+classes comes with W2: in W1 water does not move, so the classes are worked
+out from the depth alone.
 
 The classes and the walking costs are the only things the pathfinder and
 the connectivity regions see. `Map.topology_revision` is bumped only when a
@@ -642,11 +645,11 @@ disappear (no saves yet).
 Each step is tested, measured against the baseline (`bench_simulation`,
 `--bench-render`), and leaves the game playable.
 
-1. **W1, the water layer, at rest.** `Map.water` replaces
+1. **W1, the water layer, at rest** (done). `Map.water` replaces
    `TERRAIN_SHALLOW_WATER` and `TERRAIN_DEEP_WATER`, which go (a silt
    terrain for the beds, sand in the shallows). World generation fills the
-   hollows to a level (a lake's surface 50 cm over its shallows'
-   floor, deep water 2.5 m) with water at rest. The beaches move up to the
+   hollows to a level (a lake's surface 40 cm over its shallows'
+   floor, deep water 2.4 m) with water at rest. The beaches move up to the
    plains' level: today they lie on level −1 with the shallows, and water
    at rest has one surface over a whole level, so it would cover them; the
    sand ring of the shore is now on level 0, its slopes leading down into

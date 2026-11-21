@@ -333,6 +333,26 @@ static void temperature_text(char *out, size_t size, float celsius, int decimals
     TR_FORMAT(out, size, tr("unit.celsius"), number);
 }
 
+/* The water on a tile, from the bed of a lake deeper than a level: what lies
+ * over its floor, or over the floor below for a tile full of water over a
+ * drop (docs/WATER.md §2.2). */
+static void add_water_line(Panel *panel, const Map *map, int x, int y, int z)
+{
+    int bed = z;
+    while (!map_has_floor(map, x, y, bed) && bed > 0 &&
+           map_water(map, x, y, bed - 1) >= WATER_CELL_FULL) {
+        bed--;
+    }
+    uint32_t depth = map_water_depth(map, x, y, bed);
+    if (depth < WATER_WET_MM) {
+        return;
+    }
+    char number[16];
+    tr_integer(number, sizeof(number), (long long)((depth + 5) / 10));
+    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.water"), number,
+              tr(water_class_key(water_class_of(depth))));
+}
+
 /* With the temperature view on, the temperature felt on the tile under the mouse
  * (the warmth of fires included, as drawn); with the light view, its light now
  * and the best it gets today; with the moisture view, how wet its ground is.
@@ -524,10 +544,12 @@ static void build_tile_panel(App *app, Panel *panel)
     }
 
     const TerrainDef *terrain = terrain_def((Terrain)map->terrain[index]);
-    /* Up a trunk, no terrain to speak of. */
-    if (map->terrain[index] != TERRAIN_OPEN || map->rock[index] != ROCK_WOOD) {
+    /* Up a trunk or on the surface of a lake over a drop, no terrain to speak of. */
+    bool open = map->terrain[index] == TERRAIN_OPEN;
+    if (!open || (map->rock[index] != ROCK_WOOD && map->water[index] == 0)) {
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.terrain"), tr(terrain->name_key));
     }
+    add_water_line(panel, map, x, y, z);
     if (map_is_slope(map, x, y, z)) {
         panel_add_text(panel, tr("hud.tile.slope"));
     }

@@ -2371,7 +2371,7 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z)
     }
     size_t index = map_index(map, x, y, z);
     if (map->rock[index] != ROCK_NONE || map->structure[index] != STRUCTURE_NONE ||
-        map_is_slope(map, x, y, z) ||
+        map_is_slope(map, x, y, z) || map_is_water_at(map, index) ||
         terrain_def((Terrain)map->terrain[index])->fertility <
             plant_def(PLANT_OAK)->min_fertility) {
         return false;

@@ -15,7 +15,7 @@ static bool init_split_map(Map *map)
     for (int y = 0; y < 16; y++) {
         map_set_rock(map, 6, y, 0, ROCK_GRANITE);
     }
-    map_set_terrain(map, 0, 0, 0, TERRAIN_DEEP_WATER);
+    map_set_water(map, 0, 0, 0, WATER_DEEP_MM);
     return true;
 }
 
@@ -77,7 +77,7 @@ static void test_regions_across_levels(void)
     Regions regions;
     REQUIRE(init_hill_map(&map));
     REQUIRE(regions_init(&regions, 16, 16, 2));
-    map_set_terrain(&map, 12, 12, 1, TERRAIN_SHALLOW_WATER);
+    map_set_water(&map, 12, 12, 1, WATER_SHALLOWS_MM);
     regions_update(&regions, &map);
     CHECK(regions_current(&regions, &map));
     CHECK_EQ_UINT(regions.count, 2); /* The plains and the hilltop: a cliff between. */
@@ -288,7 +288,7 @@ static void test_incremental_updates_match_rebuilds(void)
             }
         }
     }
-    map_set_terrain(&map, 12, 12, 0, TERRAIN_SHALLOW_WATER);
+    map_set_water(&map, 12, 12, 0, WATER_SHALLOWS_MM);
     regions_update(&regions, &map);
 
     bool agree = true;
@@ -350,7 +350,7 @@ static void test_drinking_spots_per_region(void)
     CHECK(regions_has_drinking_spot(&regions, &map, REGION_NONE)); /* Unknown. */
     CHECK(regions_has_drinking_spot(&regions, &map, 99));
 
-    map_set_terrain(&map, 10, 3, 0, TERRAIN_SHALLOW_WATER);
+    map_set_water(&map, 10, 3, 0, WATER_SHALLOWS_MM);
     regions_update(&regions, &map);
     CHECK(regions_has_drinking_spot(&regions, &map, regions_at(&regions, &map, 9, 2, 0)));
     regions_free(&regions);

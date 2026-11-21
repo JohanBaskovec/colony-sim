@@ -2,7 +2,8 @@
  * Procedural map generation. Fully deterministic: the same parameters always
  * produce the same map (see map_hash()). The relief decides the map's depth:
  * plains on Map.surface_level, with `underground_levels` below; lakes and
- * rivers in hollows (shallows and beaches one level down, deep water two);
+ * rivers in hollows (shallows one level down, deep water two, filled with
+ * water at rest over a bed of silt; beaches of sand on the plains around);
  * hills rising level by level with natural slopes, rock outcrops one level
  * higher behind cliffs. The inside of the ground is earth near the surface
  * and rock deeper down (rock all the way under stony ground). Open levels
@@ -45,6 +46,11 @@
 #define WORLDGEN_MAX_UNDERGROUND 16
 _Static_assert(WORLDGEN_MAX_UNDERGROUND + 1 + WORLDGEN_LEVELS_ABOVE <= MAP_MAX_LEVELS,
                "the map has room for the deepest world");
+/* The surface of lakes over the floor of their shallows, in mm (Shallows:
+ * waded at ×3, as shallow water always was); deep water fills the level of
+ * its bed and this much of the next. A flat world's deep water. */
+#define WORLDGEN_LAKE_MM 400
+#define WORLDGEN_FLAT_DEEP_MM 1500
 /* Under the ground's surface, earth for this many levels, then rock (under
  * soft ground; stony ground is rock all the way down). */
 #define WORLDGEN_EARTH_LEVELS 2

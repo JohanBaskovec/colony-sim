@@ -115,13 +115,13 @@ static const char *const ANIMAL_POSE_NAMES[ANIMAL_POSE_COUNT] = {
 #define TILE_SPRITE_PADDING SPRITE_ALIGN
 #define TILE_SPRITE_SIZE (SPRITE_PIXELS_PER_TILE + 2 * TILE_SPRITE_PADDING)
 static const Terrain GROUND_TERRAINS[] = {
-    TERRAIN_DEEP_WATER, TERRAIN_SHALLOW_WATER, TERRAIN_SOIL, TERRAIN_RICH_SOIL, TERRAIN_SAND,
-    TERRAIN_GRAVEL, TERRAIN_ROUGH_STONE, TERRAIN_FOLIAGE, TERRAIN_GRASS_ROOF,
-    TERRAIN_FOLIAGE_MEDIUM, TERRAIN_FOLIAGE_SPARSE,
-    /* The bare crowns of winter (see sprite_ground_bare()): no terrain of their own. */
-    TERRAIN_COUNT, TERRAIN_COUNT, TERRAIN_COUNT};
-static const char *const GROUND_NAMES[] = {"deep_water",
-                                           "shallow_water",
+    TERRAIN_SILT, TERRAIN_SOIL, TERRAIN_RICH_SOIL, TERRAIN_SAND, TERRAIN_GRAVEL,
+    TERRAIN_ROUGH_STONE, TERRAIN_FOLIAGE, TERRAIN_GRASS_ROOF, TERRAIN_FOLIAGE_MEDIUM,
+    TERRAIN_FOLIAGE_SPARSE,
+    /* The bare crowns of winter (see sprite_ground_bare()) and water (see
+     * sprite_water()): no terrain of their own. */
+    TERRAIN_COUNT, TERRAIN_COUNT, TERRAIN_COUNT, TERRAIN_COUNT, TERRAIN_COUNT};
+static const char *const GROUND_NAMES[] = {"silt",
                                            "soil",
                                            "rich_soil",
                                            "sand",
@@ -133,11 +133,14 @@ static const char *const GROUND_NAMES[] = {"deep_water",
                                            "foliage_sparse",
                                            "foliage_bare",
                                            "foliage_medium_bare",
-                                           "foliage_sparse_bare"};
+                                           "foliage_sparse_bare",
+                                           "shallow_water",
+                                           "deep_water"};
 static const RockType WALL_ROCKS[] = {ROCK_GRANITE, ROCK_SANDSTONE, ROCK_EARTH};
 static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth"};
-#define GROUND_SPRITE_COUNT 14
-#define BARE_CROWN_FIRST 11 /* Index of the first bare crown among the ground sprites. */
+#define GROUND_SPRITE_COUNT 15
+#define BARE_CROWN_FIRST 10 /* Index of the first bare crown among the ground sprites. */
+#define WATER_FIRST 13      /* Index of shallow water, then deep, among the ground sprites. */
 #define WALL_SPRITE_COUNT 3
 
 enum {
@@ -291,6 +294,11 @@ SpriteId sprite_ground(Terrain terrain)
         }
     }
     return -1;
+}
+
+SpriteId sprite_water(bool deep)
+{
+    return GROUND_FIRST + WATER_FIRST + (deep ? 1 : 0);
 }
 
 SpriteId sprite_ground_bare(Terrain terrain)

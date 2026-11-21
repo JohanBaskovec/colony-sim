@@ -68,7 +68,7 @@ themselves still know everything (step 3); the rest is design. Values marked
 |-------|-------|
 | Rock, earth, the trunk of a tree, walls | Blocked. The face of the wall is seen (the tile is known), not what lies behind |
 | Doors (a screen of branches) | Blocked, like a wall |
-| A floor (ground, a built floor, a roof, dense foliage, deep or shallow water) | A plane at the bottom of its tile: blocks sight between its level and the one below, from above and from below |
+| A floor (ground, a built floor, a roof, dense foliage, the bed under water) | A plane at the bottom of its tile: blocks sight between its level and the one below, from above and from below |
 | Open space | Seen through |
 | Thin and sparse foliage | Seen through (as drawn: `map_sees_through_at()`) |
 | Plants on the ground, items, settlers, ladders, props, workstations, beds | Seen through |

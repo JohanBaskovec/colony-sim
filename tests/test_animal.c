@@ -27,10 +27,12 @@ static bool init_flat_game(Game *game)
     Map *map = &game->map;
     for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_OPEN;
+        map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_SOIL;
+        map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE) | ITEM_TYPE_BIT(ITEM_FLINT));
         map_clear_litter_at(map, i,
@@ -487,7 +489,7 @@ static void test_drinking(void)
 
     for (int y = 30; y <= 33; y++) {
         for (int x = 30; x <= 33; x++) {
-            map_set_terrain(&game.map, x, y, 0, TERRAIN_DEEP_WATER);
+            map_set_water(&game.map, x, y, 0, WATER_DEEP_MM);
         }
     }
     deer->search_cooldown[ANIMAL_SEARCH_WATER] = 0;

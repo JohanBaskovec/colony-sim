@@ -108,16 +108,26 @@ static void place_stones(Map *map, int x, int y, int z, Rng *rng, int chance)
 }
 
 /* The sand along the water, up to this elevation above the water level, lies
- * in the hollow of the water, one level down (see ground_height()). */
+ * on the plains around the hollow of the water (see ground_height()). */
 #define BEACH_ELEVATION 0.03f
+/* Deep water below this elevation under the water level, shallows above. */
+#define DEEP_WATER_BELOW 0.08f
+
+/* The water of a column: none, shallows (a hollow one level down) or deep
+ * water (two levels down). */
+typedef enum Lake { LAKE_NONE, LAKE_SHALLOWS, LAKE_DEEP } Lake;
+
+static Lake pick_lake(const WorldGenParams *params, float elevation)
+{
+    return elevation < params->water_level - DEEP_WATER_BELOW ? LAKE_DEEP
+           : elevation < params->water_level                  ? LAKE_SHALLOWS
+                                                              : LAKE_NONE;
+}
 
 static Terrain pick_terrain(const WorldGenParams *params, float elevation, float moisture)
 {
-    if (elevation < params->water_level - 0.08f) {
-        return TERRAIN_DEEP_WATER;
-    }
-    if (elevation < params->water_level) {
-        return TERRAIN_SHALLOW_WATER;
+    if (pick_lake(params, elevation) != LAKE_NONE) {
+        return TERRAIN_SILT; /* The bed of the water. */
     }
     if (elevation < params->water_level + BEACH_ELEVATION) {
         return TERRAIN_SAND;
@@ -154,14 +164,12 @@ static float glade_share(float glade)
 }
 
 /* How far each column is from open water (Chebyshev, capped at
- * SOIL_WET_FAR), from the surface terrains. */
-static void water_distances(const uint8_t *surfaces, int width, int height, uint8_t *out)
+ * SOIL_WET_FAR), from the water of the columns (Lake). */
+static void water_distances(const uint8_t *lakes, int width, int height, uint8_t *out)
 {
     size_t columns = (size_t)width * (size_t)height;
     for (size_t c = 0; c < columns; c++) {
-        Terrain terrain = (Terrain)surfaces[c];
-        out[c] =
-            terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER ? 0 : SOIL_WET_FAR;
+        out[c] = lakes[c] != LAKE_NONE ? 0 : SOIL_WET_FAR;
     }
     /* Two sweeps over the eight neighbors: forward, then backward. */
     for (int pass = 0; pass < 2; pass++) {
@@ -547,13 +555,12 @@ static void place_shore_plants(Map *map, Rng *rng, uint32_t reed_seed, float fre
         for (int x = 0; x < map->width; x++) {
             int z = map_ground_level(map, x, y);
             size_t index = map_index(map, x, y, z);
-            Terrain terrain = (Terrain)map->terrain[index];
             Plant *plant = &map->plants[index];
-            if (terrain == TERRAIN_DEEP_WATER || map->rock[index] != ROCK_NONE ||
+            if (map_water_class(map, x, y, z) > WATER_SHALLOWS || map->rock[index] != ROCK_NONE ||
                 plant_is_tree(plant->type) || !by_water(map, x, y, z)) {
                 continue;
             }
-            bool shallows = terrain == TERRAIN_SHALLOW_WATER;
+            bool shallows = map_is_water_at(map, index);
             if (shallows) { /* Only at the edge: next to the land. */
                 bool shore = false;
                 for (int d = 0; d < 4 && !shore; d++) {
@@ -774,20 +781,19 @@ static float level_step(const WorldGenParams *params, float top)
 }
 
 /* Level of the ground of a column, from the plains' (0): lakes and rivers
- * lie in hollows, their shallows and beaches one level down, deep water two;
+ * lie in hollows, their shallows one level down, deep water two (beaches stay
+ * on the plains: water at rest has one surface over a level);
  * the ground rises one level every `step` of elevation above `hill_level`
  * (see level_step()); rock outcrops stand one level above the ground around
  * them, behind cliffs. */
-static int ground_height(const WorldGenParams *params, float step, float elevation, Terrain surface)
+static int ground_height(const WorldGenParams *params, float step, float elevation, Terrain surface,
+                         Lake lake)
 {
     if (params->flat) {
         return 0;
     }
-    if (surface == TERRAIN_DEEP_WATER) {
-        return -2;
-    }
-    if (elevation < params->water_level + BEACH_ELEVATION) { /* Shallows and beaches. */
-        return -1;
+    if (lake != LAKE_NONE) {
+        return lake == LAKE_DEEP ? -2 : -1;
     }
     if (elevation < params->hill_level || step <= 0.0f) {
         return surface == TERRAIN_ROUGH_STONE ? 1 : 0;
@@ -797,6 +803,25 @@ static int ground_height(const WorldGenParams *params, float step, float elevati
         height++;
     }
     return height;
+}
+
+/* The water of a lake over its bed at `index`, at rest: every lake's surface
+ * WORLDGEN_LAKE_MM over the floor of its shallows, so deep water fills the
+ * level of its bed and that much of the level above (docs/WATER.md W1). A
+ * flat world has a single level: its deep water is WORLDGEN_FLAT_DEEP_MM. */
+static void fill_lake(Map *map, const WorldGenParams *params, size_t index, Lake lake)
+{
+    if (lake == LAKE_SHALLOWS) {
+        map->water[index] = WORLDGEN_LAKE_MM;
+    } else if (params->flat) {
+        map->water[index] = WORLDGEN_FLAT_DEEP_MM;
+    } else {
+        map->water[index] = WATER_CELL_FULL;
+        size_t above = index + map_level_tile_count(map);
+        if (above < map_tile_count(map)) {
+            map->water[above] = WORLDGEN_LAKE_MM;
+        }
+    }
 }
 
 /* Whether the ground of a column is stony: its inside is rock, not earth, and
@@ -809,14 +834,15 @@ static bool stony_column(Terrain surface)
 /* Natural slopes: where soft ground or shallow water rises one level to an
  * orthogonal neighbor (not a rock outcrop), the lower tile slopes up to it.
  * Rock outcrops, deep water and steeper rises stay cliffs. */
-static void place_slopes(Map *map, const uint8_t *heights, const uint8_t *surfaces)
+static void place_slopes(Map *map, const uint8_t *heights, const uint8_t *surfaces,
+                         const uint8_t *lakes)
 {
     static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
             size_t column = (size_t)y * (size_t)map->width + (size_t)x;
             Terrain surface = (Terrain)surfaces[column];
-            if (surface == TERRAIN_ROUGH_STONE || surface == TERRAIN_DEEP_WATER) {
+            if (surface == TERRAIN_ROUGH_STONE || lakes[column] == LAKE_DEEP) {
                 continue; /* Shallows slope up their banks: one wades out. */
             }
             for (int d = 0; d < 4; d++) {
@@ -967,7 +993,8 @@ static bool understory_ground(const Map *map, size_t index)
     case TERRAIN_GRAVEL: break;
     default: return false;
     }
-    return map->rock[index] == ROCK_NONE && map->plants[index].type == PLANT_NONE;
+    return map->rock[index] == ROCK_NONE && map->plants[index].type == PLANT_NONE &&
+           map->water[index] == 0;
 }
 
 static void place_understory(Map *map, const WorldGenParams *params, const float *moistures,
@@ -1059,13 +1086,15 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
     float *moistures = malloc(columns * sizeof(*moistures));
     float *forests = malloc(columns * sizeof(*forests));
     uint8_t *shores = malloc(columns);
+    uint8_t *lakes = malloc(columns);
     if (heights == NULL || surfaces == NULL || moistures == NULL || forests == NULL ||
-        shores == NULL) {
+        shores == NULL || lakes == NULL) {
         free(heights);
         free(surfaces);
         free(moistures);
         free(forests);
         free(shores);
+        free(lakes);
         return false;
     }
     /* The plains' level: the levels below are underground. */
@@ -1091,15 +1120,18 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
             float moisture =
                 stretch(noise_fbm2d(moisture_seed, nx * 1.3f, ny * 1.3f, 4, 2.0f, 0.5f));
             Terrain surface = pick_terrain(params, elevation, moisture);
-            int height = clampi(surface_level + ground_height(params, step, elevation, surface), 0,
-                                MAP_MAX_LEVELS - 1);
+            Lake lake = pick_lake(params, elevation);
+            int height =
+                clampi(surface_level + ground_height(params, step, elevation, surface, lake), 0,
+                       MAP_MAX_LEVELS - 1);
             heights[column] = (uint8_t)height;
             surfaces[column] = (uint8_t)surface;
+            lakes[column] = (uint8_t)lake;
             moistures[column] = moisture;
             highest = height > highest ? height : highest;
         }
     }
-    water_distances(surfaces, params->width, params->height, shores);
+    water_distances(lakes, params->width, params->height, shores);
     /* Open levels over the highest ground: room for the tallest trees, and
      * for roofs everywhere. A world with relief has WORLDGEN_LEVELS_ABOVE levels
      * over the plains whatever its hills; a flat one only what it needs. */
@@ -1112,6 +1144,7 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
         free(moistures);
         free(forests);
         free(shores);
+        free(lakes);
         return false;
     }
     map->surface_level = surface_level;
@@ -1146,6 +1179,17 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
 
             size_t index = map_index(map, x, y, z);
             map->terrain[index] = (uint8_t)terrain;
+            float forest = stretch(noise_fbm2d(forest_seed, nx * 2.0f, ny * 2.0f, 3, 2.0f, 0.5f));
+            forests[column] = forest;
+            if (lakes[column] != LAKE_NONE) {
+                fill_lake(map, params, index, (Lake)lakes[column]);
+                /* Nothing grows nor lies on the bed (shore plants come later); the
+                 * draws of a site are made all the same, so that the plants of
+                 * the land do not depend on where the water is. */
+                rng_next_float(&rng);
+                rng_next_float(&rng);
+                continue;
+            }
             if (terrain_def(terrain)->stony) {
                 float flint = stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
                 place_stones(map, x, y, z, &stone_rng, flint_chance(terrain, flint));
@@ -1156,18 +1200,17 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
                 }
                 continue; /* Bare rock on the top of outcrops. */
             }
-            float forest = stretch(noise_fbm2d(forest_seed, nx * 2.0f, ny * 2.0f, 3, 2.0f, 0.5f));
             float glade = stretch(noise_fbm2d(glade_seed, nx * 6.0f, ny * 6.0f, 2, 2.0f, 0.5f));
-            forests[column] = forest;
             place_woody(map, index, &rng, params, moistures[column],
                         expected_moisture(moistures[column], shores[column]), forest, glade);
         }
     }
     if (!params->flat) {
-        place_slopes(map, heights, surfaces);
+        place_slopes(map, heights, surfaces, lakes);
     }
     free(heights);
     free(surfaces);
+    free(lakes);
     Rng tree_rng; /* A stream of its own: the other plants do not depend on the trees. */
     rng_seed(&tree_rng, params->seed, 0x7472656573ULL /* "trees" */);
     place_tree_volumes(map, &tree_rng);

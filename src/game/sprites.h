@@ -78,6 +78,9 @@ SpriteId sprite_animal(AnimalSpecies species, AnimalSex sex, AnimalPose pose);
 SpriteId sprite_ground(Terrain terrain);
 /* The crown of foliage in winter: bare branches (-1 for any other terrain). */
 SpriteId sprite_ground_bare(Terrain terrain);
+/* The surface of water, drawn over the bed (docs/WATER.md §6.6): shallow
+ * water lets the bed show through, deep water hides it. */
+SpriteId sprite_water(bool deep);
 SpriteId sprite_wall(RockType rock);
 
 typedef struct Sprites Sprites;

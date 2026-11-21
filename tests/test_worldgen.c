@@ -189,10 +189,11 @@ static void test_relief(void)
                     }
                 }
                 Terrain terrain = (Terrain)map.terrain[map_index(&map, x, y, ground)];
-                if (terrain == TERRAIN_DEEP_WATER) {
+                WaterClass depth = map_water_class(&map, x, y, ground);
+                if (depth == WATER_DEEP) {
                     CHECK_EQ_INT(ground, surface - 2);
                     water++;
-                } else if (terrain == TERRAIN_SHALLOW_WATER) {
+                } else if (depth != WATER_DRY) {
                     CHECK_EQ_INT(ground, surface - 1);
                     water++;
                 }
@@ -238,6 +239,60 @@ static void test_hill_height(void)
     map_free(&map);
 }
 
+/* Lakes are water at rest over a bed of silt (docs/WATER.md W1): one surface
+ * for all of them, WORLDGEN_LAKE_MM over the floor of the shallows; deep water
+ * fills the level of its bed; beaches stay dry on the plains; nothing but
+ * shore plants stands in the water, and no water lies anywhere else. */
+static void test_lakes_at_rest(void)
+{
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        const int surface = map.surface_level;
+        const long level = (long)(surface - 1) * WATER_CELL_FULL + WORLDGEN_LAKE_MM;
+        int shallows = 0, deep = 0;
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                int ground = map_ground_level(&map, x, y);
+                size_t floor = map_index(&map, x, y, ground);
+                for (int z = 0; z < map.depth; z++) {
+                    int water = map_water(&map, x, y, z);
+                    if (water == 0) {
+                        continue;
+                    }
+                    CHECK(z == ground || z == ground + 1); /* Over the bed only. */
+                    if (z == map.depth - 1 || map_water(&map, x, y, z + 1) == 0) {
+                        CHECK_EQ_INT((long)z * WATER_CELL_FULL + water, level); /* Its top. */
+                    }
+                }
+                if (map.water[floor] == 0) {
+                    CHECK(ground >= surface); /* Beaches and banks on the plains. */
+                    continue;
+                }
+                CHECK_EQ_INT(map.terrain[floor], TERRAIN_SILT);
+                PlantType plant = (PlantType)map.plants[floor].type;
+                CHECK(plant == PLANT_NONE || plant == PLANT_CATTAIL || plant == PLANT_REED);
+                CHECK(map_is_water(&map, x, y, ground));
+                if (ground == surface - 2) {
+                    CHECK_EQ_INT(map_water_class(&map, x, y, ground), WATER_DEEP);
+                    CHECK(!map_is_passable(&map, x, y, ground));
+                    CHECK(map_is_water(&map, x, y, ground + 1)); /* Seen from the banks. */
+                    deep++;
+                } else {
+                    CHECK_EQ_INT(ground, surface - 1);
+                    CHECK_EQ_INT(map_water_class(&map, x, y, ground), WATER_SHALLOWS);
+                    CHECK(map_is_passable(&map, x, y, ground));
+                    shallows++;
+                }
+            }
+        }
+        CHECK(shallows > 0);
+        CHECK(deep > 0);
+        map_free(&map);
+    }
+}
+
 /* Slopes lead up onto soft hills and out of the shallows; rock outcrops and
  * deep water stand behind cliffs. */
 static void test_slopes(void)
@@ -261,9 +316,8 @@ static void test_slopes(void)
             leads_up |= map_can_climb(&map, x, y, z, x + DX[d], y + DY[d]);
         }
         CHECK(leads_up);
-        Terrain terrain = (Terrain)map.terrain[i];
-        CHECK(terrain != TERRAIN_DEEP_WATER);
-        wading += terrain == TERRAIN_SHALLOW_WATER;
+        CHECK(map_water_class(&map, x, y, z) != WATER_DEEP);
+        wading += map_is_water(&map, x, y, z);
     }
     CHECK_EQ_INT(counted, map.slope_count);
     CHECK(wading > 0); /* Shallows slope up their banks. */
@@ -616,6 +670,7 @@ int main(void)
     RUN_TEST(test_stones);
     RUN_TEST(test_relief);
     RUN_TEST(test_hill_height);
+    RUN_TEST(test_lakes_at_rest);
     RUN_TEST(test_slopes);
     RUN_TEST(test_flat);
     RUN_TEST(test_trees);

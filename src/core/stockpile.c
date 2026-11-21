@@ -48,7 +48,8 @@ static size_t index_of(const Stockpiles *stockpiles, int x, int y, int z)
 bool stockpile_can_cover(const Map *map, int x, int y, int z)
 {
     return map_is_passable(map, x, y, z) &&
-           terrain_def((Terrain)map->terrain[map_index(map, x, y, z)])->buildable;
+           terrain_def((Terrain)map->terrain[map_index(map, x, y, z)])->buildable &&
+           !map_is_water(map, x, y, z);
 }
 
 /* Clips a rectangle given by two corners in any order to the zone layer. */

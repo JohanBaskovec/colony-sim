@@ -407,7 +407,7 @@ static void test_debug_plants_and_grows_a_tree(void)
     CHECK(!game_debug_plant_tree(&game, 10, 10, 0)); /* Already one. */
     CHECK(!game_debug_plant_tree(&game, 11, 10, 0)); /* Trunks never touch. */
     CHECK(game_debug_plant_tree(&game, 13, 10, 0));
-    map_set_terrain(map, 5, 5, 0, TERRAIN_SHALLOW_WATER);
+    map_set_water(map, 5, 5, 0, WATER_SHALLOWS_MM);
     CHECK(!game_debug_plant_tree(&game, 5, 5, 0)); /* Too wet and poor. */
     CHECK(!game_debug_plant_tree(&game, -1, 5, 0));
     CHECK(!game_debug_grow_tree(&game, 3, 3, 0, false)); /* Not a tree. */
@@ -1305,6 +1305,7 @@ static void test_fell_over_drop_and_onto_walls(void)
         for (int x = 0; x < 10; x++) { /* The hill: x < 10, ground on level 1. */
             map.rock[map_index(&map, x, y, 0)] = ROCK_EARTH;
             map.terrain[map_index(&map, x, y, 1)] = TERRAIN_SOIL;
+            map.water[map_index(&map, x, y, 1)] = 0;
         }
     }
     map_topology_changed(&map);

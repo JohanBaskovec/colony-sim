@@ -17,7 +17,7 @@ static bool init_world(Map *map, Constructions *constructions, Items *items)
         return false;
     }
     map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
-    map->terrain[map_index(map, 6, 6, 0)] = TERRAIN_DEEP_WATER;
+    map->water[map_index(map, 6, 6, 0)] = WATER_DEEP_MM;
     map->plants[map_index(map, 7, 7, 0)] = (Plant){.type = PLANT_OAK, .growth = 1.0f};
     map->plants[map_index(map, 8, 8, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
     return true;

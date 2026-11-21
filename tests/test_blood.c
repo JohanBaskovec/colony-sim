@@ -26,7 +26,7 @@ static bool init_map(Map *map)
     if (!map_init(map, 16, 16, 1)) {
         return false;
     }
-    map->terrain[map_index(map, 0, 0, 0)] = TERRAIN_SHALLOW_WATER;
+    map->water[map_index(map, 0, 0, 0)] = WATER_SHALLOWS_MM;
     return true;
 }
 
@@ -206,6 +206,7 @@ static void test_trail_in_a_game(void)
     Map *map = &game.map;
     for (size_t i = 0; i < map_level_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_SOIL;
+        map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }

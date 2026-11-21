@@ -14,13 +14,9 @@
 #include <stdlib.h>
 
 static const SDL_Color TERRAIN_COLORS[TERRAIN_COUNT] = {
-    [TERRAIN_DEEP_WATER] = {28, 58, 110, 255},
-    [TERRAIN_SHALLOW_WATER] = {56, 102, 156, 255},
-    [TERRAIN_SAND] = {212, 194, 140, 255},
-    [TERRAIN_SOIL] = {122, 94, 64, 255},
-    [TERRAIN_RICH_SOIL] = {90, 66, 44, 255},
-    [TERRAIN_GRAVEL] = {138, 132, 122, 255},
-    [TERRAIN_ROUGH_STONE] = {106, 102, 98, 255},
+    [TERRAIN_SILT] = {104, 96, 80, 255},          [TERRAIN_SAND] = {212, 194, 140, 255},
+    [TERRAIN_SOIL] = {122, 94, 64, 255},          [TERRAIN_RICH_SOIL] = {90, 66, 44, 255},
+    [TERRAIN_GRAVEL] = {138, 132, 122, 255},      [TERRAIN_ROUGH_STONE] = {106, 102, 98, 255},
     [TERRAIN_GRASS_ROOF] = {196, 168, 96, 255},   /* Textured: sprite_ground(). */
     [TERRAIN_FOLIAGE] = {62, 106, 48, 255},       /* Textured: sprite_ground(). */
     [TERRAIN_FOLIAGE_MEDIUM] = {52, 90, 42, 255}, /* Textured: sprite_ground(). */
@@ -792,6 +788,66 @@ static void ground_textures(const Map *map, int x, int y, int z, size_t index,
     }
 }
 
+/* How much of the water's surface hides the bed, by the depth (mm) over a
+ * floor: a film barely shows, a puddle darkens the ground, shallows let the
+ * bed show through, deep water hides it. */
+static float water_opacity(uint32_t depth)
+{
+    if (depth >= WATER_DEEP_MM) {
+        return 1.0f;
+    }
+    if (depth < WATER_SHALLOWS_MM) {
+        return 0.2f + 0.25f * (float)depth / (float)WATER_SHALLOWS_MM;
+    }
+    return 0.45f + 0.45f * SDL_min(1.0f, (float)depth / 1000.0f);
+}
+
+/* Third pass: water over the floors, and the surface of water resting on a
+ * full tile over a drop (a lake deeper than a level), which hides what lies
+ * under it (docs/WATER.md §6.6). */
+static void render_water(Sprites *sprites, const Map *map, const Camera *camera)
+{
+    const int z = camera->level;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    size_t level = map_level_tile_count(map);
+    sprites_begin(sprites, camera->zoom);
+    for (int y = visible.y0; y < visible.y1; y++) {
+        float top, bottom, left, right, unused;
+        camera_world_to_screen(camera, 0.0f, (float)y, &unused, &top);
+        camera_world_to_screen(camera, 0.0f, (float)(y + 1), &unused, &bottom);
+        camera_world_to_screen(camera, (float)visible.x0, 0.0f, &right, &unused);
+        for (int x = visible.x0; x < visible.x1; x++) {
+            left = right;
+            camera_world_to_screen(camera, (float)(x + 1), 0.0f, &right, &unused);
+            size_t index = map_index(map, x, y, z);
+            if (map->water[index] < WATER_WET_MM || map->rock[index] != ROCK_NONE) {
+                continue;
+            }
+            bool floor = !map_is_open_at(map, index);
+            uint32_t depth;
+            if (floor) {
+                if (!tile_seen(x, y, z)) {
+                    continue;
+                }
+                depth = map_water_depth_at(map, index);
+            } else {
+                /* Over a drop: only on a full tile (water falling is not drawn). */
+                if (z == 0 || map->water[index - level] < WATER_CELL_FULL ||
+                    !thin_foliage_seen(x, y, z)) {
+                    continue;
+                }
+                depth = WATER_DEEP_MM;
+            }
+            SDL_FRect tile = {floorf(left), floorf(top), floorf(right) - floorf(left),
+                              floorf(bottom) - floorf(top)};
+            bool deep = depth >= WATER_DEEP_MM;
+            sprites_draw_tile(sprites, sprite_water(deep), &tile,
+                              (SDL_FColor){1.0f, 1.0f, 1.0f, water_opacity(depth)});
+        }
+    }
+    sprites_flush(sprites);
+}
+
 /* Last pass: what goes over the ground (slopes, drop edges). */
 static void ground_overlays(const Map *map, int x, int y, int z, size_t index,
                             const SDL_FRect *tile, void *userdata)
@@ -811,6 +867,7 @@ void render_map(SDL_Renderer *renderer, Sprites *sprites, const Map *map, const 
     sprites_begin(sprites, camera->zoom);
     visit_ground_tiles(map, camera, ground_textures, &pass);
     sprites_flush(sprites);
+    render_water(sprites, map, camera);
     visit_ground_tiles(map, camera, ground_overlays, &pass);
     batch_flush(renderer);
 }

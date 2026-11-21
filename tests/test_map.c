@@ -202,7 +202,7 @@ static void test_passability_and_move_cost(void)
     CHECK_NEAR(map_move_cost(&map, 1, 1, 0), 1.0, 1e-6);
     CHECK(!map_is_passable(&map, -1, 0, 0));
 
-    map.terrain[map_index(&map, 2, 2, 0)] = TERRAIN_DEEP_WATER;
+    map.water[map_index(&map, 2, 2, 0)] = WATER_DEEP_MM;
     CHECK(!map_is_passable(&map, 2, 2, 0));
 
     map.rock[map_index(&map, 3, 3, 0)] = ROCK_GRANITE;
@@ -211,7 +211,7 @@ static void test_passability_and_move_cost(void)
     map.plants[map_index(&map, 4, 4, 0)].type = PLANT_OAK;
     CHECK_NEAR(map_move_cost(&map, 4, 4, 0), plant_def(PLANT_OAK)->move_cost, 1e-6);
 
-    map.terrain[map_index(&map, 5, 5, 0)] = TERRAIN_SHALLOW_WATER;
+    map.water[map_index(&map, 5, 5, 0)] = WATER_SHALLOWS_MM;
     CHECK(map_move_cost(&map, 5, 5, 0) > 1.0f);
     CHECK_NEAR(map_move_cost_at(&map, map_index(&map, 4, 4, 0)), map_move_cost(&map, 4, 4, 0),
                1e-6);
@@ -420,9 +420,9 @@ static void test_water_and_drinking_spots(void)
 {
     Map map;
     REQUIRE(map_init(&map, 16, 16, 1));
-    map.terrain[map_index(&map, 5, 5, 0)] = TERRAIN_SHALLOW_WATER;
-    map.terrain[map_index(&map, 10, 10, 0)] = TERRAIN_DEEP_WATER;
-    map.terrain[map_index(&map, 0, 0, 0)] = TERRAIN_DEEP_WATER;
+    map.water[map_index(&map, 5, 5, 0)] = WATER_SHALLOWS_MM;
+    map.water[map_index(&map, 10, 10, 0)] = WATER_DEEP_MM;
+    map.water[map_index(&map, 0, 0, 0)] = WATER_DEEP_MM;
 
     CHECK(map_is_water(&map, 5, 5, 0));
     CHECK(map_is_water(&map, 10, 10, 0));
@@ -933,15 +933,15 @@ static void test_plants_take_root_where_they_can_live(void)
     CHECK(!plant_can_take_root(&map, PLANT_HEATHER, 8, 3, 0, -1.0f));
 
     /* Cattails by the water: at the shore of the shallows, or on the bank. */
-    map_set_terrain(&map, 10, 8, 0, TERRAIN_SHALLOW_WATER);
-    map_set_terrain(&map, 11, 8, 0, TERRAIN_SHALLOW_WATER);
-    map_set_terrain(&map, 12, 8, 0, TERRAIN_SHALLOW_WATER);
+    map_set_water(&map, 10, 8, 0, WATER_SHALLOWS_MM);
+    map_set_water(&map, 11, 8, 0, WATER_SHALLOWS_MM);
+    map_set_water(&map, 12, 8, 0, WATER_SHALLOWS_MM);
     for (int y = 7; y <= 9; y++) {
         for (int x = 10; x <= 12; x++) {
-            map_set_terrain(&map, x, y, 0, TERRAIN_SHALLOW_WATER);
+            map_set_water(&map, x, y, 0, WATER_SHALLOWS_MM);
         }
     }
-    map_set_terrain(&map, 11, 8, 0, TERRAIN_DEEP_WATER);
+    map_set_water(&map, 11, 8, 0, WATER_DEEP_MM);
     CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 10, 8, 0, -1.0f));  /* At the shore. */
     CHECK(plant_can_take_root(&map, PLANT_CATTAIL, 13, 8, 0, -1.0f));  /* On the bank. */
     CHECK(!plant_can_take_root(&map, PLANT_CATTAIL, 11, 8, 0, -1.0f)); /* Deep. */
@@ -1465,6 +1465,7 @@ static bool init_dug_room(Map *map)
             bool room = x >= 5 && x <= 9 && y >= 5 && y <= 9;
             map->rock[map_index(map, x, y, 0)] = room ? ROCK_NONE : ROCK_EARTH;
             map->terrain[map_index(map, x, y, 1)] = TERRAIN_SOIL;
+            map->water[map_index(map, x, y, 1)] = 0;
         }
     }
     map_topology_changed(map); /* The layers were written directly. */

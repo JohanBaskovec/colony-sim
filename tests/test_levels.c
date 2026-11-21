@@ -38,6 +38,7 @@ static bool init_raised_game(Game *game)
         map->terrain[i] = (uint8_t)(z <= ground ? TERRAIN_SOIL : TERRAIN_OPEN);
         map->rock[i] = (uint8_t)(z < ground ? ROCK_EARTH : ROCK_NONE);
         map->slope[i] = 0;
+        map->water[i] = 0;
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
@@ -141,6 +142,7 @@ static void test_view_level(void)
     for (int z = 0; z <= LOW; z++) {
         size_t i = map_index(pit, 5, 5, z);
         pit->terrain[i] = TERRAIN_OPEN;
+        pit->water[i] = 0;
         pit->rock[i] = ROCK_NONE;
     }
     map_topology_changed(pit);

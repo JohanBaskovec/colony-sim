@@ -133,10 +133,12 @@ static void make_grove(Map *map)
 {
     for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_OPEN; /* Open air over it: no trees rising there. */
+        map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
+        map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
         map->structure[i] = STRUCTURE_NONE;
         /* A grove on the west half, meadow on the east; bare ground between. */

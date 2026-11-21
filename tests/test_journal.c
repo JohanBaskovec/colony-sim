@@ -237,6 +237,7 @@ static void test_chat_in_a_game(void)
     REQUIRE(game_init(&game, &params));
     for (size_t i = 0; i < map_level_tile_count(&game.map); i++) {
         game.map.terrain[i] = TERRAIN_SOIL;
+        game.map.water[i] = 0;
         game.map.rock[i] = ROCK_NONE;
         memset(&game.map.plants[i], 0, sizeof(game.map.plants[i]));
     }

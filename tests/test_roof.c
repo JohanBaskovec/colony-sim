@@ -17,6 +17,7 @@ static void test_natural_roof(void)
         for (int x = 0; x < 32; x++) {
             map.rock[map_index(&map, x, y, 0)] = ROCK_GRANITE;
             map.terrain[map_index(&map, x, y, 1)] = TERRAIN_SOIL;
+            map.water[map_index(&map, x, y, 1)] = 0;
         }
     }
     for (int y = 10; y <= 12; y++) {
@@ -40,6 +41,7 @@ static void test_natural_roof(void)
         for (int x = 0; x < 32; x++) {
             map.rock[map_index(&map, x, y, 0)] = ROCK_NONE;
             map.terrain[map_index(&map, x, y, 1)] = TERRAIN_OPEN;
+            map.water[map_index(&map, x, y, 1)] = 0;
         }
     }
     map_topology_changed(&map);
@@ -228,10 +230,12 @@ static bool init_flat_game(Game *game)
     Map *map = &game->map;
     for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_OPEN; /* Open air over it: no trees rising there. */
+        map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
+        map->water[i] = 0;
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));

@@ -14,6 +14,7 @@ static int imin(int a, int b)
 
 /* docs/CLIMATE.md §3 (tuning): mm of water in the root zone. */
 static const SoilDef SOIL_DEFS[TERRAIN_COUNT] = {
+    [TERRAIN_SILT] = {60.0f, 200.0f, 280.0f, 0.03f, 6.0f},
     [TERRAIN_SAND] = {8.0f, 40.0f, 90.0f, 0.25f, 40.0f},
     [TERRAIN_GRAVEL] = {12.0f, 55.0f, 100.0f, 0.18f, 25.0f},
     [TERRAIN_SOIL] = {40.0f, 140.0f, 200.0f, 0.06f, 12.0f},
@@ -31,7 +32,7 @@ const SoilDef *soil_def(Terrain terrain)
 /* The bucket of a tile, NULL when it is not rooting ground. */
 static const SoilDef *tile_def(const Map *map, size_t index)
 {
-    if (map->rock[index] != ROCK_NONE) {
+    if (map->rock[index] != ROCK_NONE || map_is_water_at(map, index)) {
         return NULL;
     }
     return soil_def((Terrain)map->terrain[index]);
@@ -333,7 +334,7 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
         if (def == NULL) {
             /* Water turns all its sun into vapour, foliage what its roots
              * draw; stone and roofs none. */
-            bool water = terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER;
+            bool water = map_is_water_at(map, i);
             if (terrain_is_foliage(terrain)) {
                 soil->evap[i] = foliage_evaporation(soil, map, i);
             } else {

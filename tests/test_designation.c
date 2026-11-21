@@ -225,6 +225,7 @@ static bool init_bank(Map *map, Designations *designations)
         for (int x = 4; x < 16; x++) {
             map->rock[map_index(map, x, y, 0)] = ROCK_EARTH;
             map->terrain[map_index(map, x, y, 1)] = TERRAIN_SOIL;
+            map->water[map_index(map, x, y, 1)] = 0;
         }
     }
     map_topology_changed(map); /* The layers were written directly. */

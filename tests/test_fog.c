@@ -180,6 +180,7 @@ static bool walled_plain(Game *game)
         int x, y, z;
         map_tile_of(map, i, &x, &y, &z);
         map->terrain[i] = (uint8_t)(z <= ground ? TERRAIN_SOIL : TERRAIN_OPEN);
+        map->water[i] = 0;
         map->rock[i] = (uint8_t)(z < ground ? ROCK_EARTH : ROCK_NONE);
         map->slope[i] = 0;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
@@ -515,6 +516,7 @@ static void test_settlers_plan_on_the_known_world(void)
             size_t index = map_index(map, x, y, z);
             game.vision.explored[index >> 6] &= ~((uint64_t)1 << (index & 63));
             game.known.map.terrain[index] = TERRAIN_OPEN;
+            game.known.map.water[index] = 0;
             game.known.map.rock[index] = 0;
             memset(&game.known.map.plants[index], 0, sizeof(game.known.map.plants[index]));
             items_remove(&game.known.items, x, y, z, UINT16_MAX);
@@ -671,6 +673,7 @@ static void test_move_order_stays_in_the_explored(void)
             size_t index = map_index(map, x, y, z);
             game.vision.explored[index >> 6] &= ~((uint64_t)1 << (index & 63));
             game.known.map.terrain[index] = TERRAIN_OPEN;
+            game.known.map.water[index] = 0;
         }
     }
     REQUIRE(!game_tile_explored(&game, 50, 50, z));
@@ -728,6 +731,7 @@ static void test_remembers_what_hangs_in_the_crowns(void)
         for (int level = z + 1; level < game.map.depth; level++) {
             game.map.rock[map_index(&game.map, 30, y, level)] = ROCK_GRANITE;
             game.map.terrain[map_index(&game.map, 30, y, level)] = TERRAIN_SOIL;
+            game.map.water[map_index(&game.map, 30, y, level)] = 0;
         }
     }
     map_topology_changed(&game.map);

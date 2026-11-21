@@ -142,10 +142,10 @@ static void test_falling(void)
     CHECK_EQ_INT(apples.quality, 80);
     CHECK_EQ_INT(items_get_of(&items, 4, 4, 0, ITEM_TYPE_BIT(ITEM_PEARS)).quality, 20);
     /* Over water: lost. */
-    map.terrain[map_index(&map, 5, 4, 0)] = TERRAIN_DEEP_WATER;
-    map.terrain[map_index(&map, 5, 3, 0)] = TERRAIN_DEEP_WATER;
-    map.terrain[map_index(&map, 5, 5, 0)] = TERRAIN_DEEP_WATER;
-    map.terrain[map_index(&map, 6, 4, 0)] = TERRAIN_DEEP_WATER;
+    map.water[map_index(&map, 5, 4, 0)] = WATER_DEEP_MM;
+    map.water[map_index(&map, 5, 3, 0)] = WATER_DEEP_MM;
+    map.water[map_index(&map, 5, 5, 0)] = WATER_DEEP_MM;
+    map.water[map_index(&map, 6, 4, 0)] = WATER_DEEP_MM;
     CHECK(!crown_drop(&map, &items, 5, 4, 2, hanging(ITEM_APPLES, 50, 0)));
     CHECK(crowns_check(&crowns));
     free_world(&map, &items, &crowns);
@@ -188,6 +188,7 @@ static void test_an_hour(void)
     }
     REQUIRE(crowns_add(&crowns, &map, 5, 4, 2, hanging(ITEM_APPLES, 50, 0)));
     map.terrain[map_index(&map, 5, 4, 2)] = TERRAIN_OPEN; /* Its foliage is gone. */
+    map.water[map_index(&map, 5, 4, 2)] = 0;
     CrownHour hour = {.seed = 42,
                       .hour = 100,
                       .day = 1,

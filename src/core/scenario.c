@@ -93,7 +93,7 @@ static void stock_dry_grass(Game *game, int x0, int y0, int x1, int y1, int z)
 /* Makes the ground of the rectangle (x0, y0)-(x1, y1) level z: the hills cut
  * away, the hollows filled (a scenario places things at a fixed spot of the
  * level the first settler stands on). Trees there are taken out, with what
- * lies about. */
+ * lies about, and the water there drained. */
 static void level_ground(Game *game, int x0, int y0, int x1, int y1, int z)
 {
     Map *map = &game->map;
@@ -112,6 +112,7 @@ static void level_ground(Game *game, int x0, int y0, int x1, int y1, int z)
                 map_remove_plant(map, x, y, zz);
                 map_set_slope(map, x, y, zz, false);
                 items_clear(&game->items, x, y, zz);
+                map_set_water(map, x, y, zz, 0);
                 if (zz > z) {
                     map_set_rock(map, x, y, zz, ROCK_NONE);
                     map_set_terrain(map, x, y, zz, TERRAIN_OPEN);

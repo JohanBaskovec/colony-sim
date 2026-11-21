@@ -14,7 +14,7 @@ static bool init_world(Map *map, Workstations *stations, Items *items)
         return false;
     }
     map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
-    map->terrain[map_index(map, 6, 6, 0)] = TERRAIN_DEEP_WATER;
+    map->water[map_index(map, 6, 6, 0)] = WATER_DEEP_MM;
     return true;
 }
 

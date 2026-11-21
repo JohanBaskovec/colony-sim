@@ -37,7 +37,8 @@ static void test_buckets_by_terrain(void)
         CHECK(def->capacity < def->saturation);
         CHECK(def->drainage > 0.0f && def->drainage < 1.0f);
     }
-    CHECK(soil_def(TERRAIN_SHALLOW_WATER) == NULL);
+    CHECK(soil_def(TERRAIN_SILT) != NULL); /* A lake's bed, once dry. */
+    CHECK(soil_def(TERRAIN_OPEN) == NULL);
     CHECK(soil_def(TERRAIN_ROUGH_STONE) == NULL);
     CHECK(soil_def(TERRAIN_FOLIAGE) == NULL);
     CHECK(soil_def(TERRAIN_SAND)->capacity < soil_def(TERRAIN_SOIL)->capacity);
@@ -146,7 +147,7 @@ static void test_moisture_scale(void)
     }
     Map map;
     flat_map(&map, 3);
-    map_set_terrain(&map, 0, 0, 0, TERRAIN_SHALLOW_WATER);
+    map_set_water(&map, 0, 0, 0, WATER_SHALLOWS_MM);
     map.rock[map_index(&map, 8, 8, 0)] = ROCK_WOOD; /* A trunk, two levels high. */
     map.rock[map_index(&map, 8, 8, 1)] = ROCK_WOOD;
     map_set_rock(&map, 12, 12, 0, ROCK_GRANITE);
@@ -173,7 +174,7 @@ static void test_banks_stay_wet(void)
     Map map;
     flat_map(&map, 2);
     for (int y = 0; y < 16; y++) {
-        map_set_terrain(&map, 0, y, 0, TERRAIN_SHALLOW_WATER);
+        map_set_water(&map, 0, y, 0, WATER_SHALLOWS_MM);
     }
     Soil soil;
     REQUIRE(soil_init(&soil, &map, 0.0f));
@@ -193,10 +194,9 @@ static void test_banks_stay_wet(void)
     CHECK(soil_moisture(&soil, &map, 2, 5, 0) < 1.6f);
     CHECK(soil_moisture(&soil, &map, 3, 5, 0) > 0.6f);
     CHECK(soil_moisture(&soil, &map, 12, 5, 0) < 0.1f);
-    /* Dug away: the bank moves with the water. */
-    map_set_terrain(&map, 0, 5, 0, TERRAIN_SOIL);
+    /* Drained: the bank moves with the water. */
     for (int y = 0; y < 16; y++) {
-        map_set_terrain(&map, 0, y, 0, TERRAIN_SOIL);
+        map_set_water(&map, 0, y, 0, 0);
     }
     soil_refresh_banks(&soil, &map);
     CHECK_EQ_INT(soil.wet[map_index(&map, 1, 5, 0)], SOIL_WET_FAR);

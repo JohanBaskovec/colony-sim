@@ -2372,6 +2372,26 @@ def draw_rich_soil():
     return canvas.to_pixels()
 
 
+def draw_silt():
+    """The bed of lakes: fine grey-brown mud, smooth and dull, with soft
+    ripple marks left by the water, a few dark rotten leaves and shells."""
+    rng = np.random.default_rng(6150)
+    ys = (np.arange(TILE, dtype=np.float32) + 0.5)[:, None] / TILE * math.tau
+    warp = 0.6 * periodic_noise(rng, 24.0, 12.0)
+    ripples = np.sin(ys * 6 + warp) * np.ones((1, TILE), dtype=np.float32)
+    field = (1.0 + 0.05 * periodic_noise(rng, 11.0) + 0.03 * ripples +
+             0.02 * rng.standard_normal((TILE, TILE)).astype(np.float32))
+    canvas = WrapCanvas(tinted((104, 96, 80), field))
+    for _ in range(12):  # Rotten leaves sunk in the mud.
+        canvas.ellipse(rng.random() * TILE, rng.random() * TILE, 1.0 + rng.random() * 1.2,
+                       0.5 + rng.random() * 0.5, rgb((62, 54, 40)), rng.random() * math.pi, 0.6)
+    for _ in range(5):  # Pale bits of shell.
+        canvas.ellipse(rng.random() * TILE, rng.random() * TILE, 0.6 + rng.random() * 0.4,
+                       0.4 + rng.random() * 0.3, rgb((170, 162, 140)), rng.random() * math.pi,
+                       0.8)
+    return canvas.to_pixels()
+
+
 def caustics(rng, cell, width):
     """A network of thin bright lines, like light focused by ripples."""
     _, best, second = cells(rng, cell)
@@ -2658,6 +2678,7 @@ def draw_grass_roof():
 GROUND_TEXTURES = {
     "ground_deep_water": draw_deep_water,
     "ground_shallow_water": draw_shallow_water,
+    "ground_silt": draw_silt,
     "ground_soil": draw_soil,
     "ground_rich_soil": draw_rich_soil,
     "ground_sand": draw_sand,

@@ -73,6 +73,9 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
         dst->forbidden_count += (map->forbidden[i] != 0) - (dst->forbidden[i] != 0);
         dst->doors_kept_open += ((map->doors[i] & MAP_DOOR_KEPT_OPEN) != 0) -
                                 ((dst->doors[i] & MAP_DOOR_KEPT_OPEN) != 0);
+        if (map->water[i] != dst->water[i]) {
+            dst->water_revision++;
+        }
         if (map->terrain[i] != dst->terrain[i] || map->rock[i] != dst->rock[i] ||
             map->structure[i] != dst->structure[i] ||
             ((map->doors[i] ^ dst->doors[i]) & MAP_DOOR_KEPT_OPEN) != 0) {
@@ -89,6 +92,7 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
     memcpy(dst->terrain + first, map->terrain + first, count);
     memcpy(dst->rock + first, map->rock + first, count);
     memcpy(dst->slope + first, map->slope + first, count);
+    memcpy(dst->water + first, map->water + first, count * sizeof(*map->water));
     memcpy(dst->plants + first, map->plants + first, count * sizeof(*map->plants));
     memcpy(dst->cobbles + first, map->cobbles + first, count);
     memcpy(dst->flint + first, map->flint + first, count);

@@ -97,7 +97,7 @@ simulation:
 | `tile_light` | The light of each tile for the simulation, from the real map (`Game.light`): how much of the sky it sees, its share in the sun now and its hours of sun today and yesterday, a byte each per tile of the plant levels, worked out in slices on a schedule of the tick, and the most of it around noon; rays cut short over what is ahead of them (`LightAhead`); read by the plants, the soil and the microclimate (see *Light in the simulation*) |
 | `fire_light` | The light of fires on screen: from each point of the fine texture a ray to the flame (3D, stopped by walls, floors and rock), kept per fire until the fire or the map near it changes (see *Light and shade*) |
 | `shadow`     | Shadows on screen: the sun's rays from the surfaces drawn, worked out ahead of time by pieces and half hours, each point keeping the moment an edge passes, so frames read them for the time now and the shadows glide; out of date by the map's light stamps; the light put together (sky, direct sun) (see *Shadows on screen*) |
-| `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
+| `map`        | The map as a volume of levels (`map_index()`, `map_ground_level()`), tile layers (terrain, rock, free water in mm with its depth classes, plants with a stock for each product, cobbles and flint in the ground, branches and twigs lying on tiles), static definitions (`TerrainDef`, `PlantDef` with the plants' seasons...) and a plant's life over the year (`plant_advance()`) |
 | `new_game`   | The options of a new game as the title screen's New game window shows them: a table (range, step, unit, section, keys) read from and written into `NewGameParams` in whole numbers (tiles, percents, levels), the hills and the rock kept in order, the options a flat world has no use for, and the seed typed as text (digits, or a hash of the words) |
 | `worldgen`   | Procedural map generation from a seed: relief (hills, slopes, rock outcrops behind cliffs), terrain, trees, then the understory by the tile light, where each plant gets light enough all year round, stones |
 | `noise`      | Deterministic value noise and fBm                                            |
@@ -262,11 +262,30 @@ index minus `Map.surface_level`).
 Hashes only mix in a level when it is not 0 (or when the map has more than
 one level), the slope layer once a slope exists.
 
+**Water** (`core/map.h`, docs/WATER.md): a quantity, never a terrain.
+`Map.water` holds the free water of every tile in mm (`WATER_CELL_FULL`,
+2 000, is a full tile: 2 m), held by its floor or by the full tile under it;
+the depth over a floor (`map_water_depth()`) adds the tiles above while the
+one under is full. The rest of the simulation reads depth classes
+(`WaterClass`: dry, wet, puddle, shallows, wading, deep): the walking cost is
+the terrain's times the class's (×3 in the shallows, deep water impassable),
+`map_is_water()` is shallows or deeper (drinking, the banks of the soil,
+heat kept by open water), nothing is built in a puddle or deeper and no
+stockpile goes in open water. `map_set_water()` keeps the revisions: a
+topology change when a tile becomes passable or not, or open water or not
+(drinking spots), and `water_revision` for the latter. The known world copies
+the layer like the others, and vision tracks the surface of water over a drop.
+Water does not move yet (W1 of docs/WATER.md): what world generation lays
+stays, but for rock placed over it (the water is gone).
+
 **Relief** (`core/worldgen.h`): the elevation noise decides each column's
 ground level. The plains lie on `Map.surface_level` (`underground_levels`,
 4 by default; the player sees it as level 0, the levels below as negative);
-lakes and rivers lie in hollows below it, shallows and beaches one level
-down, deep water two; the ground rises one level every so much elevation
+lakes and rivers lie in hollows below it, shallows one level down, deep water
+two, filled with water at rest over a bed of silt (`fill_lake()`: one surface
+for every lake, `WORLDGEN_LAKE_MM` over the floor of the shallows; deep water
+fills the level of its bed and that much of the next), beaches of sand on the
+plains around them; the ground rises one level every so much elevation
 above `hill_level` (half as fast above `mountain_level`: hills, not
 mountains), rock outcrops one level above the ground around them behind
 cliffs. That step is worked out for each map from `hill_height` (20 by default,
@@ -276,7 +295,7 @@ elevation of the map found first). Under the ground's surface lie `WORLDGEN_EART
 (`ROCK_EARTH`: dug out, it gives nothing), then granite or sandstone; stony
 ground is rock all the way down. Where soft ground or shallow water rises
 one level to an orthogonal neighbor, the lower tile is a slope (one wades up
-the bank to the beach, then walks up to the plains); rock outcrops, deep
+the bank out of the shallows to the beach); rock outcrops, deep
 water and steeper rises stay cliffs. The levels under the ground are solid
 until dug (see *Digging*). A map with relief has `WORLDGEN_LEVELS_ABOVE` (25)
 levels over the plains (the hills reach 20, the rest is open space where the
@@ -1054,7 +1073,7 @@ Each tick, `colonist_tick()`:
    Severe hunger or thirst wakes a sleeping colonist up;
 3. acts: walks one tick along its path (speed / tile cost), eats, drinks, or sleeps.
 
-A drinking spot is a passable tile that is shallow water or touches water
+A drinking spot is a passable tile that is open water or touches it
 (`map_is_drinking_spot()`), so colonists stop on the shore rather than wade
 in. A failed food or water search floods everything within its cost limit, so
 retries back off exponentially (½ h, 1 h, 2 h, then every 4 in-game hours)

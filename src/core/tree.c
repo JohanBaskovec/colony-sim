@@ -525,6 +525,9 @@ static int landing_level(const Map *map, int x, int y, int z)
  * (-1 if none). */
 int tree_landing_level(const Map *map, int x, int y, int z)
 {
+    if (!map_in_bounds(map, x, y, 0)) {
+        return -1;
+    }
     while (z >= 0 && (lets_fall(map, x, y, z) ||
                       (map->rock[map_index(map, x, y, z)] == ROCK_NONE &&
                        terrain_is_foliage(map->terrain[map_index(map, x, y, z)])))) {
@@ -560,8 +563,7 @@ static bool holds_litter(const Map *map, int x, int y, int z)
     size_t index = map_index(map, x, y, z);
     Terrain terrain = (Terrain)map->terrain[index];
     return map->rock[index] == ROCK_NONE && terrain != TERRAIN_OPEN &&
-           !terrain_is_foliage(terrain) && terrain != TERRAIN_DEEP_WATER &&
-           terrain != TERRAIN_SHALLOW_WATER &&
+           !terrain_is_foliage(terrain) && !map_is_water_at(map, index) &&
            !structure_blocks((StructureType)map->structure[index]);
 }
 

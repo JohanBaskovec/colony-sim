@@ -147,7 +147,7 @@ static void test_prefers_cheaper_terrain(void)
     /* A band of shallow water (cost 3) across the straight line, with a dry detour. */
     for (int y = 0; y < 8; y++) {
         for (int x = 10; x < 13; x++) {
-            map.terrain[map_index(&map, x, y, 0)] = TERRAIN_SHALLOW_WATER;
+            map.water[map_index(&map, x, y, 0)] = WATER_SHALLOWS_MM;
         }
     }
     REQUIRE(pathfinder_find(&finder, &map, tile(5, 5), tile(18, 5), PATH_NO_COST_LIMIT, &path));
@@ -155,7 +155,7 @@ static void test_prefers_cheaper_terrain(void)
     CHECK(finder.last_cost < straight_cost);
     for (int i = 0; i < path.count; i++) {
         TilePos step = path.steps[i];
-        CHECK(map.terrain[map_index(&map, step.x, step.y, step.z)] != TERRAIN_SHALLOW_WATER);
+        CHECK(!map_is_water(&map, step.x, step.y, step.z));
     }
     cleanup(&map, &finder, &path);
 }

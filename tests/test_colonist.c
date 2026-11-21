@@ -26,10 +26,12 @@ static bool init_flat_game(Game *game)
     Map *map = &game->map;
     for (size_t i = map_level_tile_count(map); i < map_tile_count(map); i++) {
         map->terrain[i] = TERRAIN_OPEN; /* Open air over it: no trees rising there. */
+        map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
     }
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
+        map->water[i] = 0;
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
         map_clear_litter_at(map, i,
@@ -93,7 +95,7 @@ static void add_water_band(Map *map, int x0)
 {
     for (int y = 0; y < map->height; y++) {
         for (int x = x0; x < map->width; x++) {
-            map_set_terrain(map, x, y, 0, TERRAIN_SHALLOW_WATER);
+            map_set_water(map, x, y, 0, WATER_SHALLOWS_MM);
         }
     }
 }
@@ -131,7 +133,7 @@ static void test_spawn_requires_passable_tile(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    map_set_terrain(&game.map, 3, 3, 0, TERRAIN_DEEP_WATER);
+    map_set_water(&game.map, 3, 3, 0, WATER_DEEP_MM);
     CHECK(entity_id_is_none(game_spawn_colonist(&game, 3, 3, 0)));
     CHECK(entity_id_is_none(game_spawn_colonist(&game, -1, 3, 0)));
 
@@ -1102,6 +1104,7 @@ static bool init_hill_game(Game *game)
         map_tile_of(map, i, &x, &y, &z);
         bool hill = x >= 26;
         map->terrain[i] = (uint8_t)(z == 0 || (z == 1 && hill) ? TERRAIN_SOIL : TERRAIN_OPEN);
+        map->water[i] = 0;
         map->rock[i] = (uint8_t)(z == 0 && hill ? ROCK_EARTH : ROCK_NONE);
         map->slope[i] = 0;
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
@@ -1812,7 +1815,7 @@ static void test_no_search_when_region_has_no_water(void)
 
     /* Water appears within reach: found at the next attempt. */
     map_set_rock(&game.map, 21, 20, 0, ROCK_NONE);
-    map_set_terrain(&game.map, 21, 20, 0, TERRAIN_SHALLOW_WATER);
+    map_set_water(&game.map, 21, 20, 0, WATER_SHALLOWS_MM);
     colonist->search_cooldown[SEARCH_WATER] = 0;
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_DRINK);
@@ -2449,7 +2452,7 @@ static void test_item_move_refuses_bad_orders(void)
     REQUIRE(init_flat_game(&game));
     items_add(&game.items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 3));
     items_add(&game.items, 20, 20, 0, item_stack_pristine(ITEM_BRANCHES, 1000));
-    map_set_terrain(&game.map, 25, 25, 0, TERRAIN_DEEP_WATER);
+    map_set_water(&game.map, 25, 25, 0, WATER_DEEP_MM);
     CHECK(!game_order_item_move(&game, 11, 10, 0, 30, 20, 0)); /* Nothing there. */
     CHECK(!game_order_item_move(&game, 10, 10, 0, 10, 10, 0)); /* The same tile. */
     CHECK(!game_order_item_move(&game, 10, 10, 0, 20, 20, 0)); /* Full of another kind. */

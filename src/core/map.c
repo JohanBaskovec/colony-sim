@@ -13,9 +13,8 @@
 #include <string.h>
 
 static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
-    [TERRAIN_DEEP_WATER] = {"deep_water", N_("terrain.deep_water"), 0.0f, 0.0f, false, false},
-    [TERRAIN_SHALLOW_WATER] = {"shallow_water", N_("terrain.shallow_water"), 3.0f, 0.0f, false,
-                               false},
+    /* Mud underfoot once the water is gone. */
+    [TERRAIN_SILT] = {"silt", N_("terrain.silt"), 1.2f, 0.8f, true, false},
     [TERRAIN_SAND] = {"sand", N_("terrain.sand"), 1.4f, 0.1f, true, false},
     [TERRAIN_SOIL] = {"soil", N_("terrain.soil"), 1.0f, 1.0f, true, true},
     [TERRAIN_RICH_SOIL] = {"rich_soil", N_("terrain.rich_soil"), 1.0f, 1.4f, true, true},
@@ -1288,6 +1287,7 @@ bool map_init(Map *map, int width, int height, int depth)
     map->terrain = malloc(count);
     map->rock = calloc(count, 1);
     map->slope = calloc(count, 1);
+    map->water = calloc(count, sizeof(*map->water));
     map->plants = calloc(count, sizeof(Plant));
     map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
@@ -1310,7 +1310,7 @@ bool map_init(Map *map, int width, int height, int depth)
     map->light_solid_stamps = calloc(blocks, sizeof(*map->light_solid_stamps));
     if (map->light_stamps == NULL || map->light_solid_stamps == NULL || map->doors == NULL ||
         map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL ||
-        map->plants == NULL || map->cobbles == NULL || map->flint == NULL ||
+        map->water == NULL || map->plants == NULL || map->cobbles == NULL || map->flint == NULL ||
         map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
         map->tree_species == NULL || map->structure == NULL || map->structure_part == NULL ||
         map->structure_quality == NULL || map->structure_hit_points == NULL ||
@@ -1334,6 +1334,7 @@ void map_free(Map *map)
     free(map->terrain);
     free(map->rock);
     free(map->slope);
+    free(map->water);
     free(map->plants);
     free(map->cobbles);
     free(map->flint);
@@ -1500,10 +1501,6 @@ void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain)
     } else if (!floor_before) {
         light_changed_at(map, x, y, false); /* Foliage grown, thinned or gone. */
     }
-    if (old == TERRAIN_SHALLOW_WATER || old == TERRAIN_DEEP_WATER ||
-        terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER) {
-        map->water_revision++;
-    }
     /* Trees: open space, thin foliage (nobody stands on it) and dense foliage
      * (a floor) change into each other all the time as crowns spread. */
     bool tree_terrain = (unstandable_air(old) || old == TERRAIN_FOLIAGE) &&
@@ -1532,6 +1529,10 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     bool was_open = map_is_open_at(map, index);
     RockType old_rock = (RockType)map->rock[index];
     map->rock[index] = (uint8_t)rock;
+    if (rock != ROCK_NONE && map->water[index] != 0) {
+        map->water[index] = 0; /* Free water holds no room in rock (until docs/WATER.md W4). */
+        map->water_revision++;
+    }
     if (old_rock != rock) {
         map_light_changed(map, x, y);
     }
@@ -1788,6 +1789,9 @@ float map_move_cost_at(const Map *map, size_t index)
         return 0.0f;
     }
     float cost = TERRAIN_DEFS[map->terrain[index]].move_cost;
+    if (map->water[index] != 0) {
+        cost *= water_move_factor(water_class_of(map_water_depth_at(map, index)));
+    }
     return cost * PLANT_DEFS[map->plants[index].type].move_cost *
            structure_def((StructureType)map->structure[index])->move_cost;
 }
@@ -1938,7 +1942,8 @@ bool map_is_buildable(const Map *map, int x, int y, int z)
     }
     size_t index = map_index(map, x, y, z);
     return map->rock[index] == ROCK_NONE && map->slope[index] == 0 &&
-           TERRAIN_DEFS[map->terrain[index]].buildable;
+           TERRAIN_DEFS[map->terrain[index]].buildable &&
+           map_water_depth_at(map, index) < WATER_PUDDLE_MM;
 }
 
 StructureType map_roof(const Map *map, int x, int y, int z)
@@ -2178,6 +2183,7 @@ float plant_bare_target(float climate)
 static bool rooting_ground(Terrain terrain)
 {
     switch (terrain) {
+    case TERRAIN_SILT:
     case TERRAIN_SAND:
     case TERRAIN_SOIL:
     case TERRAIN_RICH_SOIL:
@@ -2273,13 +2279,14 @@ bool plant_can_take_root(const Map *map, PlantType type, int x, int y, int z, fl
     }
     const PlantDef *def = &PLANT_DEFS[type];
     Terrain terrain = (Terrain)map->terrain[index];
+    bool shallows = map_is_water_at(map, index);
     if (def->wetland) {
-        bool shallows = terrain == TERRAIN_SHALLOW_WATER;
-        if (shallows ? !at_shore(map, x, y, z)
+        if (shallows ? map_water_class(map, x, y, z) > WATER_SHALLOWS || !at_shore(map, x, y, z)
                      : !rooting_ground(terrain) || !water_near(map, x, y, z)) {
             return false;
         }
-    } else if (!rooting_ground(terrain) || TERRAIN_DEFS[terrain].fertility < def->min_fertility) {
+    } else if (shallows || !rooting_ground(terrain) ||
+               TERRAIN_DEFS[terrain].fertility < def->min_fertility) {
         return false;
     }
     if (!plant_light_suits(map, type, x, y, z, light)) {
@@ -2356,6 +2363,10 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->terrain[index] = src->terrain[index];
     dst->rock[index] = src->rock[index];
     dst->slope[index] = src->slope[index];
+    if (dst->water[index] != src->water[index]) {
+        dst->water[index] = src->water[index];
+        dst->water_revision++;
+    }
     dst->plants[index] = src->plants[index];
     dst->cobbles[index] = src->cobbles[index];
     dst->flint[index] = src->flint[index];
@@ -2397,6 +2408,12 @@ uint64_t map_hash(const Map *map)
     hash = hash_fnv1a64(hash, map->rock, count);
     if (map->slope_count > 0) { /* Hashes of maps without slopes stay as they were. */
         hash = hash_fnv1a64(hash, map->slope, count);
+    }
+    for (size_t i = 0; i < count; i++) { /* Maps without water hash as they did. */
+        if (map->water[i] != 0) {
+            uint64_t at[2] = {i, map->water[i]};
+            hash = hash_fnv1a64(hash, at, sizeof(at));
+        }
     }
     hash = hash_fnv1a64(hash, map->cobbles, count);
     hash = hash_fnv1a64(hash, map->flint, count);
@@ -2755,13 +2772,108 @@ bool map_tree_near(const Map *map, int x, int y, int z, int range)
     return false;
 }
 
+WaterClass water_class_of(uint32_t depth)
+{
+    return depth >= WATER_DEEP_MM       ? WATER_DEEP
+           : depth >= WATER_WADING_MM   ? WATER_WADING
+           : depth >= WATER_SHALLOWS_MM ? WATER_SHALLOWS
+           : depth >= WATER_PUDDLE_MM   ? WATER_PUDDLE
+           : depth >= WATER_WET_MM      ? WATER_WET
+                                        : WATER_DRY;
+}
+
+float water_move_factor(WaterClass water)
+{
+    static const float FACTORS[WATER_CLASS_COUNT] = {1.0f, 1.2f, 1.5f, 3.0f, 6.0f, 0.0f};
+    return (unsigned)water < WATER_CLASS_COUNT ? FACTORS[water] : 0.0f;
+}
+
+const char *water_class_key(WaterClass water)
+{
+    static const char *const KEYS[WATER_CLASS_COUNT] = {
+        N_("water.class.dry"),      N_("water.class.wet"),    N_("water.class.puddle"),
+        N_("water.class.shallows"), N_("water.class.wading"), N_("water.class.deep"),
+    };
+    return (unsigned)water < WATER_CLASS_COUNT ? KEYS[water] : KEYS[WATER_DRY];
+}
+
+int map_water(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) ? map->water[map_index(map, x, y, z)] : 0;
+}
+
+uint32_t map_water_depth_at(const Map *map, size_t index)
+{
+    uint32_t water = map->water[index];
+    uint32_t depth = water;
+    size_t level = map_level_tile_count(map), count = map_tile_count(map);
+    while (water >= WATER_CELL_FULL && index + level < count) {
+        index += level;
+        water = map->water[index];
+        depth += water;
+    }
+    return depth;
+}
+
+uint32_t map_water_depth(const Map *map, int x, int y, int z)
+{
+    return map_in_bounds(map, x, y, z) ? map_water_depth_at(map, map_index(map, x, y, z)) : 0;
+}
+
+WaterClass map_water_class(const Map *map, int x, int y, int z)
+{
+    return water_class_of(map_water_depth(map, x, y, z));
+}
+
+bool map_is_water_at(const Map *map, size_t index)
+{
+    return map->water[index] != 0 && map_water_depth_at(map, index) >= WATER_SHALLOWS_MM;
+}
+
 bool map_is_water(const Map *map, int x, int y, int z)
 {
+    return map_in_bounds(map, x, y, z) && map_is_water_at(map, map_index(map, x, y, z));
+}
+
+void map_set_water(Map *map, int x, int y, int z, int mm)
+{
     if (!map_in_bounds(map, x, y, z)) {
-        return false;
+        return;
     }
-    uint8_t terrain = map->terrain[map_index(map, x, y, z)];
-    return terrain == TERRAIN_SHALLOW_WATER || terrain == TERRAIN_DEEP_WATER;
+    size_t index = map_index(map, x, y, z);
+    mm = map->rock[index] != ROCK_NONE ? 0 : clampi(mm, 0, WATER_CELL_FULL);
+    if (map->water[index] == mm) {
+        return;
+    }
+    /* The tile and those under it whose depth reaches it (full ones). */
+    enum { CHAIN_MAX = MAP_MAX_LEVELS };
+    int levels = 1;
+    while (levels < CHAIN_MAX && z - levels >= 0 &&
+           map->water[map_index(map, x, y, z - levels)] >= WATER_CELL_FULL) {
+        levels++;
+    }
+    bool passable[CHAIN_MAX], water[CHAIN_MAX];
+    for (int i = 0; i < levels; i++) {
+        size_t at = map_index(map, x, y, z - i);
+        passable[i] = map_move_cost_at(map, at) > 0.0f;
+        water[i] = map_is_water_at(map, at);
+    }
+    map->water[index] = (uint16_t)mm;
+    bool water_changed = false;
+    for (int i = 0; i < levels; i++) {
+        size_t at = map_index(map, x, y, z - i);
+        bool now_passable = map_move_cost_at(map, at) > 0.0f;
+        bool now_water = map_is_water_at(map, at);
+        if (now_passable != passable[i]) {
+            log_topology_change(map, x, y, z - i, now_passable);
+        } else if (now_water != water[i]) {
+            log_topology_change(map, x, y, z - i, false); /* Drinking spots around. */
+        }
+        water_changed |= now_water != water[i];
+    }
+    if (water_changed) {
+        map->water_revision++;
+    }
 }
 
 bool map_is_drinking_spot(const Map *map, int x, int y, int z)

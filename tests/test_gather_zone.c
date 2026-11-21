@@ -22,8 +22,9 @@ static bool init_world(Map *map, GatherZones *zones, Items *items)
     }
     map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
     map->terrain[map_index(map, 9, 8, 0)] = TERRAIN_GRAVEL;
+    map->water[map_index(map, 9, 8, 0)] = 0;
     map->terrain[map_index(map, 10, 8, 0)] = TERRAIN_SAND;
-    map->terrain[map_index(map, 11, 8, 0)] = TERRAIN_SHALLOW_WATER;
+    map->water[map_index(map, 11, 8, 0)] = WATER_SHALLOWS_MM;
     return true;
 }
 
@@ -175,13 +176,15 @@ static void test_where_zones_and_stones_lie(void)
     CHECK(gather_zone_can_cover(&map, 8, 8, 0));
     CHECK(gather_zone_can_cover(&map, 10, 8, 0));
     CHECK(gather_zone_can_cover(&map, 11, 8, 0));
-    map.terrain[map_index(&map, 12, 8, 0)] = TERRAIN_DEEP_WATER;
+    map.water[map_index(&map, 12, 8, 0)] = WATER_DEEP_MM;
     CHECK(!gather_zone_can_cover(&map, 12, 8, 0));
     CHECK(!gather_zone_can_cover(&map, 5, 5, 0));
     CHECK(!gather_zone_can_cover(&map, -1, 0, 0));
     map.terrain[map_index(&map, 13, 8, 0)] = TERRAIN_OPEN; /* No floor. */
+    map.water[map_index(&map, 13, 8, 0)] = 0;
     CHECK(!gather_zone_can_cover(&map, 13, 8, 0));
     map.terrain[map_index(&map, 13, 8, 0)] = TERRAIN_SOIL;
+    map.water[map_index(&map, 13, 8, 0)] = 0;
     /* Stones lie on soil, gravel and rough stone, not on sand. */
     CHECK(gather_stone_ground(&map, 8, 8, 0));
     CHECK(gather_stone_ground(&map, 9, 8, 0));
@@ -443,7 +446,7 @@ static void test_food_in_season(void)
     Plant *cattail = put_plant(&map, 2, 1, PLANT_CATTAIL, 1.0f);
     Plant *carrot = put_plant(&map, 3, 1, PLANT_WILD_CARROT, 1.0f);
     Plant *mushrooms = put_plant(&map, 1, 3, PLANT_MUSHROOMS, 1.0f);
-    map.terrain[map_index(&map, 2, 1, 0)] = TERRAIN_SHALLOW_WATER; /* Cattails stand in water. */
+    map.water[map_index(&map, 2, 1, 0)] = WATER_SHALLOWS_MM; /* Cattails stand in water. */
     int index = gather_zone_create(&zones, &map, 0, 0, 4, 4, 0);
     for (int r = GATHER_BLACKBERRIES; r <= GATHER_CATTAIL_RHIZOMES; r++) {
         order(&zones, &items, index, (GatherResource)r, GATHER_FOREVER);

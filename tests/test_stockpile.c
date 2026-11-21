@@ -12,7 +12,7 @@ static bool init_world(Map *map, Stockpiles *stockpiles)
         return false;
     }
     for (int y = 0; y < 16; y++) {
-        map->terrain[map_index(map, 0, y, 0)] = TERRAIN_SHALLOW_WATER;
+        map->water[map_index(map, 0, y, 0)] = WATER_SHALLOWS_MM;
     }
     map->rock[map_index(map, 5, 5, 0)] = ROCK_GRANITE;
     return true;

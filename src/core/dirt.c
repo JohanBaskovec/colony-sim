@@ -50,8 +50,7 @@ int dirt_at(const Dirt *dirt, int x, int y, int z)
 
 bool dirt_can_lie(const Map *map, int x, int y, int z)
 {
-    return map_is_passable(map, x, y, z) &&
-           map->terrain[map_index(map, x, y, z)] != TERRAIN_SHALLOW_WATER;
+    return map_is_passable(map, x, y, z) && !map_is_water(map, x, y, z);
 }
 
 int dirt_add(Dirt *dirt, const Map *map, int x, int y, int z, int amount)

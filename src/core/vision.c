@@ -30,10 +30,12 @@
 /* Tracked tiles and columns                                                */
 /* ------------------------------------------------------------------------ */
 
+/* What there is to see on a tile: rock, a floor, a structure, or the surface
+ * of water over a drop (a lake deeper than a level). */
 static bool tracked_at(const Map *map, size_t index)
 {
     return map->rock[index] != 0 || map->terrain[index] != TERRAIN_OPEN ||
-           map->structure[index] != STRUCTURE_NONE;
+           map->structure[index] != STRUCTURE_NONE || map->water[index] != 0;
 }
 
 bool vision_tracked(const Map *map, int x, int y, int z)

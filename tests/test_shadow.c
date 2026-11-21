@@ -67,6 +67,7 @@ static void test_surface_heights(void)
     CHECK(shadow_surface_height(&map, 7, 6, 2, &height));
     CHECK_NEAR(height, SUN_RAY_LIFT, 1e-6);
     map.terrain[map_index(&map, 8, 8, 0)] = TERRAIN_OPEN; /* Nothing down there. */
+    map.water[map_index(&map, 8, 8, 0)] = 0;
     CHECK(!shadow_surface_height(&map, 8, 8, 1, &height));
     map_free(&map);
 }

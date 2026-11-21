@@ -77,6 +77,7 @@ static void put_rock(Scene *scene, int x, int y, int z)
 static void put_floor(Scene *scene, int x, int y, int z)
 {
     scene->map.terrain[map_index(&scene->map, x, y, z)] = TERRAIN_SOIL;
+    scene->map.water[map_index(&scene->map, x, y, z)] = 0;
 }
 
 static void test_open_plain(void)
@@ -211,6 +212,7 @@ static void test_open_space_is_seen_through(void)
     for (int y = 18; y <= 22; y++) {
         for (int x = 18; x <= 22; x++) {
             scene.map.terrain[map_index(&scene.map, x, y, 1)] = TERRAIN_OPEN;
+            scene.map.water[map_index(&scene.map, x, y, 1)] = 0;
             scene.map.rock[map_index(&scene.map, x, y, 0)] = ROCK_NONE;
         }
     }
