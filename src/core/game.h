@@ -349,6 +349,15 @@ bool game_debug_colonist_knowledge(Game *game, EntityId id, KnowledgeType knowle
  * all along (Weather.debug_offset), within GAME_DEBUG_TEMPERATURE_LIMIT. */
 void game_debug_temperature(Game *game, int direction);
 
+/* Debug: the rain one step harder (`direction` > 0) or lighter along
+ * GAME_DEBUG_RAIN_STEPS (Weather.debug_rain, mm an hour; 0: the weather's
+ * own); some rain under a sky that does not rain brings rain. */
+#define GAME_DEBUG_RAIN_STEPS                                                                      \
+    {                                                                                              \
+        0.0f, 0.1f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f, 20.0f, 50.0f, 100.0f                            \
+    }
+void game_debug_rain(Game *game, int direction);
+
 /* Debug: the next sky at once (clear → cloudy → fog → rain → storm), and a
  * cold snap (the coldest spell, until the next day's draw). */
 void game_debug_next_weather(Game *game);

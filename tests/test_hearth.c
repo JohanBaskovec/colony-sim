@@ -685,6 +685,7 @@ static void run_rainy_ticks(Game *game, int ticks, WeatherType type)
     for (int i = 0; i < ticks; i++) {
         game->weather.type = (uint8_t)type;
         game->weather.spell = 5.0f;
+        game->weather.debug_rain = WEATHER_WETTING_RAIN_MM; /* Every hour: soaked in one. */
         run_ticks(game, 1, true);
     }
 }
@@ -699,7 +700,7 @@ static void test_rain_puts_out_fires_in_the_open(void)
     map_set_roof(&game.map, 20, 10, 1, STRUCTURE_ROOF, ITEM_QUALITY_STANDARD);
     REQUIRE(hearth_light(&game.workstations, open));
     REQUIRE(hearth_light(&game.workstations, roofed));
-    float wetting = WEATHER_WETTING_RAIN;
+    float wetting = 1.0f; /* Soaked in an hour. */
     CHECK(hearth_rained_on(hearth(&game, open), &game.map, wetting));
     CHECK(!hearth_rained_on(hearth(&game, roofed), &game.map, wetting));
     CHECK(!hearth_rained_on(hearth(&game, open), &game.map, 0.0f));
@@ -725,6 +726,7 @@ static void test_rain_puts_out_fires_in_the_open(void)
     run_rainy_ticks(&game, 600, WEATHER_STORM);
     CHECK(!hearth(&game, open)->burning);
     CHECK(lighter->task != TASK_LIGHT);
+    game.weather.debug_rain = 0.0f;
     for (int i = 0; i < 3000 && !hearth(&game, open)->burning; i++) {
         game.weather.type = WEATHER_CLEAR;
         run_ticks(&game, 1, true);

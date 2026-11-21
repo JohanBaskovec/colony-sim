@@ -799,7 +799,8 @@ static void test_grass_does_not_dry_in_a_storm(void)
     REQUIRE(items_add(&game.items, x, y, 0, cut) == 2);
     for (int i = 0; i < 6 * TICKS_PER_HOUR; i++) {
         game.weather.type = WEATHER_STORM;
-        game.weather.spell = 5.0f; /* Rain, not snow. */
+        game.weather.spell = 5.0f;      /* Rain, not snow. */
+        game.weather.debug_rain = 1.0f; /* Every hour. */
         game_tick(&game);
     }
     float soaked = item_stack_moisture(items_get(&game.items, x, y, 0));

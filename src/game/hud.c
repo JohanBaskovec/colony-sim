@@ -419,8 +419,16 @@ static void build_status_panel(App *app, Panel *panel)
     char outdoor[32];
     temperature_text(outdoor, sizeof(outdoor), game_outdoor_temperature(&app->game), 0);
     TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.outdoor_temperature"), outdoor);
-    TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.weather"),
-              tr(weather_name_key(&app->game.weather, clock->tick)));
+    float rain = weather_rainfall(&app->game.weather, clock->tick);
+    if (rain > 0.0f) {
+        char amount[16];
+        tr_decimal(amount, sizeof(amount), rain, rain < 10.0f ? 1 : 0);
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.weather_rain"),
+                  tr(weather_name_key(&app->game.weather, clock->tick)), amount);
+    } else {
+        TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.weather"),
+                  tr(weather_name_key(&app->game.weather, clock->tick)));
+    }
     char humidity[16];
     tr_integer(
         humidity, sizeof(humidity),

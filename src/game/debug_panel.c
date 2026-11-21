@@ -14,6 +14,8 @@ typedef struct DebugRows {
     bool toggle_god_mode;
     bool toggle_character_editor;
     int temperature_step; /* -1, 0, 1: the buttons of the temperature row. */
+    float rain;           /* Weather.debug_rain. */
+    int rain_step;        /* -1, 0, 1: the buttons of the rain row. */
     bool toggle_instant_build;
     bool toggle_free_crafts;
     bool toggle_no_tools;
@@ -102,6 +104,22 @@ static void debug_rows(UiLayout *layout, void *userdata)
     if (step != 0) {
         rows->temperature_step = step;
     }
+    /* The rain forced in mm an hour (or the weather's own), with its - and + buttons. */
+    char amount[16], rain[32];
+    if (rows->rain > 0.0f) {
+        tr_decimal(amount, sizeof(amount), rows->rain, rows->rain < 1.0f ? 1 : 0);
+        TR_FORMAT(rain, sizeof(rain), tr("unit.mm_per_hour"), amount);
+    } else {
+        SDL_strlcpy(rain, tr("debug.rain_natural"), sizeof(rain));
+    }
+    TR_FORMAT(label, sizeof(label), tr("debug.rain"), rain);
+    ui_layout_set_stepper(layout, true);
+    row = ui_layout_pair(layout, label, "", layout->ui->theme.colors[THEME_TEXT], false);
+    step = ui_layout_stepper(layout, row);
+    ui_layout_set_stepper(layout, false);
+    if (step != 0) {
+        rows->rain_step = step;
+    }
     rows->sadden |= button_row(layout, tr("debug.sadden"));
     rows->discord |= button_row(layout, tr("debug.discord"));
     rows->forget_social |= button_row(layout, tr("debug.forget_social"));
@@ -157,6 +175,7 @@ void debug_panel_draw(App *app)
         .character_editor = app->character_editor,
         .god_mode = god_mode,
         .temperature_offset = game->weather.debug_offset,
+        .rain = game->weather.debug_rain,
         .weather = tr(weather_name_key(&game->weather, game->clock.tick)),
         .chats = &game->chat_counts,
         .teleport_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_TELEPORT),
@@ -185,6 +204,9 @@ void debug_panel_draw(App *app)
     }
     if (rows.temperature_step != 0) {
         game_debug_temperature(game, rows.temperature_step);
+    }
+    if (rows.rain_step != 0) {
+        game_debug_rain(game, rows.rain_step);
     }
     if (rows.toggle_instant_build) {
         game_set_instant_build(game, !game->debug.instant_build);

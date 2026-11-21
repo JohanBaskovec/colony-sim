@@ -240,6 +240,8 @@ debug.next_weather = Weather: {0} (next)
 debug.cold_snap = Cold snap (until tomorrow)
 # {0} = degrees added to (or taken off) the air's temperature (e.g. +5 °C)
 debug.temperature = Temperature: {0}
+debug.rain = Rain: {0}
+debug.rain_natural = as the weather goes
 debug.sadden = Sadden everyone (gloom, fading)
 debug.discord = Turn everyone against each other
 debug.forget_social = Forget what the debug tools did to opinions
@@ -421,6 +423,8 @@ weather.fog = Fog
 weather.rain = Rain
 weather.storm = Storm
 weather.downpour = Downpour
+weather.drizzle = Drizzle
+weather.heavy_rain = Heavy rain
 weather.snow = Snow
 weather.snowstorm = Snowstorm
 
@@ -431,6 +435,7 @@ hud.date = {1} {0}, year {2} · {3}:{4}
 hud.outdoor_temperature = Outdoors: {0}
 # {0} = the sky (e.g. Rain)
 hud.weather = Weather: {0}
+hud.weather_rain = Weather: {0} ({1} mm/h)
 hud.outdoor_humidity = Air humidity: {0}%
 # {0} = how much of the open ground snow covers, in percent
 hud.snow_cover = Snow on the ground: {0}%
@@ -1131,6 +1136,7 @@ unit.hours_minutes = {0} h {1} min
 unit.kg = {0} kg
 unit.percent = {0}%
 unit.celsius = {0} °C
+unit.mm_per_hour = {0} mm/h
 
 # Generic UI
 

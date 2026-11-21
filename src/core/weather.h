@@ -78,13 +78,16 @@ typedef enum Precipitation {
 #define WEATHER_SNOW_PER_HOUR 0.08f
 #define WEATHER_MELT_PER_DEGREE_HOUR 0.015f
 #define WEATHER_RAIN_MELT 0.05f
-/* Recent rain: hours of rain, keeping WEATHER_RAIN_MEMORY of itself each
- * hour (about half after 17 hours). */
+/* Recent rain: mm of rain, keeping WEATHER_RAIN_MEMORY of itself each hour
+ * (about half after 17 hours). */
 #define WEATHER_RAIN_MEMORY 0.96f
 /* How fast what is out in the rain gets wet, per hour (1: soaked in an
- * hour), by what falls. */
-#define WEATHER_WETTING_RAIN 1.0f
-#define WEATHER_WETTING_STORM 2.0f
+ * hour): with the square root of the rain, 1 at WEATHER_WETTING_RAIN_MM mm an
+ * hour, half as much again in a storm's wind, WEATHER_WETTING_MAX at most;
+ * WEATHER_WETTING_SNOW in the snow. */
+#define WEATHER_WETTING_RAIN_MM 0.25f
+#define WEATHER_WETTING_STORM 1.5f
+#define WEATHER_WETTING_MAX 6.0f
 #define WEATHER_WETTING_SNOW 0.25f
 
 typedef struct WeatherDef {
@@ -98,11 +101,11 @@ typedef struct WeatherDef {
     /* Step along clear (0) → cloudy, fog (1) → rain (2) → storm (3). */
     int cloudiness;
     bool falls; /* Rain or snow falls. */
-    /* Water that falls, in mm an hour (docs/CLIMATE.md §3.1); how far the
-     * dew point stays below the day's mean temperature (0: the air is
-     * saturated, §4); how much of the sky is clear for the ground to cool
-     * at night (§5.1). */
-    float rain_mm;
+    /* The water of the snow that falls, in mm an hour (docs/CLIMATE.md
+     * §3.1; rain: weather_rain_at()); how far the dew point stays below the
+     * day's mean temperature (0: the air is saturated, §4); how much of the
+     * sky is clear for the ground to cool at night (§5.1). */
+    float snow_mm;
     float dew_gap;
     float clearness;
 } WeatherDef;
@@ -114,10 +117,13 @@ typedef struct Weather {
     uint32_t day;      /* The day the spell was last drawn for. */
     float spell;       /* Degrees added to the season's temperature today. */
     float snow;        /* Snow cover on open ground, 0..1. */
-    float recent_rain; /* Hours of rain lately (see WEATHER_RAIN_MEMORY). */
+    float recent_rain; /* mm of rain lately (see WEATHER_RAIN_MEMORY). */
     /* Debug: degrees added to the air all along (the debug menu's + and -);
      * 0 in a game as played. */
     float debug_offset;
+    /* Debug: the rain in mm an hour whenever the sky rains, every hour (the
+     * debug menu; tests); 0 in a game as played: drawn (weather_rain_at()). */
+    float debug_rain;
 } Weather;
 
 /* NULL when out of range. */
@@ -148,57 +154,80 @@ void weather_tick(Weather *weather, uint64_t tick);
 /* Outdoor air temperature at `tick` with this weather. */
 float weather_outdoor(const Weather *weather, uint64_t tick);
 
-/* What falls at `tick`: rain, or snow when the air is cold enough. */
+/* What falls at `tick`: rain (in a wet hour), or snow when the air is cold
+ * enough. */
 Precipitation weather_precipitation(const Weather *weather, uint64_t tick);
 
 /* How fast what is out under the open sky gets wet at `tick`, per hour
  * (0 when nothing falls). */
 float weather_wetting(const Weather *weather, uint64_t tick);
 
-/* Translation key of the sky now (snow and snowstorm when it snows, a
- * downpour in a storm's heaviest hours). */
+/* Translation key of the sky now: snow and snowstorm when it snows; under a
+ * sky of rain, drizzle, rain, heavy rain or a downpour by how hard it falls,
+ * cloudy in a dry hour; a storm, or a downpour. */
 const char *weather_name_key(const Weather *weather, uint64_t tick);
 
 /* Daylight let through by the sky (1: all of it). */
 float weather_light(const Weather *weather);
 
-/* The rain of a storm (docs/WATER.md §4.3), drawn per period: `mm` an hour,
- * from WEATHER_STORM_MM_MIN to WEATHER_STORM_MM_MAX; now and then (the
- * season's WEATHER_DOWNPOUR_ODDS of storms, most in summer) a downpour of
- * `downpour_mm` an hour (WEATHER_DOWNPOUR_MM_MIN to _MAX) for
- * `downpour_hours` (1 to WEATHER_DOWNPOUR_HOURS_MAX, 0: none) from
- * `downpour_start`, hours in the period. A downpour fills the hollows: far
- * more than any ground takes in. The storms are lighter than they were
- * (1.2 mm an hour) and the rains too (0.25 mm), so that what falls in a
- * season stays about what it was (tuning). Snowstorms snow as before. */
-#define WEATHER_STORM_MM_MIN 0.5f
-#define WEATHER_STORM_MM_MAX 1.1f
-#define WEATHER_DOWNPOUR_MM_MIN 10.0f
-#define WEATHER_DOWNPOUR_MM_MAX 20.0f
-#define WEATHER_DOWNPOUR_HOURS_MAX 3
-/* Spring, summer, autumn, winter. */
-#define WEATHER_DOWNPOUR_ODDS                                                                      \
+/*
+ * How hard it rains (docs/WATER.md §4.3), in mm an hour, anywhere from
+ * WEATHER_RAIN_MM_MIN to WEATHER_RAIN_MM_MAX. Under a sky of rain or storm it
+ * does not rain every hour: each hour is wet with the sky's `wet_share`
+ * (showers and pauses). A wet hour's rain is drawn from a log-normal law
+ * around the sky's `median_mm` (times the season's factor for storms: the
+ * summer's are the heaviest): the rain of a period (an episode, spread
+ * `episode_spread`, the natural log's standard deviation) times that of the
+ * hour (`hour_spread`). Most rain is light, heavy rain comes now and then,
+ * and once in a long while a cloudburst. Over a season it rains about as
+ * much as when it rained every hour of those skies, lightly (rain 0.25 mm an
+ * hour, storms 1.2): fewer hours, harder. From the seed and the hour alone
+ * (weather_roll()).
+ */
+#define WEATHER_RAIN_MM_MIN 0.1f
+#define WEATHER_RAIN_MM_MAX 100.0f
+typedef struct RainLaw {
+    float wet_share;
+    float median_mm;
+    float episode_spread;
+    float hour_spread;
+} RainLaw;
+/* Rain, storm (tuning). */
+#define WEATHER_RAIN_LAW                                                                           \
     {                                                                                              \
-        0.06f, 0.10f, 0.06f, 0.02f                                                                 \
+        0.35f, 0.33f, 0.8f, 0.9f                                                                   \
     }
+#define WEATHER_STORM_LAW                                                                          \
+    {                                                                                              \
+        0.75f, 0.55f, 1.0f, 1.1f                                                                   \
+    }
+/* Spring, summer, autumn, winter: the storms' median times this. */
+#define WEATHER_STORM_SEASON                                                                       \
+    {                                                                                              \
+        1.0f, 1.2f, 1.0f, 0.9f                                                                     \
+    }
+/* The names of the rain by how hard it falls (mm an hour): a drizzle below
+ * the first, heavy rain from the second, a downpour from the third. */
+#define WEATHER_DRIZZLE_BELOW 0.5f
+#define WEATHER_HEAVY_RAIN_FROM 4.0f
+#define WEATHER_DOWNPOUR_FROM 16.0f
 
-typedef struct StormRain {
-    float mm;
-    float downpour_mm;
-    int downpour_start;
-    int downpour_hours;
-} StormRain;
+/* The law of the rain under the sky `type` in `season` (median with the
+ * season's factor); all zero when that sky does not rain. */
+RainLaw weather_rain_law(WeatherType type, Season season);
 
-/* The storm of `period` (tick / WEATHER_PERIOD_TICKS) in `season`, from the
- * seed alone (weather_roll()), and its rain in an hour of the period. */
-StormRain weather_storm_rain(uint64_t seed, uint64_t period, Season season);
-float weather_storm_rain_at(const StormRain *rain, int hour);
+/* The rain under the sky `type` in the hour `hour` (counted from the start
+ * of the game: tick / TICKS_PER_HOUR) of a game of `seed`, in mm an hour; 0
+ * in a dry hour or under a sky that does not rain (snow is apart:
+ * weather_snowfall()). */
+float weather_rain_at(uint64_t seed, WeatherType type, uint64_t hour);
 
-/* Whether a downpour falls at `tick` (a storm's heaviest hours). */
+/* Whether a downpour falls at `tick` (rain of WEATHER_DOWNPOUR_FROM mm an
+ * hour or more). */
 bool weather_downpour(const Weather *weather, uint64_t tick);
 
-/* Water falling at `tick` as rain and as snow, in mm (of water) an hour
- * (docs/CLIMATE.md §3.1). */
+/* Water falling at `tick` as rain (weather_rain_at(); 0 when it snows) and
+ * as snow, in mm (of water) an hour (docs/CLIMATE.md §3.1). */
 float weather_rainfall(const Weather *weather, uint64_t tick);
 float weather_snowfall(const Weather *weather, uint64_t tick);
 

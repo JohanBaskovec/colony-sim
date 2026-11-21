@@ -36,11 +36,11 @@
 #define SPAWN_PLANT_SPOT_CHANCE 0.08f
 /* Mushrooms (docs/KNOWLEDGE.md §7.3): each cool night (MUSHROOM_MIN_CELSIUS), a patch
  * appears with MUSHROOM_CHANCE on open soil within MUSHROOM_TREE_RANGE tiles
- * of a mature tree, ×(1 + recent rain / MUSHROOM_RAIN_HOURS), at most
- * ×MUSHROOM_RAIN_MAX after much rain (Weather.recent_rain), and an existing
+ * of a mature tree, ×(1 + recent rain / MUSHROOM_RAIN_MM), at most
+ * ×MUSHROOM_RAIN_MAX after much rain (Weather.recent_rain, in mm), and an existing
  * one goes with MUSHROOM_VANISH_CHANCE (five days on average). */
 #define MUSHROOM_CHANCE 0.0015f
-#define MUSHROOM_RAIN_HOURS 4.0f
+#define MUSHROOM_RAIN_MM 1.2f
 #define MUSHROOM_RAIN_MAX 4.0f
 #define MUSHROOM_VANISH_CHANCE 0.2f
 #define MUSHROOM_TREE_RANGE 2
@@ -834,7 +834,7 @@ static float world_roll(uint64_t seed, size_t tile, int day, uint32_t salt)
 static float mushroom_chance(const Weather *weather)
 {
     return MUSHROOM_CHANCE *
-           fminf(1.0f + weather->recent_rain / MUSHROOM_RAIN_HOURS, MUSHROOM_RAIN_MAX);
+           fminf(1.0f + weather->recent_rain / MUSHROOM_RAIN_MM, MUSHROOM_RAIN_MAX);
 }
 
 /* Once a day per tile: mushroom patches come and go under the trees. */
@@ -2089,6 +2089,22 @@ void game_debug_temperature(Game *game, int direction)
                    (direction > 0 ? GAME_DEBUG_TEMPERATURE_STEP : -GAME_DEBUG_TEMPERATURE_STEP);
     game->weather.debug_offset =
         clampf(offset, -GAME_DEBUG_TEMPERATURE_LIMIT, GAME_DEBUG_TEMPERATURE_LIMIT);
+}
+
+void game_debug_rain(Game *game, int direction)
+{
+    static const float STEPS[] = GAME_DEBUG_RAIN_STEPS;
+    const int count = (int)(sizeof(STEPS) / sizeof(STEPS[0]));
+    int at = 0; /* The step at or below the rain now. */
+    while (at + 1 < count && STEPS[at + 1] <= game->weather.debug_rain) {
+        at++;
+    }
+    at = clampi(at + (direction > 0 ? 1 : -1), 0, count - 1);
+    game->weather.debug_rain = STEPS[at];
+    const WeatherDef *sky = weather_def((WeatherType)game->weather.type);
+    if (STEPS[at] > 0.0f && (sky == NULL || !sky->falls)) {
+        game->weather.type = WEATHER_RAIN;
+    }
 }
 
 void game_debug_next_weather(Game *game)

@@ -1243,8 +1243,11 @@ void render_weather(SDL_Renderer *renderer, const Game *game, const Camera *came
     }
     bool storm = type == WEATHER_STORM;
     bool snow = falling == PRECIPITATION_SNOW;
-    /* As many drops on any screen: so many per million pixels. */
-    float density = snow ? 300.0f : storm ? 600.0f : 300.0f;
+    /* As many drops on any screen: so many per million pixels, more as the
+     * rain falls harder (300 at 1 mm an hour, a tenth of that in a drizzle,
+     * ten times as many in a cloudburst). */
+    float rain = snow ? 0.0f : weather_rainfall(&game->weather, game->clock.tick);
+    float density = snow ? 300.0f : SDL_clamp(300.0f * SDL_sqrtf(rain), 40.0f, 3000.0f);
     int count = (int)(density * width * height / 1.0e6f);
     float speed = snow ? 60.0f : storm ? 1100.0f : 800.0f; /* Pixels a second. */
     float wind = snow ? 15.0f : storm ? 0.35f * speed : 0.08f * speed;

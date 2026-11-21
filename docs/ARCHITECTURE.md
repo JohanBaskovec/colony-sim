@@ -343,9 +343,9 @@ cracks, roofs shed their rain, foliage lets it through, open water takes it
 on its surface tile. Outside an active block the exchange tells the map of
 class changes itself, and wakes the block only when it sets the water moving
 (it would fall, or spill to or from a neighbour by a film, after and not
-before): water asleep beside lower ground stays held. The weather draws each
-storm's rain and now and then a downpour (`weather_storm_rain()`,
-`weather_downpour()`).
+before): water asleep beside lower ground stays held. The weather draws the
+rain of each hour, 0.1 to 100 mm an hour or none (`weather_rain_at()`,
+docs/WATER.md §4.3).
 
 **Saves** (`core/save.h`, `core/serialize.h`, docs/SAVE.md): `game_save()`
 writes a game into memory, `game_load()` makes a new game from it; the
@@ -1853,7 +1853,7 @@ bucket set by its terrain (`SoilDef`: wilting point, field capacity,
 saturation, drainage, intake). It is worked out once an hour in slices over
 the ticks like the plants (`soil_update()`, from `update_plants()`), with
 what the hour brings worked out once for the map (`SoilHour`: rain from the
-weather's `rain_mm`, the snowpack's melt, the potential evapotranspiration
+weather (`weather_rainfall()`), the snowpack's melt, the potential evapotranspiration
 from the sun, the sky, the temperature and the air's humidity, the dew
 point): rain lands less under crowns and not at all under roofs or rock,
 water above field capacity drains, the crowns over a tile, the plant on it
@@ -1907,13 +1907,17 @@ within ±8). The outdoor air is the season's mean plus the spell plus the
 sky's offset (rain −2 °C, storm −4) plus the daily swing times the sky's
 factor (clear ×1.3, cloudy ×0.6, rain ×0.4...). Every hour the snow cover
 of open ground grows while it snows and melts above 0 °C (faster in the
-rain), and `recent_rain` keeps 0.96 of itself plus one per hour of rain.
+rain), and `recent_rain` keeps 0.96 of itself plus the hour's rain in mm.
+Under a sky of rain or storm each hour is wet or dry, and a wet hour's rain
+is drawn from a log-normal law (`weather_rain_at()`: the period's draw times
+the hour's, 0.1 to 100 mm an hour; `Weather.debug_rain` forces one).
 Draws come from `weather_roll()`, a hash of the seed, the period or day and
 a salt, never from `game->rng`: the weather does not depend on what the
 settlers do. The game starts on a clear sky.
 
 What it changes: what falls wets settlers under the open sky
-(`weather_wetting()`, 1 an hour in the rain, 2 in a storm, 0.25 in the snow,
+(`weather_wetting()`: the square root of the rain over 0.25 mm an hour, ×1.5
+in a storm, 6 at most; 0.25 in the snow,
 into `ColonistContext.wetting`; `Colonist.wetness` dries by 0.25 an hour, 1
 where it feels 20 °C or more), and a wet settler feels up to
 `COLONIST_WET_CHILL` (8 °C) colder, which counts for sleep; settlers do not
@@ -1922,8 +1926,8 @@ open sky soaks up the same rate (`Workstation.soaked`) and goes out at
 `HEARTH_SOAKED_OUT` (2: two hours of rain), its fuel kept; nobody lights a
 hearth rain or snow falls on (`hearth_rained_on()`). What lies out in the
 rain gets wet, food rotting faster for it (`ItemConditions`). Mushrooms come
-×(1 + recent rain / 4), at most ×4. The frontend shows the sky and snow
-cover in the HUD, how wet a settler is, a hearth soaking, the snow cover on
+×(1 + recent rain / 1.2 mm), at most ×4. The frontend shows the sky, the rain
+in mm an hour and the snow cover in the HUD, how wet a settler is, a hearth soaking, the snow cover on
 open ground (`render_snow_cover()`), falling rain and snow, fog and
 lightning over the view (`render_weather()`, animated by real time), and
 clouds dim the daylight (`weather_light()`).
@@ -2369,7 +2373,11 @@ them (`bench_simulation` hashes are unchanged).
   hashes with cheats on stay as they were).
 - **Weather**: `game_debug_next_weather()` switches to the next sky at once,
   `game_debug_cold_snap()` sets the coldest spell (until the next day's
-  draw). They change `Game.weather` directly (always in the hash).
+  draw), `game_debug_rain()` steps the rain forced every hour
+  (`Weather.debug_rain`: 0, the weather's own, then 0.1 to 100 mm an hour;
+  a sky of rain when the sky did not rain). They change `Game.weather`
+  directly (always in the hash; the forced rain apart, so that earlier
+  hashes stay as they were).
 - **One-shot commands** change the state directly (hashed as any state):
   `game_debug_learn_all()` (every knowledge at least at
   `GAME_DEBUG_KNOWLEDGE_LEVEL`, practised now), `game_debug_skip()` (ticks

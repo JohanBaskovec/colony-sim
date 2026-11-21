@@ -528,6 +528,37 @@ static void test_temperature_steps(void)
     game_shutdown(&b);
 }
 
+/* The debug menu's rain: steps from the weather's own up to a cloudburst
+ * and back, rain under a clear sky, every hour as hard. */
+static void test_debug_rain(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    game.weather.type = WEATHER_CLEAR;
+    game.weather.spell = 10.0f; /* Rain, not snow. */
+    uint64_t tick = game.clock.tick;
+    CHECK_NEAR(weather_rainfall(&game.weather, tick), 0.0, 1e-9);
+    game_debug_rain(&game, 1);
+    CHECK_NEAR(game.weather.debug_rain, 0.1, 1e-6);
+    CHECK_EQ_INT(game.weather.type, WEATHER_RAIN);
+    for (int i = 0; i < 20; i++) {
+        game_debug_rain(&game, 1);
+    }
+    CHECK_NEAR(game.weather.debug_rain, WEATHER_RAIN_MM_MAX, 1e-4);
+    for (uint64_t hour = 0; hour < 12; hour++) {
+        CHECK_NEAR(weather_rainfall(&game.weather, tick + hour * TICKS_PER_HOUR),
+                   WEATHER_RAIN_MM_MAX, 1e-4);
+    }
+    CHECK_STR_EQ(weather_name_key(&game.weather, tick), "weather.downpour");
+    game_debug_rain(&game, -1);
+    CHECK_NEAR(game.weather.debug_rain, 50.0, 1e-4);
+    for (int i = 0; i < 20; i++) {
+        game_debug_rain(&game, -1);
+    }
+    CHECK_NEAR(game.weather.debug_rain, 0.0, 1e-9); /* The weather's own again. */
+    game_shutdown(&game);
+}
+
 static void test_learn_all(void)
 {
     Game game;
@@ -840,6 +871,7 @@ int main(void)
     RUN_TEST(test_hash);
     RUN_TEST(test_character_editor);
     RUN_TEST(test_temperature_steps);
+    RUN_TEST(test_debug_rain);
     RUN_TEST(test_learn_all);
     RUN_TEST(test_skip_and_next_season);
     RUN_TEST(test_spawn_items);

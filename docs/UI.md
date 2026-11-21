@@ -291,7 +291,8 @@ From the bottom up, above the bottom bar:
   it as "level / highest level" (the plains are 0, the levels under them negative), a mark at the
   ground level. Page Up / Page Down and Shift + wheel (down: a level up, as the wheel down zooms out) still work.
 - Above, right aligned: **date and hour**, **season**, **outdoor
-  temperature**, **weather** (sky, snow cover), and the **alerts**.
+  temperature**, **weather** (sky, the rain in mm an hour while it rains,
+  snow cover), and the **alerts**.
 
 ### Alerts (right side)
 

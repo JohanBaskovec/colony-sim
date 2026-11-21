@@ -237,6 +237,8 @@ debug.character_editor = Éditeur de personnage (boutons - et + sur les besoins,
 debug.next_weather = Temps : {0} (suivant)
 debug.cold_snap = Vague de froid (jusqu’à demain)
 debug.temperature = Température : {0}
+debug.rain = Pluie : {0}
+debug.rain_natural = selon la météo
 debug.sadden = Démoraliser tout le monde (cafard passager)
 debug.discord = Brouiller tout le monde
 debug.forget_social = Oublier les opinions modifiées par le débogage
@@ -418,6 +420,8 @@ weather.fog = Brouillard
 weather.rain = Pluie
 weather.storm = Orage
 weather.downpour = Averse torrentielle
+weather.drizzle = Bruine
+weather.heavy_rain = Forte pluie
 weather.snow = Neige
 weather.snowstorm = Tempête de neige
 
@@ -425,6 +429,7 @@ weather.snowstorm = Tempête de neige
 hud.date = {1}, jour {0}, an {2} · {3}h{4}
 hud.outdoor_temperature = Dehors : {0}
 hud.weather = Temps : {0}
+hud.weather_rain = Temps : {0} ({1} mm/h)
 hud.outdoor_humidity = Humidité de l’air : {0} %
 hud.snow_cover = Neige au sol : {0} %
 hud.temperature_view = Vue thermique : bleu {0}, rouge {1} · {2} : masquer
@@ -1030,6 +1035,7 @@ unit.hours_minutes = {0} h {1} min
 unit.kg = {0} kg
 unit.percent = {0} %
 unit.celsius = {0} °C
+unit.mm_per_hour = {0} mm/h
 
 # Interface générique
 

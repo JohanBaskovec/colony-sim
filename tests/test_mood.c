@@ -403,6 +403,7 @@ static void test_a_night_in_the_rain(void)
     for (int i = 0; i < 9 * TICKS_PER_HOUR; i++) {
         game.weather.type = WEATHER_RAIN;
         game.weather.spell = WEATHER_SPELL_MAX;
+        game.weather.debug_rain = 1.0f; /* Every hour. */
         run_ticks(&game, 1);
     }
     REQUIRE(sheltered->task != TASK_SLEEP && exposed->task != TASK_SLEEP);

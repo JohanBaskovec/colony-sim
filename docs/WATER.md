@@ -469,6 +469,37 @@ banks (step W5).
   15 % of what it was (`test_season_rain_is_kept`). Lakes keep about their
   level over two years without inflow: about 40 mm lower each summer, most
   of it back by the end of autumn (−25 mm a year at seed 42).
+- *As built (W3d, rain of every strength):* the rain is no longer a
+  constant of the sky. Under a sky of rain or storm, each hour is wet or dry
+  (showers and pauses: 35 % of the hours of rain are wet, 75 % of a
+  storm's), and a wet hour's rain is drawn from a log-normal law, anywhere
+  from 0.1 to 100 mm an hour: the rain of the period (an episode) times that
+  of the hour, around a median of 0.33 mm an hour under a sky of rain and
+  0.55 in a storm (×1.2 in summer, ×0.9 in winter) *(tuning)*. Most rain is
+  light; 2 % of the wet hours of rain bring 4 mm an hour or more, 9 % of a
+  storm's (11 % in summer); a storm reaches 30 mm an hour once in 250 wet
+  hours, 90 once in 3 000. It rains in about 8 % of the hours (23 % before),
+  harder, and a
+  season gets about as much as before (`test_season_rain_is_kept`: within
+  15 % of rain 0.25 mm an hour and storms 1.2 in every hour of their skies,
+  on which the soil was tuned). From the seed and the hour alone
+  (`weather_rain_at()`). The weather is named by how hard it falls under a
+  sky of rain (*Drizzle* below 0.5 mm an hour, *Rain*, *Heavy rain* from 4,
+  *Downpour* from 16, *Cloudy* in a dry hour), a storm is a storm but in
+  its downpours, and the HUD shows the rain in mm an hour; the rain drawn
+  over the view thickens with it. Settlers and fires get wet with the
+  square root of the rain (soaked in an hour at 0.25 mm an hour, in 15
+  minutes at 4, half as fast again in a storm's wind). `recent_rain` counts
+  mm. The debug menu forces a rain (0.1 to 100 mm an hour, every hour).
+  What it does: a rain of 5 mm an hour soaks into the soil (it takes 12 an
+  hour) and raises a lake by its own rain; 20 mm an hour for three hours
+  (60 mm) raises a lake of seed 42 by 17 cm (its banks' runoff), 10 cm
+  once settled, and leaves puddles in the hollows of the land that soak in
+  within hours. Its cost: rain heavier than the cracks of rough stone drink
+  (1.5 mm an hour) lies on the stone floors of the hills and flows on as a
+  sheet a few millimetres deep, which keeps up to 800 blocks awake during
+  the heaviest hours (4 ms a tick; over a year of `bench_simulation 12 60
+  1`, 48.6 → 54.7 µs a tick).
 - A downpour on soaked ground fills the hollows. Water runs down the hills
   in sheets that gather in the valleys and into dug cellars and galleries
   whose openings face uphill.

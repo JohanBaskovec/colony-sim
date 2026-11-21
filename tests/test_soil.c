@@ -308,7 +308,11 @@ static void test_air_humidity(void)
     weather_init(&weather, 3, tick);
     weather.type = WEATHER_RAIN;
     CHECK_NEAR(weather_dew_point(&weather, tick), weather_outdoor(&weather, tick), 1e-4);
-    CHECK(weather_rainfall(&weather, tick) > 0.0f);
+    float rain = 0.0f; /* Some hours of the day are dry. */
+    for (uint64_t hour = 0; hour < HOURS_PER_DAY; hour++) {
+        rain += weather_rainfall(&weather, tick + hour * TICKS_PER_HOUR);
+    }
+    CHECK(rain > 0.0f);
     CHECK_NEAR(weather_snowfall(&weather, tick), 0.0, 1e-6);
     weather.type = WEATHER_CLEAR;
     CHECK(weather_dew_point(&weather, tick) < weather_outdoor(&weather, tick) - 3.0f);

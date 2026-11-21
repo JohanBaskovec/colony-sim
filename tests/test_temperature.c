@@ -770,6 +770,8 @@ static void run_sky(Game *game, float hours, WeatherType type)
     for (int i = 0; i < ticks; i++) {
         game->weather.type = (uint8_t)type;
         game->weather.spell = 0.0f;
+        /* Rain every hour, soaking in one (weather_wetting()). */
+        game->weather.debug_rain = WEATHER_WETTING_RAIN_MM;
         run_hours(game, 1.0f / (float)TICKS_PER_HOUR);
     }
 }

@@ -71,7 +71,10 @@ no rock):
 ### 3.1 Rain and snow
 
 - What falls, in mm an hour *(tuning)*: rain 0.25, storm 1.2; nothing from
-  fog and clouds (dew, §4, adds a little at night). With the odds of
+  fog and clouds (dew, §4, adds a little at night). *As built:* the rain of
+  each hour is drawn, from 0.1 to 100 mm an hour, with dry hours between
+  (docs/WATER.md §4.3, W3d), and a season gets about what these constants
+  gave; snow still falls at them. With the odds of
   `WEATHER_SEASON_ODDS` it gives about 4 mm a day in summer (mostly storms)
   and 3 in spring and autumn: a little more than plants and sun take in a
   long dry spell, so the ground stays moist on average, dries in a week of

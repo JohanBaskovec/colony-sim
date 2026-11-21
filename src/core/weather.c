@@ -10,12 +10,10 @@
 enum {
     ROLL_KEEP,
     ROLL_DRAW,
-    ROLL_SPELL, /* Four of them, ROLL_SPELL to ROLL_SPELL + 3. */
-    ROLL_STORM_RAIN = ROLL_SPELL + 4,
-    ROLL_DOWNPOUR,
-    ROLL_DOWNPOUR_RAIN,
-    ROLL_DOWNPOUR_START,
-    ROLL_DOWNPOUR_HOURS,
+    ROLL_SPELL,                    /* Four of them, ROLL_SPELL to ROLL_SPELL + 3. */
+    ROLL_EPISODE = ROLL_SPELL + 4, /* Two of them: a normal roll. */
+    ROLL_WET = ROLL_EPISODE + 2,
+    ROLL_HOUR, /* Two of them. */
 };
 
 static const WeatherDef WEATHER_DEFS[WEATHER_TYPE_COUNT] = {
@@ -184,6 +182,7 @@ void weather_tick(Weather *weather, uint64_t tick)
         return;
     }
     Precipitation falling = weather_precipitation(weather, tick);
+    float rain = falling == PRECIPITATION_RAIN ? weather_rainfall(weather, tick) : 0.0f;
     bool storm = weather->type == WEATHER_STORM;
     if (falling == PRECIPITATION_SNOW) {
         weather->snow += WEATHER_SNOW_PER_HOUR * (storm ? 2.0f : 1.0f);
@@ -197,8 +196,7 @@ void weather_tick(Weather *weather, uint64_t tick)
         }
     }
     weather->snow = clampf(weather->snow, 0.0f, 1.0f);
-    weather->recent_rain =
-        weather->recent_rain * WEATHER_RAIN_MEMORY + (falling == PRECIPITATION_RAIN ? 1.0f : 0.0f);
+    weather->recent_rain = weather->recent_rain * WEATHER_RAIN_MEMORY + rain;
 }
 
 float weather_outdoor(const Weather *weather, uint64_t tick)
@@ -210,21 +208,35 @@ float weather_outdoor(const Weather *weather, uint64_t tick)
            TEMPERATURE_DAILY_SWING * swing * temperature_daily_swing(tick);
 }
 
+/* The rain of the sky now, the debug menu's when it sets one. */
+static float rain_now(const Weather *weather, uint64_t tick)
+{
+    if (weather->debug_rain > 0.0f) {
+        return clampf(weather->debug_rain, WEATHER_RAIN_MM_MIN, WEATHER_RAIN_MM_MAX);
+    }
+    return weather_rain_at(weather->seed, (WeatherType)weather->type, tick / TICKS_PER_HOUR);
+}
+
 Precipitation weather_precipitation(const Weather *weather, uint64_t tick)
 {
     const WeatherDef *def = weather_def((WeatherType)weather->type);
     if (def == NULL || !def->falls) {
         return PRECIPITATION_NONE;
     }
-    return weather_outdoor(weather, tick) <= WEATHER_SNOW_CELSIUS ? PRECIPITATION_SNOW
-                                                                  : PRECIPITATION_RAIN;
+    if (weather_outdoor(weather, tick) <= WEATHER_SNOW_CELSIUS) {
+        return PRECIPITATION_SNOW;
+    }
+    return rain_now(weather, tick) > 0.0f ? PRECIPITATION_RAIN : PRECIPITATION_NONE;
 }
 
 float weather_wetting(const Weather *weather, uint64_t tick)
 {
     switch (weather_precipitation(weather, tick)) {
-    case PRECIPITATION_RAIN:
-        return weather->type == WEATHER_STORM ? WEATHER_WETTING_STORM : WEATHER_WETTING_RAIN;
+    case PRECIPITATION_RAIN: {
+        float wetting = sqrtf(weather_rainfall(weather, tick) / WEATHER_WETTING_RAIN_MM);
+        wetting *= weather->type == WEATHER_STORM ? WEATHER_WETTING_STORM : 1.0f;
+        return fminf(wetting, WEATHER_WETTING_MAX);
+    }
     case PRECIPITATION_SNOW: return WEATHER_WETTING_SNOW;
     default: return 0.0f;
     }
@@ -239,10 +251,17 @@ const char *weather_name_key(const Weather *weather, uint64_t tick)
     if (def->snow_key != NULL && weather_precipitation(weather, tick) == PRECIPITATION_SNOW) {
         return def->snow_key;
     }
-    if (weather_downpour(weather, tick)) {
+    float rain = weather_rainfall(weather, tick);
+    if (rain >= WEATHER_DOWNPOUR_FROM) {
         return N_("weather.downpour");
     }
-    return def->name_key;
+    if (weather->type != WEATHER_RAIN) {
+        return def->name_key;
+    }
+    return rain <= 0.0f                     ? N_("weather.cloudy")
+           : rain < WEATHER_DRIZZLE_BELOW   ? N_("weather.drizzle")
+           : rain < WEATHER_HEAVY_RAIN_FROM ? def->name_key
+                                            : N_("weather.heavy_rain");
 }
 
 float weather_light(const Weather *weather)
@@ -251,75 +270,59 @@ float weather_light(const Weather *weather)
     return def != NULL ? def->light : 1.0f;
 }
 
-StormRain weather_storm_rain(uint64_t seed, uint64_t period, Season season)
+RainLaw weather_rain_law(WeatherType type, Season season)
 {
-    static const float DOWNPOUR_ODDS[SEASON_COUNT] = WEATHER_DOWNPOUR_ODDS;
-    StormRain rain = {0};
-    rain.mm = WEATHER_STORM_MM_MIN + (WEATHER_STORM_MM_MAX - WEATHER_STORM_MM_MIN) *
-                                         weather_roll(seed, period, ROLL_STORM_RAIN);
-    float odds = (unsigned)season < SEASON_COUNT ? DOWNPOUR_ODDS[season] : 0.0f;
-    if (weather_roll(seed, period, ROLL_DOWNPOUR) < odds) {
-        rain.downpour_hours =
-            1 + (int)(weather_roll(seed, period, ROLL_DOWNPOUR_HOURS) * WEATHER_DOWNPOUR_HOURS_MAX);
-        rain.downpour_start = (int)(weather_roll(seed, period, ROLL_DOWNPOUR_START) *
-                                    (float)(WEATHER_PERIOD_HOURS - rain.downpour_hours + 1));
-        rain.downpour_mm =
-            WEATHER_DOWNPOUR_MM_MIN + (WEATHER_DOWNPOUR_MM_MAX - WEATHER_DOWNPOUR_MM_MIN) *
-                                          weather_roll(seed, period, ROLL_DOWNPOUR_RAIN);
+    static const RainLaw RAIN = WEATHER_RAIN_LAW, STORM = WEATHER_STORM_LAW;
+    static const float STORM_SEASON[SEASON_COUNT] = WEATHER_STORM_SEASON;
+    RainLaw law = {0};
+    if (type == WEATHER_RAIN) {
+        law = RAIN;
+    } else if (type == WEATHER_STORM) {
+        law = STORM;
+        law.median_mm *= (unsigned)season < SEASON_COUNT ? STORM_SEASON[season] : 1.0f;
     }
-    return rain;
+    return law;
 }
 
-float weather_storm_rain_at(const StormRain *rain, int hour)
+/* A roll of a standard normal law (Box-Muller) from two rolls. */
+static float normal_roll(uint64_t seed, uint64_t number, uint32_t salt)
 {
-    bool pouring = rain->downpour_hours > 0 && hour >= rain->downpour_start &&
-                   hour < rain->downpour_start + rain->downpour_hours;
-    return pouring ? rain->downpour_mm : rain->mm;
+    float u = 1.0f - weather_roll(seed, number, salt); /* (0, 1]: no log of 0. */
+    float v = weather_roll(seed, number, salt + 1);
+    return sqrtf(-2.0f * logf(u)) * cosf(6.2831853f * v);
 }
 
-/* The storm of the current period. */
-static StormRain current_storm(const Weather *weather, uint64_t tick)
+float weather_rain_at(uint64_t seed, WeatherType type, uint64_t hour)
 {
-    uint64_t period = tick / WEATHER_PERIOD_TICKS;
+    uint64_t period = hour / WEATHER_PERIOD_HOURS;
     Season season = game_date_from_tick(period * WEATHER_PERIOD_TICKS).season;
-    return weather_storm_rain(weather->seed, period, season);
-}
-
-/* The hour of `tick` within its period. */
-static int hour_in_period(uint64_t tick)
-{
-    return (int)(tick % WEATHER_PERIOD_TICKS / TICKS_PER_HOUR);
+    RainLaw law = weather_rain_law(type, season);
+    if (law.wet_share <= 0.0f || weather_roll(seed, hour, ROLL_WET) >= law.wet_share) {
+        return 0.0f;
+    }
+    float spread = law.episode_spread * normal_roll(seed, period, ROLL_EPISODE) +
+                   law.hour_spread * normal_roll(seed, hour, ROLL_HOUR);
+    return clampf(law.median_mm * expf(spread), WEATHER_RAIN_MM_MIN, WEATHER_RAIN_MM_MAX);
 }
 
 bool weather_downpour(const Weather *weather, uint64_t tick)
 {
-    if (weather->type != WEATHER_STORM ||
-        weather_precipitation(weather, tick) != PRECIPITATION_RAIN) {
-        return false;
-    }
-    StormRain rain = current_storm(weather, tick);
-    int hour = hour_in_period(tick);
-    return rain.downpour_hours > 0 && hour >= rain.downpour_start &&
-           hour < rain.downpour_start + rain.downpour_hours;
+    return weather_rainfall(weather, tick) >= WEATHER_DOWNPOUR_FROM;
 }
 
 float weather_rainfall(const Weather *weather, uint64_t tick)
 {
     const WeatherDef *def = weather_def((WeatherType)weather->type);
-    if (def == NULL || weather_precipitation(weather, tick) != PRECIPITATION_RAIN) {
+    if (def == NULL || !def->falls || weather_outdoor(weather, tick) <= WEATHER_SNOW_CELSIUS) {
         return 0.0f;
     }
-    if (weather->type == WEATHER_STORM) {
-        StormRain rain = current_storm(weather, tick);
-        return weather_storm_rain_at(&rain, hour_in_period(tick));
-    }
-    return def->rain_mm;
+    return rain_now(weather, tick);
 }
 
 float weather_snowfall(const Weather *weather, uint64_t tick)
 {
     const WeatherDef *def = weather_def((WeatherType)weather->type);
-    return def != NULL && weather_precipitation(weather, tick) == PRECIPITATION_SNOW ? def->rain_mm
+    return def != NULL && weather_precipitation(weather, tick) == PRECIPITATION_SNOW ? def->snow_mm
                                                                                      : 0.0f;
 }
 
@@ -355,6 +358,9 @@ uint64_t weather_hash(const Weather *weather, uint64_t hash)
     if (weather->debug_offset != 0.0f) { /* Apart: earlier hashes stay as they were. */
         hash = hash_fnv1a64(hash, &weather->debug_offset, sizeof(weather->debug_offset));
     }
+    if (weather->debug_rain != 0.0f) {
+        hash = hash_fnv1a64(hash, &weather->debug_rain, sizeof(weather->debug_rain));
+    }
     return hash;
 }
 
@@ -368,4 +374,5 @@ void weather_serialize(Serializer *s, Weather *weather)
     ser_float(s, &weather->snow);
     ser_float(s, &weather->recent_rain);
     ser_float(s, &weather->debug_offset);
+    ser_float(s, &weather->debug_rain);
 }
