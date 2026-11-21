@@ -87,6 +87,28 @@ static bool count_food_plant(const Map *map, int x, int y, int z, void *userdata
     return false;
 }
 
+/* The settlers start the game awake and rested, not asleep: the game begins at dawn, when the last
+ * minutes of the night are not over for all of them. */
+static void test_settlers_start_awake(void)
+{
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        Game game;
+        REQUIRE(init_small_game(&game, seed));
+        uint32_t count = game_colonist_slot_count(&game);
+        REQUIRE(count > 0);
+        for (uint32_t slot = 0; slot < count; slot++) {
+            CHECK_NEAR(game.colonists[slot].needs[NEED_REST], 1.0f, 1e-6);
+        }
+        for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
+            game_tick(&game);
+            for (uint32_t slot = 0; slot < count; slot++) {
+                CHECK(game.colonists[slot].task != TASK_SLEEP);
+            }
+        }
+        game_shutdown(&game);
+    }
+}
+
 /* At the end of summer: brambles bearing fruit near the arrival point, and
  * hazels for the autumn. */
 static void test_settlers_arrive_near_food(void)
@@ -845,7 +867,9 @@ static void test_plant_stocks_grow_back(void)
     game_shutdown(&game);
 }
 
-static void test_zones_of_different_kinds_never_overlap(void)
+/* A stockpile and a gathering zone may lie on the same tiles, in whichever order they are drawn;
+ * no zone lies on a workstation. */
+static void test_stockpiles_and_gather_zones_stack(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game, 4)); /* Level 0 is the ground, over no water table. */
@@ -858,31 +882,43 @@ static void test_zones_of_different_kinds_never_overlap(void)
     int pile = game_add_stockpile_rect(&game, 10, 10, 12, 12, 0, STOCKPILE_NONE);
     REQUIRE(pile != STOCKPILE_NONE);
 
-    /* A gathering zone drawn over the stockpile gets the other tiles only. */
+    /* A gathering zone drawn over the stockpile gets every tile of the rectangle. */
     int zone = game_add_gather_zone_rect(&game, 11, 11, 14, 14, 0, GATHER_ZONE_NONE);
     REQUIRE(zone != GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, zone)->cell_count, 16 - 4);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 12, 12, 0), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 12, 0), zone);
+    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, zone)->cell_count, 16);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 12, 12, 0), zone);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 12, 12, 0), pile); /* Both are there. */
+    CHECK_EQ_INT(stockpile_get(&game.stockpiles, pile)->cell_count, 9);
 
-    /* And the other way round: the stockpile grows around the zone. */
+    /* And the other way round: a stockpile drawn over the zone, a new one or the same. */
     CHECK_EQ_INT(game_add_stockpile_rect(&game, 12, 10, 16, 10, 0, pile), pile);
     CHECK_EQ_INT(stockpile_get(&game.stockpiles, pile)->cell_count, 9 + 4);
-    CHECK_EQ_INT(game_add_stockpile_rect(&game, 13, 13, 14, 14, 0, STOCKPILE_NONE), STOCKPILE_NONE);
-    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 13, 13, 0), STOCKPILE_NONE);
+    int second = game_add_stockpile_rect(&game, 13, 13, 14, 14, 0, STOCKPILE_NONE);
+    CHECK(second != STOCKPILE_NONE && second != pile);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 13, 13, 0), second);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 13, 0), zone);
 
-    /* Merging zones of the same kind still works across the other kind. */
+    /* Zones of the same kind merge across the other kind. */
     int other = game_add_gather_zone_rect(&game, 18, 18, 19, 19, 0, GATHER_ZONE_NONE);
     REQUIRE(other != GATHER_ZONE_NONE);
     CHECK_EQ_INT(game_add_gather_zone_rect(&game, 13, 10, 18, 18, 0, GATHER_ZONE_NONE), zone);
     CHECK_EQ_INT(game.gather_zones.used_count, 1);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 10, 0), GATHER_ZONE_NONE); /* Stockpile. */
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 17, 17, 0), zone);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 19, 19, 0), zone);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 13, 10, 0), zone); /* Over the stockpile. */
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 13, 10, 0), pile);
 
-    for (size_t i = 0; i < map_tile_count(&game.map); i++) {
-        CHECK(game.stockpiles.zone[i] == 0 || game.gather_zones.zone[i] == 0);
-    }
+    /* Extending one over the other kind takes everything too, and taking a tile out of one leaves
+     * the other. */
+    CHECK_EQ_INT(game_extend_gather_zone_rect(&game, zone, 10, 10, 10, 10, 0), 1);
+    CHECK_EQ_INT(game_remove_stockpile_rect(&game, 10, 10, 10, 10, 0), 1);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 10, 10, 0), STOCKPILE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 10, 10, 0), zone);
+
+    /* Not on a workstation, whichever the zone. */
+    REQUIRE(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 16, 16, 0));
+    CHECK_EQ_INT(game_add_stockpile_rect(&game, 16, 16, 16, 16, 0, STOCKPILE_NONE), STOCKPILE_NONE);
+    game_add_gather_zone_rect(&game, 16, 16, 16, 16, 0, zone);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 16, 16, 0), STOCKPILE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 16, 16, 0), GATHER_ZONE_NONE);
     game_shutdown(&game);
 }
 
@@ -975,6 +1011,7 @@ int main(void)
 {
     RUN_TEST(test_init_and_shutdown);
     RUN_TEST(test_init_failure_leaves_game_safe_to_shut_down);
+    RUN_TEST(test_settlers_start_awake);
     RUN_TEST(test_settlers_arrive_near_food);
     RUN_TEST(test_mushrooms_need_bare_ground);
     RUN_TEST(test_mushrooms_come_and_go);
@@ -995,7 +1032,7 @@ int main(void)
     RUN_TEST(test_mushrooms_come_after_rain);
     RUN_TEST(test_grass_does_not_dry_in_a_storm);
     RUN_TEST(test_plant_stocks_grow_back);
-    RUN_TEST(test_zones_of_different_kinds_never_overlap);
+    RUN_TEST(test_stockpiles_and_gather_zones_stack);
     RUN_TEST(test_items_in_hand_are_kept);
     return test_summary();
 }

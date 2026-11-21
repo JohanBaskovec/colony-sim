@@ -545,7 +545,12 @@ static void spawn_starting_colonists(Game *game, int count)
             LOG_WARN("Not enough room to place every starting colonist");
             break;
         }
-        game_spawn_colonist(game, tile.x, tile.y, tile.z);
+        /* They arrive rested and awake: at the start of the day, with the night's last minutes
+         * not yet over for some of them, they would go to sleep at once. */
+        Colonist *colonist = game_colonist(game, game_spawn_colonist(game, tile.x, tile.y, tile.z));
+        if (colonist != NULL) {
+            colonist->needs[NEED_REST] = 1.0f;
+        }
     }
     /* They came together: families among them, and the journey. */
     social_start_together(&game->social, game->colonists, &game->colonist_pool, game->clock.tick);
@@ -3989,8 +3994,7 @@ bool game_single_item_move_at(const Game *game, ItemId id, TilePos *destination)
 
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred)
 {
-    const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at,
-                                game->constructions.workstation_tiles, NULL};
+    const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
     /* Through the known world: tiles nobody has seen are not there. */
     return stockpiles_add_view_rect(&game->stockpiles, game_view_map(game), x0, y0, x1, y1, z,
                                     preferred, blocked);
@@ -3998,8 +4002,7 @@ int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, i
 
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred)
 {
-    const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at,
-                                game->constructions.workstation_tiles, NULL};
+    const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
     return gather_zones_add_view_rect(&game->gather_zones, game_view_map(game), x0, y0, x1, y1, z,
                                       preferred, blocked);
 }
@@ -4016,8 +4019,7 @@ int game_remove_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int
 
 int game_extend_stockpile_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z)
 {
-    const uint8_t *blocked[] = {game->gather_zones.zone, game->workstations.at,
-                                game->constructions.workstation_tiles, NULL};
+    const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
     return stockpile_extend_view(&game->stockpiles, game_view_map(game), index, x0, y0, x1, y1, z,
                                  blocked);
 }
@@ -4029,8 +4031,7 @@ int game_shrink_stockpile_rect(Game *game, int index, int x0, int y0, int x1, in
 
 int game_extend_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z)
 {
-    const uint8_t *blocked[] = {game->stockpiles.zone, game->workstations.at,
-                                game->constructions.workstation_tiles, NULL};
+    const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
     return gather_zone_extend_view(&game->gather_zones, game_view_map(game), index, x0, y0, x1, y1,
                                    z, blocked);
 }

@@ -1057,11 +1057,11 @@ The zone tools (stockpiles and gathering zones alike) add a dragged rectangle
 with `stockpiles_add_rect()` / `gather_zones_add_rect()`: the selected zone and
 every zone of the same kind the rectangle overlaps are merged into one, which
 keeps the settings of the selected zone, else of the oldest; work under way on
-gathering tiles is kept. With no zone involved, a new one is created. Zones of
-different kinds never overlap, and no zone lies under a workstation: the tools
-go through `game_add_stockpile_rect()` / `game_add_gather_zone_rect()`, which
-pass the other kind's tile layer, the workstation layer and the tiles of
-workstation sites (`Constructions.workstation_tiles`) as `blocked` layers (a
+gathering tiles is kept. With no zone involved, a new one is created. A
+stockpile and a gathering zone may stack on the same tiles, but no zone lies
+under a workstation: the tools go through `game_add_stockpile_rect()` /
+`game_add_gather_zone_rect()`, which pass the workstation layer and the tiles
+of workstation sites (`Constructions.workstation_tiles`) as `blocked` layers (a
 NULL-terminated list), so their tiles are left out (the low-level
 `*_create()` / `*_extend()` do not check, for tests and benchmark scenarios).
 The tools work on what is seen: they call the `*_add_view_rect()` /

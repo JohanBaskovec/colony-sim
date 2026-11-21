@@ -2053,6 +2053,8 @@ static void progress_bar(SDL_Renderer *renderer, const SDL_FRect *tile, float fr
 
 /* Zone index of a tile, or -1 outside any zone and off the map. */
 typedef int (*ZoneAt)(const void *zones, int x, int y, int z);
+/* Pixels a gathering zone's border lies inside the tile's edge. */
+#define ZONE_BORDER_INSET 3.0f
 
 static int stockpile_zone_at(const void *zones, int x, int y, int z)
 {
@@ -2067,8 +2069,12 @@ static int gather_zone_zone_at(const void *zones, int x, int y, int z)
 /* The zones of the level shown as a translucent overlay with their borders;
  * the selected one (index, or -1) stands out: filled brighter, with a thick
  * light border. */
+/* Draws one kind of zone: a veil over its tiles and a border on the edges that face another
+ * zone or none, `inset` pixels inside the tile's edge (a stockpile and a gathering zone may
+ * stack: their borders then show side by side). */
 static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, const void *zones,
-                              ZoneAt zone_at, int width, int height, int selected, SDL_Color color)
+                              ZoneAt zone_at, int width, int height, int selected, SDL_Color color,
+                              float inset)
 {
     const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, width, height);
@@ -2092,10 +2098,11 @@ static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, cons
             bool bottom = zone_at(zones, x, y + 1, z) != index;
             if (chosen) {
                 float t = SDL_max(2.0f, floorf(tile.w * 0.1f));
-                SDL_FRect edges[4] = {{tile.x, tile.y, t, tile.h},
-                                      {tile.x + tile.w - t, tile.y, t, tile.h},
-                                      {tile.x, tile.y, tile.w, t},
-                                      {tile.x, tile.y + tile.h - t, tile.w, t}};
+                SDL_FRect edges[4] = {
+                    {tile.x + inset, tile.y + inset, t, tile.h - 2.0f * inset},
+                    {tile.x + tile.w - t - inset, tile.y + inset, t, tile.h - 2.0f * inset},
+                    {tile.x + inset, tile.y + inset, tile.w - 2.0f * inset, t},
+                    {tile.x + inset, tile.y + tile.h - t - inset, tile.w - 2.0f * inset, t}};
                 bool shown[4] = {left, right, top, bottom};
                 for (int i = 0; i < 4; i++) {
                     if (shown[i]) {
@@ -2107,7 +2114,8 @@ static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, cons
             SDL_Color edge = color;
             edge.a = 140;
             SDL_SetRenderDrawColor(renderer, edge.r, edge.g, edge.b, edge.a);
-            float l = tile.x, t = tile.y, r = tile.x + tile.w - 1.0f, b = tile.y + tile.h - 1.0f;
+            float l = tile.x + inset, t = tile.y + inset, r = tile.x + tile.w - 1.0f - inset,
+                  b = tile.y + tile.h - 1.0f - inset;
             if (left) {
                 SDL_RenderLine(renderer, l, t, l, b);
             }
@@ -2141,7 +2149,7 @@ void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *c
 {
     const Stockpiles *stockpiles = &game->stockpiles;
     render_zone_layer(renderer, camera, stockpiles, stockpile_zone_at, stockpiles->width,
-                      stockpiles->height, selected, STOCKPILE_COLOR);
+                      stockpiles->height, selected, STOCKPILE_COLOR, 0.0f);
 }
 
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
@@ -2160,7 +2168,7 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
         return;
     }
     render_zone_layer(renderer, camera, zones, gather_zone_zone_at, zones->width, zones->height,
-                      selected, GATHER_ZONE_COLOR);
+                      selected, GATHER_ZONE_COLOR, ZONE_BORDER_INSET);
     /* Progress of the job under way on each tile. */
     TileRect visible = camera_visible_tiles(camera, zones->width, zones->height);
     for (int y = visible.y0; y < visible.y1; y++) {

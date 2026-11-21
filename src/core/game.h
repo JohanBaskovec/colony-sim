@@ -865,15 +865,14 @@ bool game_single_item_move_at(const Game *game, ItemId id, TilePos *destination)
 
 /* ---- Zones --------------------------------------------------------------- */
 
-/* Zones of different kinds never overlap: these add a rectangle (corners in
- * any order) to the stockpiles or to the gathering zones as the zone tools do
- * (see stockpiles_add_view_rect() and gather_zones_add_view_rect(): zones of
- * the same kind it overlaps, and `preferred`, merge), leaving out the tiles
- * of the other kind of zone and of workstations (built or not). `z` is the
- * level shown: the zone covers what is seen in the rectangle, so the levels
- * below too where the level shown is open space (map_view_level()). Return
- * the zone's index, or STOCKPILE_NONE / GATHER_ZONE_NONE when nothing could
- * be added. */
+/* A stockpile and a gathering zone may lie on the same tiles (what is gathered there may be
+ * stored there); no zone lies on a workstation. These add a rectangle (corners in any order)
+ * to the stockpiles or to the gathering zones as the zone tools do (see
+ * stockpiles_add_view_rect() and gather_zones_add_view_rect(): zones of the same kind it
+ * overlaps, and `preferred`, merge), leaving out the tiles of workstations (built or not). `z` is
+ * the level shown: the zone covers what is seen in the rectangle, so the levels below too where the
+ * level shown is open space (map_view_level()). Return the zone's index, or STOCKPILE_NONE /
+ * GATHER_ZONE_NONE when nothing could be added. */
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
 

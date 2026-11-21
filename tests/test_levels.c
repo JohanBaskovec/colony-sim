@@ -178,13 +178,14 @@ static void test_zones_cover_the_levels_seen(void)
     }
     CHECK_EQ_INT(stockpile_get(&game.stockpiles, stockpile)->cell_count, 16);
 
-    /* A gathering zone likewise, but not over the stockpile's tiles. */
+    /* A gathering zone likewise, over the stockpile's tiles too (zones stack). */
     int zone = game_add_gather_zone_rect(&game, 18, 10, 21, 12, HIGH, GATHER_ZONE_NONE);
     REQUIRE(zone != GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 18, 12, LOW), zone);
     CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 21, 12, LOW), zone);
-    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 21, 10, LOW), GATHER_ZONE_NONE);
-    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, zone)->cell_count, 4 * 3 - 2 * 2);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 21, 10, LOW), zone);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 10, LOW), stockpile);
+    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, zone)->cell_count, 4 * 3);
 
     /* From the plains' level the plateau is a wall: nothing there to cover. */
     CHECK_EQ_INT(game_add_stockpile_rect(&game, 30, 20, 33, 21, LOW, STOCKPILE_NONE),
@@ -194,7 +195,7 @@ static void test_zones_cover_the_levels_seen(void)
     CHECK_EQ_INT(game_remove_stockpile_rect(&game, 20, 10, 27, 11, HIGH), 16);
     CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 10, LOW), STOCKPILE_NONE);
     CHECK_EQ_INT(stockpile_at(&game.stockpiles, 25, 10, HIGH), STOCKPILE_NONE);
-    CHECK_EQ_INT(game_remove_gather_zone_rect(&game, 0, 0, 47, 47, HIGH), 4 * 3 - 2 * 2);
+    CHECK_EQ_INT(game_remove_gather_zone_rect(&game, 0, 0, 47, 47, HIGH), 4 * 3);
     game_shutdown(&game);
 }
 
