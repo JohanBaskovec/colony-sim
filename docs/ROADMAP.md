@@ -331,7 +331,7 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
   - [ ] W3: where water comes from
     - [x] W3a: rain and snowmelt beyond the soil's intake lie as free water, puddles evaporate and soak in, frozen ground takes nothing, rough stone drinks a storm into its cracks, roofs shed their rain; storms of various intensity and downpours (*Downpour* in the weather shown); an exchange wakes the flow only where it sets water moving (`bench_simulation 12 4 1`: 27 → 30 µs a tick)
     - [x] W3b: the map's edges: the land beyond each edge column as it was (solid under its ground), a basin of 256 tiles behind each edge tile living the edge's weather, a film's difference to flow; lakes cut by the edge keep their level, floods flow out; the tests' flat world seals its edges (`bench_simulation 12 4 1`: p50 18.9 → 19.4 µs, p99 303 → 327 µs, water flowing 8158 → 19764 ticks: storm runoff now drains out at the edges; `bench_water` sealed: +3 % a block step)
-    - [ ] W3c: a river laid by world generation (New game option) with its discharge and floods
+    - [ ] W3c: a river laid by world generation (New game option) with its discharge and floods, as parameters the world map will set later (edge in, edge out, where along them, discharge: `docs/WORLD.md` G0c)
     - [x] Lakes of a flat world: nothing holds them once woken; no longer a player's world (Relief 0 % gives a plain with its lakes in hollows), only the tests' flat world keeps them, which do not need them held (docs/WATER.md §3.7)
   - [ ] W4: water in the ground: pore water in every block, layers of sand, gravel and clay, the water table, drainage and Darcy flow, seepage and springs, the soil's root zone draining into the ground (its banks go), damp walls, wells, mud
   - [ ] W5: water in play: floodgates, dams of earth, cisterns, irrigation ditches, floating items carried away, alerts for a rising river and a flooding gallery
@@ -343,6 +343,21 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
 - [ ] Health by body part: injuries, bleeding, infection, lost limbs, for settlers and animals (planned step by step in M6 "Health")
 - [ ] Genetics: inherited traits with random mutations for plants (varieties), animals and settlers; selection by the player (crops, breeding)
 - [ ] Performance: spread long work over ticks (budget per tick for path and job searches) so that no single tick drops a frame
+
+## The world map (long term, designed: docs/WORLD.md)
+
+A new game generates a whole world (poles, a hot middle, mountain ranges, seas, rivers) on a grid of square cells; the player picks a cell, which becomes the map played. Cells join at real scale, the latitude is a rule of the game (90° S to 90° N by row), the cell decides the map. Comes late, once the rest of the game stands; until then, every map feature the world will decide is built as a parameter of the map's generation, set by hand in the New game window.
+
+- [ ] Before the world:
+  - [ ] G0a: the latitude per game (SHADOWS.md step 7): the sun and the day lengths from it, a New game option
+  - [ ] G0b: the climate per game: the mean temperature, the seasonal swing and the rain as parameters of the weather instead of constants, New game options
+  - [ ] G0c: the river as parameters (W3c): edge in, edge out, where along them, discharge
+  - [ ] G0d: a coast: the sea along chosen edges of the map (W3b's edges at a fixed level), salt water
+- [ ] G1: the world in the core: land and sea, elevation and ranges, temperature, winds and rain (rain shadows), rivers down to the sea, biomes; a summary per cell (`docs/WORLD.md` §4.1); deterministic and tested, a benchmark
+- [ ] G2: the World screen: the world drawn (biomes, relief, rivers, seas, ice), temperature and rain overlays, a cell's card, the choice of a cell
+- [ ] G3: the map from its cell: the summary fed into the map's generation, neighbouring maps joining at their edges (noise in world coordinates, river crossings as world values), the world's seed and the cell saved
+- [ ] G4: content for every climate (every cell playable from the start, even deadly): snow and ice, plants and animals of the cold, the dry and the hot
+- [ ] G5: the world played on: travelling, settling elsewhere, villages of other people, traders and raiders coming from a direction, events from the cells nearby
 
 ## Items one by one (under way, docs/ITEMS.md)
 

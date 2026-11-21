@@ -247,7 +247,8 @@ a mini-game in itself:
 
 - Multiplayer.
 - 3D or isometric graphics.
-- A world map with several colonies.
+- A world map with several colonies (designed for late, once the rest of the
+  game stands: `docs/WORLD.md`).
 
 ## Reference numbers (current implementation)
 
