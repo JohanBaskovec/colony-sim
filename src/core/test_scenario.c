@@ -87,6 +87,7 @@ bool test_scenario_load(Game *game, TestScenario scenario)
         return false;
     }
     flatten(game);
+    water_settle(&game->water, &game->map); /* The flow and the edges as the ground now is. */
     game_refresh_light(game);
     game->debug = debug;
     game->clock.speed = clock.speed;

@@ -317,6 +317,19 @@ water is at rest. `bench_water` measures a dam opened, a pond spreading over
 a plain and a channel: about 4 µs a block a step, 1 ms a step for a whole
 256 × 256 level awake.
 
+**The edges of the map** (docs/WATER.md §4.1): beyond each column of the edge
+lies the land outside as the column was when the flow began (its ground,
+solid under it, and the surface of its water: `Water.edge_ground`,
+`edge_surface`, saved). The edge tile and the tile beyond share a pipe (the
+block's `west_edge` and `north_edge`, the east and south pipes of the map's
+last column and row) that answers only to a film's difference; the tile
+beyond is the edge of a basin of `WATER_EDGE_BASIN` tiles, which what crosses
+moves by 1/256 of what it moves on the edge, and which gets every exchange
+made on its edge tile (the same weather). `Water.edge_in` counts what came in
+less what went out. The tests' flat world seals its edges
+(`water_seal_edges()`); test scenarios retake them after flattening the
+ground (`water_settle()`).
+
 **Rain and the flow** (docs/WATER.md §3.5, §4.3): the soil's hourly slices
 (`soil_update()`, given `Game.water`) give or take the free water of each
 tile with `water_exchange()`: what the ground does not take in (its intake,

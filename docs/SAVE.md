@@ -54,7 +54,8 @@ Saved: the map and all its layers, revisions and logs; every module of
 `Game` with its state (designations, dirt, zones, items and their pool,
 crowns, corpses, stockpiles, workstations and bills, construction sites,
 beds, reservations, item moves, the clock's tick, every random stream,
-temperatures, soil, the water's active blocks and their flows, the light's
+temperatures, soil, the water's active blocks and their flows, the land
+beyond the map's edges, the light's
 sweeps, the vision and the known world while the fog is on, weather, the
 colonists, animals, social bonds, occupancy, notices, debug flags); the
 counters the simulation compares (revisions seen, stamps of failed
@@ -138,8 +139,8 @@ round-trip test (§5) shows they come back the same; otherwise they are saved.
   about 155 ms; 200 × 200 after four days of building, 4.5 MB.
 - **Tests** (`tests/test_save.c`, `tests/test_serialize.c`): the round trip
   and the future unchanged on a new game, gathering, building, feuds and
-  brawls, cooking, wild animals, the fog of war and water flowing when
-  saved; saves cut short, changed, of another version, and 300 edited ones
+  brawls, cooking, wild animals, the fog of war, water flowing and water
+  flowing out over the map's edge when saved; saves cut short, changed, of another version, and 300 edited ones
   with their hash made right; the size of 79 structs. Leaving a field out of
   a settler's save fails them (checked by hand).
 

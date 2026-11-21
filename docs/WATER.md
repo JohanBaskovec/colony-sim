@@ -332,6 +332,43 @@ other:
 - A lake cut by the edge keeps its level: what rain adds flows out, and what
   evaporates comes back in, slowly.
 - A flood reaching a dry edge on the plains flows out of the map.
+
+As built (W3b, `core/water.h`):
+
+- Each column of the edge (north row, south row, west column, east column)
+  keeps the **ground** of the land beyond (`Water.edge_ground`, solid under
+  it) and the **surface** of its water (`Water.edge_surface`), both taken
+  from the edge column when the flow begins (`water_init()`, and
+  `water_settle()` for scenarios that change the ground). Beyond a column of
+  rock up to the top, the land is solid all the way. Under the ground
+  beyond, the edge is solid: a cave cut by the edge keeps its water.
+- The virtual neighbour at level z holds the surface's water at that level.
+  The edge tile and it share a pipe (`WaterBlock.west_edge`, `north_edge`,
+  and the east and south pipes of the last column and row), which answers
+  only to a **film's difference** at least.
+- The land beyond is a **basin** of `WATER_EDGE_BASIN` (256) tiles behind
+  each edge tile *(tuning)*: what crosses moves its level by 1/256 of what
+  it moves on the edge tile (its surface is kept in 1/256 of the fine unit,
+  so nothing is lost to rounding).
+- The land beyond **lives the weather of the edge**: every exchange on an
+  edge tile (rain, the sun, the soil drinking, `water_exchange()`) is made
+  beyond too, above its ground. Rain on a dry edge then lies alike on both
+  sides and does not run out, and a lake lowered by the sun is not filled
+  from beyond.
+- `Water.edge_in` counts what came in less what went out: the total of the
+  water on the map changes only by it.
+- The tests' flat world seals its edges (`water_seal_edges()`): its lakes
+  lie on flat ground, not at rest, and fed from beyond they would flood it.
+  `bench_water` seals them too unless asked `open`, so that its cases stay
+  closed boxes as they were made.
+
+Why the basins, the film and the weather: with a fixed level beyond each
+edge tile, the sun takes a few tenths of a millimetre more from one edge
+tile than from the next, the levels beyond drift a few millimetres apart in
+a day, and a lake cut by the edge then keeps a current running through it
+for ever, in by one tile and out by another, never falling asleep. The film
+stops the smallest differences, the weather keeps the land beyond with the
+edge, and the finite basins even out what is left.
 - A **river** enters at one edge and leaves at another (§4.2). The level
   beyond its upstream end follows the river's discharge, so it rises and
   falls. The level beyond its downstream end stays where it started.
@@ -792,7 +829,12 @@ Each step is tested, measured against the baseline (`bench_simulation`,
      §4.3). Tests: a downpour lying on the ground and soaking in the hour
      after, frozen ground, puddles on stone drying, rain on lakes and ponds,
      exchanges waking only water they set moving, a season's rain kept.
-   - **W3b, the edges** (§4.1).
+   - **W3b, the edges (done)** (§4.1): the land beyond, its basins and its
+     weather, sealed edges for the tests' flat world. Tests: a lake cut by
+     the edge keeping its level, a flood flowing out at a dry edge, no
+     water crossing under the ground beyond or sealed edges, basins apart
+     evening out, the weather shared, a save made while water flows out
+     playing on alike.
    - **W3c, the river** laid by world generation (a New game option) with
      its discharge and its floods. Tests: the river's steady flow, a flood
      spilling over the banks.

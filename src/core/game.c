@@ -700,6 +700,9 @@ bool game_init(Game *game, const NewGameParams *params)
         game_shutdown(game);
         return false;
     }
+    if (params->world.flat) {
+        water_seal_edges(&game->water); /* Its lakes are not at rest. */
+    }
     return true;
 }
 

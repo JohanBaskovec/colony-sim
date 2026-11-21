@@ -4,7 +4,11 @@
  * (processor time), the blocks awake and whether the water was kept. Not
  * part of the test suite.
  *
- *     bench_water [map_size] [steps]
+ *     bench_water [map_size] [steps] [open]
+ *
+ * The map's edges are sealed (a closed box, as the cases were made), unless
+ * `open`: water then flows out over them (docs/WATER.md §4.1), and what left
+ * is told.
  *
  * - dam: half the map a lake 1500 mm deep behind a wall of rock, which is
  *   dug through over 16 tiles: the lake pours into the other half.
@@ -15,8 +19,10 @@
 #include "core/map.h"
 #include "core/water.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 static double cpu_seconds(void)
@@ -85,7 +91,7 @@ static void open_case(Map *map, Case which)
     }
 }
 
-static int run_case(Case which, int size, int steps)
+static int run_case(Case which, int size, int steps, bool open)
 {
     Map map;
     Water water;
@@ -98,6 +104,9 @@ static int run_case(Case which, int size, int steps)
         fprintf(stderr, "out of memory\n");
         map_free(&map);
         return 1;
+    }
+    if (!open) {
+        water_seal_edges(&water);
     }
     open_case(&map, which);
     uint64_t total = water_total(&water, &map);
@@ -119,12 +128,19 @@ static int run_case(Case which, int size, int steps)
         }
     }
     double seconds = cpu_seconds() - begin;
+    /* Kept: changed only by what crossed the edges. */
+    bool kept = (int64_t)water_total(&water, &map) == (int64_t)total + water.edge_in;
+    char out[48] = "";
+    if (water.edge_in != 0) {
+        snprintf(out, sizeof(out), ", %.0f mm %s", fabs((double)water.edge_in) / WATER_FINE,
+                 water.edge_in > 0 ? "in" : "out");
+    }
     printf("%-8s %d steps%s, %.1f us/step (worst %.2f ms), %.2f us per block step, "
-           "%u blocks awake at most, %llu woken, water %s%s\n",
+           "%u blocks awake at most, %llu woken, water %s%s%s\n",
            CASE_NAMES[which], step, water.active_count == 0 ? " (at rest)" : "",
            seconds * 1e6 / (step > 0 ? step : 1), worst * 1e3,
            block_steps > 0 ? seconds * 1e6 / (double)block_steps : 0.0, most,
-           (unsigned long long)water.wakes, water_total(&water, &map) == total ? "kept" : "LOST",
+           (unsigned long long)water.wakes, kept ? "kept" : "LOST", out,
            ok ? "" : " (out of memory)");
     water_free(&water);
     map_free(&map);
@@ -135,15 +151,16 @@ int main(int argc, char **argv)
 {
     int size = argc > 1 ? atoi(argv[1]) : 256;
     int steps = argc > 2 ? atoi(argv[2]) : 5000;
+    bool open = argc > 3 && strcmp(argv[3], "open") == 0;
     if (size < MAP_MIN_SIZE || size > MAP_MAX_SIZE || steps <= 0) {
-        fprintf(stderr, "usage: bench_water [map_size %d..%d] [steps]\n", MAP_MIN_SIZE,
+        fprintf(stderr, "usage: bench_water [map_size %d..%d] [steps] [open]\n", MAP_MIN_SIZE,
                 MAP_MAX_SIZE);
         return EXIT_FAILURE;
     }
-    printf("map %dx%d, at most %d steps\n", size, size, steps);
+    printf("map %dx%d, at most %d steps, edges %s\n", size, size, steps, open ? "open" : "sealed");
     int failures = 0;
     for (int which = 0; which < CASE_COUNT; which++) {
-        failures += run_case((Case)which, size, steps);
+        failures += run_case((Case)which, size, steps, open);
     }
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

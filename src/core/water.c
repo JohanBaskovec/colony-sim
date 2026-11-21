@@ -303,6 +303,8 @@ static bool read_logs(Water *water, const Map *map)
     return ok;
 }
 
+static void edges_from_map(Water *water, const Map *map);
+
 bool water_init(Water *water, const Map *map)
 {
     memset(water, 0, sizeof(*water));
@@ -319,11 +321,16 @@ bool water_init(Water *water, const Map *map)
     water->active = malloc(count * sizeof(*water->active));
     water->woken = malloc(count * sizeof(*water->woken));
     water->fine = calloc(map_tile_count(map) > 0 ? map_tile_count(map) : 1, 1);
+    size_t edges = 2 * (size_t)map->width + 2 * (size_t)map->height;
+    water->edge_ground = calloc(edges > 0 ? edges : 1, sizeof(*water->edge_ground));
+    water->edge_surface = calloc(edges > 0 ? edges : 1, sizeof(*water->edge_surface));
     if (water->slot == NULL || water->free_entries == NULL || water->active == NULL ||
-        water->woken == NULL || water->fine == NULL) {
+        water->woken == NULL || water->fine == NULL || water->edge_ground == NULL ||
+        water->edge_surface == NULL) {
         water_free(water);
         return false;
     }
+    edges_from_map(water, map);
     water->list_capacity = (uint32_t)count;
     water->topology_seen = map->topology_revision;
     water->build_seen = map->build_revision;
@@ -340,6 +347,8 @@ void water_free(Water *water)
     free(water->woken);
     free(water->overfull);
     free(water->fine);
+    free(water->edge_ground);
+    free(water->edge_surface);
     memset(water, 0, sizeof(*water));
 }
 
@@ -369,6 +378,134 @@ static void set_level(Water *water, Map *map, size_t index, int32_t level)
 
 #define FULL_FINE ((int32_t)WATER_CELL_FULL * WATER_FINE)
 #define FILM_FINE ((int32_t)WATER_FILM_MM * WATER_FINE)
+/* A full tile in the units of Water.edge_surface. */
+#define FULL_BASIN ((int64_t)FULL_FINE * WATER_EDGE_BASIN)
+
+/* The column of the land beyond the edge next to the edge tile (x, y), on the
+ * side (dx, dy): its slot in Water.edge_ground and edge_surface (north row,
+ * south row, west column, east column), SIZE_MAX when the tile is not on
+ * that edge. */
+static size_t edge_slot(const Water *water, int x, int y, int dx, int dy)
+{
+    size_t width = (size_t)water->width, height = (size_t)water->height;
+    if (dx == 0 && dy < 0 && y == 0) {
+        return (size_t)x;
+    }
+    if (dx == 0 && dy > 0 && y == water->height - 1) {
+        return width + (size_t)x;
+    }
+    if (dy == 0 && dx < 0 && x == 0) {
+        return 2 * width + (size_t)y;
+    }
+    if (dy == 0 && dx > 0 && x == water->width - 1) {
+        return 2 * width + height + (size_t)y;
+    }
+    return SIZE_MAX;
+}
+
+/* The water of the tile beyond the edge at level z (WATER_FINE units), -1
+ * where it is solid (under the ground of the land beyond). */
+static int32_t beyond(const Water *water, size_t slot, int z)
+{
+    if (slot == SIZE_MAX || z < water->edge_ground[slot]) {
+        return -1;
+    }
+    int64_t level = (water->edge_surface[slot] - (int64_t)z * FULL_BASIN) / WATER_EDGE_BASIN;
+    return level < 0 ? 0 : level > FULL_FINE ? FULL_FINE : (int32_t)level;
+}
+
+/* Moves the surface of the basin beyond an edge column (units of
+ * Water.edge_surface), never under its ground nor over the top. */
+static void move_edge_surface(Water *water, size_t slot, int64_t change)
+{
+    int64_t surface = water->edge_surface[slot] + change;
+    int64_t lowest = (int64_t)water->edge_ground[slot] * FULL_BASIN;
+    int64_t highest = (int64_t)water->depth * FULL_BASIN;
+    water->edge_surface[slot] = surface < lowest ? lowest : surface > highest ? highest : surface;
+}
+
+void water_seal_edges(Water *water)
+{
+    water->sealed = true;
+    size_t edges = 2 * (size_t)water->width + 2 * (size_t)water->height;
+    for (size_t i = 0; i < edges; i++) {
+        water->edge_ground[i] = (uint8_t)water->depth;
+        water->edge_surface[i] = (int64_t)water->depth * FULL_BASIN;
+    }
+}
+
+int32_t water_beyond_edge(const Water *water, int x, int y, int z, int dx, int dy)
+{
+    if (x < 0 || y < 0 || z < 0 || x >= water->width || y >= water->height || z >= water->depth) {
+        return -1;
+    }
+    return beyond(water, edge_slot(water, x, y, dx, dy), z);
+}
+
+/* The land beyond an edge column as the column is: its ground, and the
+ * surface of the water standing on it (full tiles carry the next). A column
+ * of rock up to the top is solid all the way (its ground: the map's depth). */
+static void edge_column(Water *water, const Map *map, size_t slot, int x, int y)
+{
+    int ground = map_ground_level(map, x, y);
+    size_t level = map_level_tile_count(map);
+    size_t index = map_index(map, x, y, ground);
+    uint8_t rock = map->rock[index];
+    if (water->sealed || (rock != ROCK_NONE && rock != ROCK_WOOD)) {
+        water->edge_ground[slot] = (uint8_t)map->depth;
+        water->edge_surface[slot] = (int64_t)map->depth * FULL_BASIN;
+        return;
+    }
+    int64_t surface = (int64_t)ground * FULL_FINE;
+    for (int z = ground; z < map->depth; z++, index += level) {
+        int32_t held = level_at(water, map, index);
+        surface += held < FULL_FINE ? held : FULL_FINE;
+        if (held < FULL_FINE || z + 1 >= map->depth || !floorless(map, index + level)) {
+            break;
+        }
+    }
+    water->edge_ground[slot] = (uint8_t)ground;
+    water->edge_surface[slot] = surface * WATER_EDGE_BASIN;
+}
+
+/* The land beyond every edge, from the map as it is. */
+static void edges_from_map(Water *water, const Map *map)
+{
+    size_t width = (size_t)water->width, height = (size_t)water->height;
+    for (int x = 0; x < water->width; x++) {
+        edge_column(water, map, (size_t)x, x, 0);
+        edge_column(water, map, width + (size_t)x, x, water->height - 1);
+    }
+    for (int y = 0; y < water->height; y++) {
+        edge_column(water, map, 2 * width + (size_t)y, 0, y);
+        edge_column(water, map, 2 * width + height + (size_t)y, water->width - 1, y);
+    }
+}
+
+/* The new flow of the pipe from tile a out to the tile beyond the edge
+ * holding `outside` (-1: solid ground there, no pipe); positive out of a. The
+ * land beyond keeps its level, and gives a step at most what it holds. It
+ * answers only to a film's difference at least: the tenths of a millimetre
+ * the sun takes more from one edge tile than from the next would otherwise
+ * keep a current running along the edge, in by one tile and out by the
+ * next, for ever. */
+static int32_t edge_pipe(const Water *water, const Map *map, int32_t flow, size_t a,
+                         int32_t outside)
+{
+    if (outside < 0) {
+        return 0;
+    }
+    int32_t la = level_at(water, map, a);
+    if (la - outside < FILM_FINE && outside - la < FILM_FINE) {
+        return 0;
+    }
+    flow = flow * WATER_FLOW_KEEP / 16 + (la - outside) / WATER_FLOW_DIVISOR;
+    if ((flow > 0 && la < FILM_FINE) || (flow < 0 && outside < FILM_FINE)) {
+        return 0;
+    }
+    flow = flow < -outside ? -outside : flow;
+    return flow > FULL_FINE ? FULL_FINE : flow;
+}
 
 /* Whether a flow from a tile holding `held` to a neighbour holding `other`
  * (WATER_FINE units) would start, the pipe being still, more than a ripple
@@ -508,13 +645,21 @@ static void compute_flows(const Water *water, const Map *map, WaterBlock *block)
     block_bounds(water, place, &x0, &y0, &x1, &y1);
     bool east_active = x1 < water->width && block_get(water, place.bx + 1, place.by, place.z);
     bool south_active = y1 < water->height && block_get(water, place.bx, place.by + 1, place.z);
-    for (int y = y0; y < y1; y++) {
-        for (int x = x0; x < x1; x++) {
+    bool on_edge = x0 == 0 || y0 == 0 || x1 == water->width || y1 == water->height;
+    for (int ly = 0; ly < WATER_BLOCK_SIZE && y0 + ly < y1; ly++) {
+        for (int lx = 0; lx < WATER_BLOCK_SIZE && x0 + lx < x1; lx++) {
+            int x = x0 + lx, y = y0 + ly;
             size_t a = map_index(map, x, y, place.z);
-            int local = (y - y0) * WATER_BLOCK_SIZE + (x - x0);
+            int local = ly * WATER_BLOCK_SIZE + lx;
             if (map_stops_light_at(map, a)) {
                 block->east[local] = 0;
                 block->south[local] = 0;
+                if (x == 0) {
+                    block->west_edge[ly] = 0;
+                }
+                if (y == 0) {
+                    block->north_edge[lx] = 0;
+                }
                 continue;
             }
             bool east = x + 1 < x1 || east_active;
@@ -522,31 +667,74 @@ static void compute_flows(const Water *water, const Map *map, WaterBlock *block)
             block->east[local] = east ? pipe_flow(water, map, block->east[local], a, a + 1) : 0;
             block->south[local] =
                 south ? pipe_flow(water, map, block->south[local], a, a + (size_t)map->width) : 0;
+            if (!on_edge) {
+                continue;
+            }
+            /* The pipes out to the land beyond the edges. */
+            if (x + 1 == water->width) {
+                block->east[local] =
+                    edge_pipe(water, map, block->east[local], a,
+                              beyond(water, edge_slot(water, x, y, 1, 0), place.z));
+            }
+            if (y + 1 == water->height) {
+                block->south[local] =
+                    edge_pipe(water, map, block->south[local], a,
+                              beyond(water, edge_slot(water, x, y, 0, 1), place.z));
+            }
+            if (x == 0) {
+                block->west_edge[ly] =
+                    -edge_pipe(water, map, -block->west_edge[ly], a,
+                               beyond(water, edge_slot(water, x, y, -1, 0), place.z));
+            }
+            if (y == 0) {
+                block->north_edge[lx] =
+                    -edge_pipe(water, map, -block->north_edge[lx], a,
+                               beyond(water, edge_slot(water, x, y, 0, -1), place.z));
+            }
         }
     }
 }
 
 /* The four pipes of a tile: east and south its own (in `block`), west and
- * north those of its neighbours (NULL where there are none, or they belong to
- * a sleeping block). */
+ * north those of its neighbours, or the block's own from beyond the map's
+ * west and north edges (NULL where there are none, or they belong to a
+ * sleeping block). Each points the same way as an east or south pipe. */
 typedef struct TilePipes {
     int32_t *east, *south, *west, *north;
 } TilePipes;
 
-static TilePipes tile_pipes(WaterBlock *block, int lx, int ly, WaterBlock *west_block,
-                            WaterBlock *north_block)
+/* The neighbours of a block: the active blocks west and north of it (NULL
+ * when asleep), and whether it lies along the map's west or north edge. */
+typedef struct BlockSides {
+    WaterBlock *west, *north;
+    bool west_edge, north_edge;
+} BlockSides;
+
+static BlockSides block_sides(const Water *water, BlockPlace place)
+{
+    BlockSides sides = {block_get(water, place.bx - 1, place.by, place.z),
+                        block_get(water, place.bx, place.by - 1, place.z), place.bx == 0,
+                        place.by == 0};
+    return sides;
+}
+
+static TilePipes tile_pipes(WaterBlock *block, int lx, int ly, BlockSides sides)
 {
     int local = ly * WATER_BLOCK_SIZE + lx;
     TilePipes pipes = {&block->east[local], &block->south[local], NULL, NULL};
     if (lx > 0) {
         pipes.west = &block->east[local - 1];
-    } else if (west_block != NULL) {
-        pipes.west = &west_block->east[local + WATER_BLOCK_SIZE - 1];
+    } else if (sides.west != NULL) {
+        pipes.west = &sides.west->east[local + WATER_BLOCK_SIZE - 1];
+    } else if (sides.west_edge) {
+        pipes.west = &block->west_edge[ly];
     }
     if (ly > 0) {
         pipes.north = &block->south[local - WATER_BLOCK_SIZE];
-    } else if (north_block != NULL) {
-        pipes.north = &north_block->south[local + WATER_BLOCK_TILES - WATER_BLOCK_SIZE];
+    } else if (sides.north != NULL) {
+        pipes.north = &sides.north->south[local + WATER_BLOCK_TILES - WATER_BLOCK_SIZE];
+    } else if (sides.north_edge) {
+        pipes.north = &block->north_edge[lx];
     }
     return pipes;
 }
@@ -569,11 +757,10 @@ static void scale_flows(const Water *water, const Map *map, WaterBlock *block)
     BlockPlace place = place_of(water, block->number);
     int x0, y0, x1, y1;
     block_bounds(water, place, &x0, &y0, &x1, &y1);
-    WaterBlock *west_block = block_get(water, place.bx - 1, place.by, place.z);
-    WaterBlock *north_block = block_get(water, place.bx, place.by - 1, place.z);
+    BlockSides sides = block_sides(water, place);
     for (int y = y0; y < y1; y++) {
         for (int x = x0; x < x1; x++) {
-            TilePipes pipes = tile_pipes(block, x - x0, y - y0, west_block, north_block);
+            TilePipes pipes = tile_pipes(block, x - x0, y - y0, sides);
             int32_t out = (*pipes.east > 0 ? *pipes.east : 0) +
                           (*pipes.south > 0 ? *pipes.south : 0) +
                           (pipes.west != NULL && *pipes.west < 0 ? -*pipes.west : 0) +
@@ -600,11 +787,37 @@ static bool apply_flows(Water *water, Map *map, WaterBlock *block, uint64_t *mov
     BlockPlace place = place_of(water, block->number);
     int x0, y0, x1, y1;
     block_bounds(water, place, &x0, &y0, &x1, &y1);
-    WaterBlock *west_block = block_get(water, place.bx - 1, place.by, place.z);
-    WaterBlock *north_block = block_get(water, place.bx, place.by - 1, place.z);
+    BlockSides sides = block_sides(water, place);
+    /* In through the edges, from the basins beyond (each moves by what
+     * crosses, in its units). */
+    int64_t through = 0;
+    int last_x = x1 - 1 - x0, last_y = y1 - 1 - y0;
+    size_t width = (size_t)water->width, height = (size_t)water->height;
+    for (int i = 0; i < WATER_BLOCK_SIZE; i++) {
+        if (x0 == 0 && i <= last_y && block->west_edge[i] != 0) {
+            through += block->west_edge[i];
+            move_edge_surface(water, 2 * width + (size_t)(y0 + i), -block->west_edge[i]);
+        }
+        if (y0 == 0 && i <= last_x && block->north_edge[i] != 0) {
+            through += block->north_edge[i];
+            move_edge_surface(water, (size_t)(x0 + i), -block->north_edge[i]);
+        }
+        int32_t out =
+            x1 == water->width && i <= last_y ? block->east[i * WATER_BLOCK_SIZE + last_x] : 0;
+        if (out != 0) {
+            through -= out;
+            move_edge_surface(water, 2 * width + height + (size_t)(y0 + i), out);
+        }
+        out = y1 == water->height && i <= last_x ? block->south[last_y * WATER_BLOCK_SIZE + i] : 0;
+        if (out != 0) {
+            through -= out;
+            move_edge_surface(water, width + (size_t)(x0 + i), out);
+        }
+    }
+    water->edge_in += through;
     for (int y = y0; y < y1; y++) {
         for (int x = x0; x < x1; x++) {
-            TilePipes pipes = tile_pipes(block, x - x0, y - y0, west_block, north_block);
+            TilePipes pipes = tile_pipes(block, x - x0, y - y0, sides);
             int32_t change = -*pipes.east - *pipes.south + (pipes.west != NULL ? *pipes.west : 0) +
                              (pipes.north != NULL ? *pipes.north : 0);
             int32_t east = *pipes.east > 0 ? *pipes.east : -*pipes.east;
@@ -767,7 +980,7 @@ static bool would_move(const Water *water, const Map *map, size_t index, int32_t
     for (int side = 0; side < 4; side++) {
         int nx = x + SIDES[side][0], ny = y + SIDES[side][1];
         if (!map_in_bounds(map, nx, ny, z)) {
-            continue;
+            continue; /* The rain falls beyond the edge alike. */
         }
         size_t other = map_index(map, nx, ny, z);
         if (map_stops_light_at(map, other)) {
@@ -796,6 +1009,22 @@ float water_mm_at(const Water *water, const Map *map, size_t index)
     return (float)level_at(water, map, index) * (1.0f / (float)WATER_FINE);
 }
 
+/* The land beyond the edges next to (x, y, z) lives the same weather as the
+ * edge: what rain, the sun or the soil gave or took there (`change`), it gets
+ * too, above its ground (else a lake cut by the edge, lowered by the sun,
+ * would be filled from beyond without end, and rain on a dry edge flow out). */
+static void weather_beyond(Water *water, int x, int y, int z, int32_t change)
+{
+    static const int SIDES[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    for (int side = 0; side < 4 && !water->sealed; side++) {
+        size_t slot = edge_slot(water, x, y, SIDES[side][0], SIDES[side][1]);
+        if (slot == SIZE_MAX || z < water->edge_ground[slot]) {
+            continue;
+        }
+        move_edge_surface(water, slot, (int64_t)change * WATER_EDGE_BASIN);
+    }
+}
+
 int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine)
 {
     if (fine == 0 || map->rock[index] != ROCK_NONE) {
@@ -813,6 +1042,9 @@ int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine)
     set_level(water, map, index, after);
     int x, y, z;
     map_tile_of(map, index, &x, &y, &z);
+    if (x == 0 || y == 0 || x + 1 == water->width || y + 1 == water->height) {
+        weather_beyond(water, x, y, z, after - before);
+    }
     uint32_t number = water_block_of(water, x, y, z);
     if (water->slot[number] != 0) {
         return after - before; /* Active: the flow tells the map. */
@@ -852,6 +1084,7 @@ void water_settle(Water *water, Map *map)
     water->topology_seen = map->topology_revision;
     water->build_seen = map->build_revision;
     water->water_seen = map->water_log_revision;
+    edges_from_map(water, map);
 }
 
 uint64_t water_total(const Water *water, const Map *map)
@@ -870,6 +1103,11 @@ uint64_t water_hash(const Water *water, uint64_t hash)
     if (water->fine_used) {
         hash = hash_fnv1a64(hash, water->fine,
                             (size_t)water->width * (size_t)water->height * (size_t)water->depth);
+        /* The land beyond the edges: the weather changes it as it does the
+         * fractions. */
+        size_t edges = 2 * (size_t)water->width + 2 * (size_t)water->height;
+        hash = hash_fnv1a64(hash, water->edge_ground, edges * sizeof(*water->edge_ground));
+        hash = hash_fnv1a64(hash, water->edge_surface, edges * sizeof(*water->edge_surface));
     }
     if (water->active_count == 0) {
         return hash;
@@ -881,6 +1119,11 @@ uint64_t water_hash(const Water *water, uint64_t hash)
         hash = hash_fnv1a64(hash, &block->quiet, sizeof(block->quiet));
         hash = hash_fnv1a64(hash, block->east, sizeof(block->east));
         hash = hash_fnv1a64(hash, block->south, sizeof(block->south));
+        hash = hash_fnv1a64(hash, block->west_edge, sizeof(block->west_edge));
+        hash = hash_fnv1a64(hash, block->north_edge, sizeof(block->north_edge));
+    }
+    if (water->edge_in != 0) {
+        hash = hash_fnv1a64(hash, &water->edge_in, sizeof(water->edge_in));
     }
     return hash;
 }
@@ -895,6 +1138,10 @@ static void water_block_serialize(Serializer *s, WaterBlock *block)
     }
     ser_u64s(s, block->passable, WATER_BLOCK_TILES / 64);
     ser_u64s(s, block->open_water, WATER_BLOCK_TILES / 64);
+    for (int i = 0; i < WATER_BLOCK_SIZE; i++) {
+        ser_i32(s, &block->west_edge[i]);
+        ser_i32(s, &block->north_edge[i]);
+    }
     ser_u16(s, &block->quiet);
     ser_bool(s, &block->moved);
 }
@@ -956,6 +1203,15 @@ void water_serialize(Serializer *s, Water *water)
         ser_check(s, water->overfull[i] < tiles);
     }
     water->overfull_count = ser_ok(s) ? overfull : 0;
+    size_t edges = 2 * (size_t)water->width + 2 * (size_t)water->height;
+    for (size_t i = 0; i < edges && ser_ok(s); i++) {
+        ser_u8_below(s, &water->edge_ground[i], (unsigned)water->depth + 1);
+        ser_i64(s, &water->edge_surface[i]);
+        ser_check(s, water->edge_surface[i] >= (int64_t)water->edge_ground[i] * FULL_BASIN &&
+                         water->edge_surface[i] <= (int64_t)water->depth * FULL_BASIN);
+    }
+    ser_i64(s, &water->edge_in);
+    ser_bool(s, &water->sealed);
     ser_u32(s, &water->topology_seen);
     ser_u32(s, &water->build_seen);
     ser_u32(s, &water->water_seen);

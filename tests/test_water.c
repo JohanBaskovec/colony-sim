@@ -31,6 +31,36 @@ static void rock_but(Map *map, int z, int x0, int y0, int x1, int y1)
     }
 }
 
+/* Rock along the rim of the map on level z: no water crosses its edges
+ * there (the land beyond is as the rim, docs/WATER.md §4.1). */
+static void rock_rim(Map *map, int z)
+{
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            if (x == 0 || y == 0 || x == map->width - 1 || y == map->height - 1) {
+                map->rock[map_index(map, x, y, z)] = ROCK_GRANITE;
+            }
+        }
+    }
+}
+
+/* Steps until every block sleeps (false when still awake after `limit`),
+ * checking at each step that the water changes only by what crossed the
+ * edges. */
+static bool run_with_edges(Water *water, Map *map, int limit)
+{
+    int64_t start = (int64_t)water_total(water, map) - water->edge_in;
+    for (int step = 0; step < limit; step++) {
+        if (!water_step(water, map) || (int64_t)water_total(water, map) != start + water->edge_in) {
+            return false;
+        }
+        if (water->active_count == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void test_water_at_rest_stays_asleep(void)
 {
     Map map;
@@ -129,12 +159,12 @@ static void test_a_channel_fills_to_the_level_of_the_lake(void)
 {
     Map map;
     REQUIRE(map_init(&map, 48, 20, 1));
-    rock_but(&map, 0, 0, 0, 15, 15); /* The lake. */
+    rock_but(&map, 0, 1, 1, 15, 15); /* The lake, off the edges. */
     for (int x = 16; x <= 40; x++) { /* The channel, shut from it by rock at x 16. */
         map.rock[map_index(&map, x, 8, 0)] = x == 16 ? ROCK_GRANITE : ROCK_NONE;
     }
-    for (int y = 0; y <= 15; y++) {
-        for (int x = 0; x <= 15; x++) {
+    for (int y = 1; y <= 15; y++) {
+        for (int x = 1; x <= 15; x++) {
             map.water[map_index(&map, x, y, 0)] = 1000;
         }
     }
@@ -145,13 +175,162 @@ static void test_a_channel_fills_to_the_level_of_the_lake(void)
     CHECK_EQ_UINT(water.active_count, 0);
     map_set_rock(&map, 16, 8, 0, ROCK_NONE); /* Dug through. */
     CHECK(run_until_asleep(&water, &map, 20000));
-    /* 256 tiles of 1000 mm over 256 + 25. */
-    int level = 1000 * 256 / 281;
+    /* 225 tiles of 1000 mm over 225 + 25. */
+    int level = 1000 * 225 / 250;
     for (int x = 16; x <= 40; x++) {
         CHECK(abs(map_water(&map, x, 8, 0) - level) <= 2 * WATER_FLOW_DIVISOR);
     }
     CHECK(abs(map_water(&map, 3, 3, 0) - level) <= 2 * WATER_FLOW_DIVISOR);
-    CHECK_EQ_UINT(water_total(&water, &map), 256000u * WATER_FINE);
+    CHECK_EQ_UINT(water_total(&water, &map), 225000u * WATER_FINE);
+    water_free(&water);
+    map_free(&map);
+}
+
+/* A lake cut by the west edge of the map: what is drawn from it comes back
+ * from the lake beyond, up to its level. */
+static void test_a_lake_cut_by_the_edge_keeps_its_level(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 32, 16, 1));
+    rock_but(&map, 0, 0, 4, 9, 11);
+    for (int y = 4; y <= 11; y++) {
+        for (int x = 0; x <= 9; x++) {
+            map.water[map_index(&map, x, y, 0)] = 600;
+        }
+    }
+    map_topology_changed(&map);
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 6, 0, -1, 0), 600 * WATER_FINE);
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 2, 0, -1, 0), -1); /* Rock there. */
+    CHECK_EQ_INT(water_beyond_edge(&water, 5, 6, 0, -1, 0), -1); /* Not on the edge. */
+    for (int step = 0; step < 100; step++) {                     /* At rest with the lake beyond. */
+        REQUIRE(water_step(&water, &map));
+    }
+    CHECK_EQ_UINT(water.active_count, 0);
+    for (int y = 4; y <= 11; y++) { /* Drawn from: a channel dug east of it. */
+        map_set_water(&map, 8, y, 0, 0);
+        map_set_water(&map, 9, y, 0, 0);
+    }
+    CHECK(run_with_edges(&water, &map, 20000));
+    CHECK(water.edge_in > 0);
+    CHECK(abs(map_water(&map, 9, 7, 0) - 600) <= 2 * WATER_FLOW_DIVISOR);
+    CHECK(abs(map_water(&map, 0, 7, 0) - 600) <= 2 * WATER_FLOW_DIVISOR);
+    water_free(&water);
+    map_free(&map);
+}
+
+/* A flood reaching a dry edge flows out of the map, into the basins beyond
+ * (four of WATER_EDGE_BASIN tiles), all but a film over what they rose. */
+static void test_a_flood_flows_out_at_a_dry_edge(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 32, 16, 1));
+    rock_but(&map, 0, 0, 6, 12, 9); /* A gully four tiles wide, open to the west. */
+    map_topology_changed(&map);
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 7, 0, -1, 0), 0);
+    map_set_water(&map, 10, 7, 0, 2000);
+    map_set_water(&map, 10, 8, 0, 2000);
+    CHECK(run_with_edges(&water, &map, 20000));
+    CHECK(water.edge_in < -3000 * WATER_FINE);
+    CHECK((int64_t)water_total(&water, &map) == 4000 * WATER_FINE + water.edge_in);
+    /* The basins rose by what came out, spread over them. */
+    int risen = (int)(-water.edge_in / (4 * WATER_EDGE_BASIN));
+    for (int y = 6; y <= 9; y++) {
+        int32_t beyond = water_beyond_edge(&water, 0, y, 0, -1, 0);
+        CHECK(beyond > 0 && beyond < 2 * risen);
+    }
+    for (int x = 0; x <= 12; x++) {
+        CHECK(map_water(&map, x, 7, 0) * WATER_FINE <= 2 * risen + WATER_FILM_MM * WATER_FINE);
+    }
+    water_free(&water);
+    map_free(&map);
+}
+
+/* Two basins beyond a lake a little apart (the sun took more from one edge
+ * tile than from the next): the current they start through the lake dies
+ * out, the lake falls asleep. */
+static void test_basins_apart_even_out(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 32, 16, 1));
+    rock_but(&map, 0, 0, 4, 9, 11);
+    for (int y = 4; y <= 11; y++) {
+        for (int x = 0; x <= 9; x++) {
+            map.water[map_index(&map, x, y, 0)] = 600;
+        }
+    }
+    map_topology_changed(&map);
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    size_t west = 2 * (size_t)map.width; /* The basins beyond the west column. */
+    water.edge_surface[west + 4] += (int64_t)8 * WATER_FINE * WATER_EDGE_BASIN;
+    water.edge_surface[west + 11] -= (int64_t)8 * WATER_FINE * WATER_EDGE_BASIN;
+    map_set_water(&map, 5, 7, 0, 0); /* Wakes it. */
+    CHECK(run_with_edges(&water, &map, 20000));
+    int32_t high = water_beyond_edge(&water, 0, 4, 0, -1, 0);
+    int32_t low = water_beyond_edge(&water, 0, 11, 0, -1, 0);
+    CHECK(high - low < 3 * WATER_FILM_MM * WATER_FINE);
+    water_free(&water);
+    map_free(&map);
+}
+
+/* The land beyond lives the edge's weather: what the sun takes from an edge
+ * tile it takes beyond, and nothing flows nor wakes. */
+static void test_the_land_beyond_shares_the_weather(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 32, 16, 1));
+    rock_but(&map, 0, 0, 4, 9, 11);
+    for (int y = 4; y <= 11; y++) {
+        for (int x = 0; x <= 9; x++) {
+            map.water[map_index(&map, x, y, 0)] = 600;
+        }
+    }
+    map_topology_changed(&map);
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    for (int y = 4; y <= 11; y++) {
+        for (int x = 0; x <= 9; x++) {
+            CHECK_EQ_INT(water_exchange(&water, &map, map_index(&map, x, y, 0), -2 * WATER_FINE),
+                         -2 * WATER_FINE);
+        }
+    }
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 7, 0, -1, 0), 598 * WATER_FINE);
+    REQUIRE(water_step(&water, &map));
+    CHECK_EQ_UINT(water.active_count, 0);
+    CHECK_EQ_INT(water.edge_in, 0);
+    water_free(&water);
+    map_free(&map);
+}
+
+/* Under the ground of the land beyond, the edge is solid: a cave cut by the
+ * edge keeps its water. Sealed edges let nothing through anywhere. */
+static void test_no_water_crosses_under_the_ground_or_sealed_edges(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 32, 16, 3));
+    rock_but(&map, 0, 0, 6, 8, 9); /* The cave, on the west edge. */
+    rock_but(&map, 1, 1, 1, 0, 0); /* Its roof: rock all over level 1. */
+    map_topology_changed(&map);
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 7, 0, -1, 0), -1);
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 7, 2, -1, 0), 0); /* Open sky above the roof. */
+    map_set_water(&map, 0, 7, 0, 2000);
+    map_set_water(&map, 0, 8, 0, 2000);
+    CHECK(run_with_edges(&water, &map, 20000));
+    CHECK_EQ_INT(water.edge_in, 0);
+    CHECK_EQ_UINT(water_total(&water, &map), 4000u * WATER_FINE);
+    water_seal_edges(&water);
+    map_set_water(&map, 0, 7, 2, 2000); /* On the roof, at a dry edge. */
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 7, 2, -1, 0), -1);
+    CHECK(run_with_edges(&water, &map, 20000));
+    CHECK_EQ_INT(water.edge_in, 0);
+    water_settle(&water, &map); /* Still sealed after. */
+    CHECK_EQ_INT(water_beyond_edge(&water, 0, 7, 2, -1, 0), -1);
     water_free(&water);
     map_free(&map);
 }
@@ -169,6 +348,7 @@ static void make_shaft(Map *map)
         }
     }
     map->terrain[map_index(map, 8, 8, 3)] = TERRAIN_OPEN; /* The mouth of the shaft. */
+    rock_rim(map, 3);
     map_topology_changed(map);
 }
 
@@ -227,7 +407,9 @@ static void test_walls_and_shut_doors_hold_water(void)
 {
     Map map;
     REQUIRE(map_init(&map, 32, 16, 1));
-    for (int y = 0; y < 16; y++) {
+    rock_rim(&map, 0);
+    map_topology_changed(&map);
+    for (int y = 1; y < 15; y++) {
         map_set_structure(&map, 16, y, 0, y == 8 ? STRUCTURE_DOOR : STRUCTURE_WALL);
     }
     Water water;
@@ -249,6 +431,8 @@ static void test_blocks_wake_as_water_reaches_them(void)
 {
     Map map;
     REQUIRE(map_init(&map, 64, 16, 1));
+    rock_rim(&map, 0);
+    map_topology_changed(&map);
     Water water;
     REQUIRE(water_init(&water, &map));
     map_set_water(&map, 2, 8, 0, 2000);
@@ -425,6 +609,11 @@ int main(void)
     RUN_TEST(test_films_do_not_flow);
     RUN_TEST(test_exchanges_wake_only_water_they_set_moving);
     RUN_TEST(test_a_channel_fills_to_the_level_of_the_lake);
+    RUN_TEST(test_a_lake_cut_by_the_edge_keeps_its_level);
+    RUN_TEST(test_a_flood_flows_out_at_a_dry_edge);
+    RUN_TEST(test_basins_apart_even_out);
+    RUN_TEST(test_the_land_beyond_shares_the_weather);
+    RUN_TEST(test_no_water_crosses_under_the_ground_or_sealed_edges);
     RUN_TEST(test_a_shaft_fills_from_the_bottom);
     RUN_TEST(test_water_pours_down_a_shaft);
     RUN_TEST(test_walls_and_shut_doors_hold_water);
