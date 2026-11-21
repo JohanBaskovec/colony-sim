@@ -170,6 +170,31 @@ static void test_flowing_water_plays_on_alike(void)
     game_shutdown(&game);
 }
 
+/* A save tells when it was made, of how many settlers, from its first bytes. */
+static void test_a_save_tells_of_itself(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 32, 3, 0.0f, SCENARIO_NONE));
+    run_ticks(&game, 50);
+    size_t size = 0;
+    uint8_t *data = game_save(&game, &size);
+    REQUIRE(data != NULL);
+    SaveInfo info;
+    REQUIRE(save_read_info(data, SAVE_INFO_BYTES, &info));
+    CHECK_EQ_UINT(info.tick, game.clock.tick);
+    CHECK_EQ_UINT(info.settlers, 3);
+    CHECK_EQ_UINT(info.seed, 42);
+    CHECK_EQ_INT(info.width, 32);
+    CHECK_EQ_INT(info.height, 32);
+    CHECK_EQ_INT(info.depth, game.map.depth);
+    CHECK(!info.colony_lost);
+    CHECK(!save_read_info(data, 12, &info)); /* Cut inside its INFO. */
+    data[4] = SAVE_VERSION + 1;
+    CHECK(!save_read_info(data, size, &info));
+    free(data);
+    game_shutdown(&game);
+}
+
 /* A save cut short, changed, of another version or of nothing at all is
  * refused, and the game left empty. */
 static void test_damaged_saves_are_refused(void)
@@ -181,15 +206,20 @@ static void test_damaged_saves_are_refused(void)
     REQUIRE(data != NULL);
     CHECK_EQ_INT(save_version_of(data, size), SAVE_VERSION);
     Game loaded;
+    CHECK_EQ_INT(save_check(data, size), SAVE_OK);
+    CHECK_EQ_INT(save_check(data, size / 2), SAVE_ERROR_DAMAGED);
     CHECK_EQ_INT(game_load(&loaded, data, size / 2), SAVE_ERROR_DAMAGED);
     CHECK(loaded.map.terrain == NULL);
     data[size / 3] ^= 0x40;
+    CHECK_EQ_INT(save_check(data, size), SAVE_ERROR_DAMAGED);
     CHECK_EQ_INT(game_load(&loaded, data, size), SAVE_ERROR_DAMAGED);
     data[size / 3] ^= 0x40;
     data[4] = SAVE_VERSION + 1;
+    CHECK_EQ_INT(save_check(data, size), SAVE_ERROR_VERSION);
     CHECK_EQ_INT(game_load(&loaded, data, size), SAVE_ERROR_VERSION);
     data[4] = SAVE_VERSION;
     data[0] = 'X';
+    CHECK_EQ_INT(save_check(data, size), SAVE_ERROR_NOT_A_SAVE);
     CHECK_EQ_INT(game_load(&loaded, data, size), SAVE_ERROR_NOT_A_SAVE);
     CHECK_EQ_INT(save_version_of(data, size), -1);
     CHECK_EQ_INT(game_load(&loaded, NULL, 0), SAVE_ERROR_NOT_A_SAVE);
@@ -352,6 +382,7 @@ int main(void)
     RUN_TEST(test_wild_animals_play_on_alike);
     RUN_TEST(test_the_fog_of_war_plays_on_alike);
     RUN_TEST(test_flowing_water_plays_on_alike);
+    RUN_TEST(test_a_save_tells_of_itself);
     RUN_TEST(test_damaged_saves_are_refused);
     RUN_TEST(test_edited_saves_never_break_loading);
     RUN_TEST(test_serialized_structs_keep_their_size);

@@ -112,13 +112,56 @@ menu.card.knowledge.unknown = Connaissance : pas encore découverte
 menu.work.description = Qui fait quel travail, et dans quel ordre
 menu.build.description = Postes de travail, constructions, zones et ordres
 menu.game = Menu
-menu.game.description = Commandes, réglages, quitter (le jeu est en pause pendant ce temps)
+menu.game.description = Sauvegarder, charger, commandes, réglages, quitter (le jeu est en pause pendant ce temps)
 game_menu.resume = Reprendre
 game_menu.quit = Quitter
 game_menu.main_menu = Menu principal
-game_menu.leave_question = Quitter cette partie ? Elle n’est pas sauvegardée.
+game_menu.leave_question = Quitter cette partie ? Ce qui n’est pas sauvegardé sera perdu.
 game_menu.leave = Quitter la partie
 game_menu.stay = Continuer à jouer
+game_menu.save = Sauvegarder
+game_menu.load = Charger
+title.load_game = Charger une partie
+# Sauvegardes (game/saves.h, game/saves_window.h)
+saves.title.save = Sauvegarder la partie
+saves.title.load = Charger une partie
+saves.new = Nouvelle sauvegarde
+saves.overwrite = Écraser
+saves.load = Charger
+saves.delete = Supprimer
+saves.cancel = Annuler
+saves.none = Aucune sauvegarde pour l’instant
+# {0}: the save's number
+saves.name.manual = Sauvegarde {0}
+saves.name.quick = Sauvegarde rapide
+saves.name.auto = Sauvegarde automatique
+saves.name.auto_previous = Sauvegarde automatique précédente
+# {0}: the date in the game, {1}: how many settlers (saves.settlers), {2}: when it was saved (saves.saved_at)
+saves.details = {0} · {1} · {2}
+saves.settlers.one = {0} colon
+saves.settlers.other = {0} colons
+saves.lost = colonie perdue
+# When the file was written: {0} year, {1} month, {2} day, {3} hours, {4} minutes
+saves.saved_at = {2}/{1}/{0} {3}:{4}
+saves.unreadable = Illisible
+# {0}: the save format's number
+saves.other_version = Faite par une autre version du jeu (format de sauvegarde {0})
+# {0}: the save's name
+saves.confirm.overwrite = Écraser {0} ?
+saves.confirm.delete = Supprimer {0} ? C’est définitif.
+saves.confirm.load = Charger {0} ? Ce qui n’est pas sauvegardé de cette partie sera perdu.
+saves.saved = Partie sauvegardée
+saves.autosaved = Partie sauvegardée automatiquement
+saves.loaded = Partie chargée
+saves.no_quick_save = Pas encore de sauvegarde rapide
+saves.error.folder = Aucun dossier où garder les sauvegardes
+saves.error.write = La partie n’a pas pu être sauvegardée
+saves.error.read = La sauvegarde n’a pas pu être lue
+saves.error.full = Trop de sauvegardes : supprimez-en d’abord
+saves.error.memory = Pas assez de mémoire pour cette sauvegarde
+saves.error.not_a_save = Ce fichier n’est pas une sauvegarde de ce jeu
+saves.error.version = Cette sauvegarde a été faite par une autre version du jeu (format de sauvegarde {0})
+saves.error.damaged = Cette sauvegarde est endommagée
 # Title screen (game/title_screen.h)
 title.tagline = Là où cède la glace, une colonie prend racine
 title.new_game = Nouvelle partie
@@ -387,6 +430,7 @@ hud.help.gathering = {0} : zones de récolte (bois, nourriture sauvage, branche
 hud.help.orders = {0} : miner · {1} : annuler des ordres (avec une zone, un chantier ou un ordre sélectionné : le supprime ou l’annule ; avec une construction sélectionnée : ordonne de la démonter)
 hud.help.copy = {0} : construire un autre exemplaire de la sélection (zone, poste, lit, mur, porte)
 hud.help.follow = {0} : suivre le colon ou l’animal sélectionné (la vue reste sur lui et change de niveau avec lui)
+hud.help.saves = {0} : sauvegarde rapide · {1} : charger la sauvegarde rapide
 hud.help.draft = {0} : mobiliser les colons sélectionnés (ils ignorent leurs besoins et suivent vos ordres), ou les démobiliser
 hud.help.rotate = {0} : tourner le lit à placer (tête et pied)
 hud.help.temperature = {0} : vue thermique (température ressentie sur chaque case, chaleur des feux comprise : bleu pour le froid, rouge pour le chaud)

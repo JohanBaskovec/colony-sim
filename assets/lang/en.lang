@@ -113,13 +113,56 @@ menu.card.knowledge.unknown = Knowledge: not discovered yet
 menu.work.description = Who does which work, and in what order
 menu.build.description = Workstations, constructions, zones and orders
 menu.game = Menu
-menu.game.description = Controls, settings, quit (the game is paused meanwhile)
+menu.game.description = Save, load, controls, settings, quit (the game is paused meanwhile)
 game_menu.resume = Resume
 game_menu.quit = Quit
 game_menu.main_menu = Main menu
-game_menu.leave_question = Leave this game? It is not saved.
+game_menu.leave_question = Leave this game? What is not saved will be lost.
 game_menu.leave = Leave the game
 game_menu.stay = Keep playing
+game_menu.save = Save
+game_menu.load = Load
+title.load_game = Load game
+# Saves (game/saves.h, game/saves_window.h)
+saves.title.save = Save the game
+saves.title.load = Load a game
+saves.new = New save
+saves.overwrite = Overwrite
+saves.load = Load
+saves.delete = Delete
+saves.cancel = Cancel
+saves.none = No saves yet
+# {0}: the save's number
+saves.name.manual = Save {0}
+saves.name.quick = Quick save
+saves.name.auto = Autosave
+saves.name.auto_previous = Previous autosave
+# {0}: the date in the game, {1}: how many settlers (saves.settlers), {2}: when it was saved (saves.saved_at)
+saves.details = {0} · {1} · {2}
+saves.settlers.one = {0} settler
+saves.settlers.other = {0} settlers
+saves.lost = colony lost
+# When the file was written: {0} year, {1} month, {2} day, {3} hours, {4} minutes
+saves.saved_at = {0}-{1}-{2} {3}:{4}
+saves.unreadable = Not readable
+# {0}: the save format's number
+saves.other_version = Made by another version of the game (save format {0})
+# {0}: the save's name
+saves.confirm.overwrite = Overwrite {0}?
+saves.confirm.delete = Delete {0}? It cannot be undone.
+saves.confirm.load = Load {0}? What is not saved of this game will be lost.
+saves.saved = Game saved
+saves.autosaved = Game saved automatically
+saves.loaded = Game loaded
+saves.no_quick_save = No quick save yet
+saves.error.folder = No folder to keep the saves in
+saves.error.write = The game could not be saved
+saves.error.read = The save could not be read
+saves.error.full = Too many saves: delete some first
+saves.error.memory = Not enough memory for this save
+saves.error.not_a_save = This file is not a save of this game
+saves.error.version = This save was made by another version of the game (save format {0})
+saves.error.damaged = This save is damaged
 # Title screen (game/title_screen.h)
 title.tagline = Where the ice gives way, a colony takes root
 title.new_game = New game
@@ -398,6 +441,7 @@ hud.help.orders = {0}: mine · {1}: cancel orders (with a zone, a site or an ord
 # {0} = key of the stockpile zone tool, {1} = key of the build tool, {2} = key of the work priorities grid
 hud.help.copy = {0}: build another of what is selected (zone, workstation, bed, wall, door)
 hud.help.follow = {0}: follow the selected settler or animal (the view stays on it and changes level with it)
+hud.help.saves = {0}: quick save · {1}: load the quick save
 hud.help.draft = {0}: mobilize the selected settlers (they ignore their needs and follow your orders), or demobilize them
 hud.help.rotate = {0}: turn the bed being placed (head and foot)
 hud.help.temperature = {0}: temperature view (felt on each tile, the warmth of fires included: blue for cold, red for hot)

@@ -46,6 +46,7 @@ add_library(colony_core STATIC
     roof.c
     scenario.c
     save.c
+    save_files.c
     serialize.c
     settings.c
     shadow.c

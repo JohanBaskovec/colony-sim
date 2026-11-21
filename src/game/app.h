@@ -13,6 +13,7 @@
 #include "core/test_scenario.h"
 #include "game/localization.h"
 #include "game/render.h"
+#include "game/saves.h"
 #include "game/sprites.h"
 #include "game/text.h"
 #include "game/ui.h"
@@ -94,11 +95,17 @@ typedef enum AppTool {
 #define APP_KEY_ITEMS_MENU SDL_SCANCODE_F5     /* Spawning items (game/items_panel.h). */
 #define APP_KEY_ANIMALS_MENU SDL_SCANCODE_F6   /* Spawning animals (game/animals_panel.h). */
 #define APP_KEY_VISUAL_MENU SDL_SCANCODE_F7    /* Visual debug (game/visual_panel.h). */
-#define APP_KEY_TEMPERATURE SDL_SCANCODE_H     /* Temperature view on or off. */
-#define APP_KEY_LIGHT SDL_SCANCODE_G           /* Light view on or off. */
-#define APP_KEY_MOISTURE SDL_SCANCODE_K        /* Soil moisture view on or off. */
-#define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP   /* The level above (also Shift + wheel). */
+#define APP_KEY_QUICK_SAVE SDL_SCANCODE_F8     /* game/saves.h */
+#define APP_KEY_QUICK_LOAD SDL_SCANCODE_F9
+#define APP_KEY_TEMPERATURE SDL_SCANCODE_H   /* Temperature view on or off. */
+#define APP_KEY_LIGHT SDL_SCANCODE_G         /* Light view on or off. */
+#define APP_KEY_MOISTURE SDL_SCANCODE_K      /* Soil moisture view on or off. */
+#define APP_KEY_LEVEL_UP SDL_SCANCODE_PAGEUP /* The level above (also Shift + wheel). */
 #define APP_KEY_LEVEL_DOWN SDL_SCANCODE_PAGEDOWN
+
+/* The game's folder in the user's data folder (SDL_GetPrefPath()): the
+ * settings, the saves. */
+#define APP_DATA_FOLDER "colony-sim"
 
 /* The font of the interface, in the assets folder. */
 #define APP_FONT_FILE "fonts/DejaVuSans.ttf"
@@ -154,6 +161,7 @@ typedef enum AppWindow {
     APP_WINDOW_GAME_MENU,
     APP_WINDOW_SETTINGS, /* Settings (game/settings_window.h), from the game menu. */
     APP_WINDOW_NEW_GAME, /* The title screen's New game window (game/title_screen.h). */
+    APP_WINDOW_SAVES,    /* Saving or loading (game/saves_window.h). */
     APP_WINDOW_COUNT
 } AppWindow;
 
@@ -170,6 +178,9 @@ typedef enum BuildCategory {
 /* Notices on screen at once, and how long each one stays (real seconds). */
 #define APP_NOTICES_SHOWN 5
 #define APP_NOTICE_SECONDS 15.0
+/* How long a message to the player stays (app_show_message(), real seconds). */
+#define APP_MESSAGE_SECONDS 5.0
+#define APP_MESSAGE_SIZE 256
 
 /* What can be selected on a tile besides a workstation and the zones: each
  * has a window of its own (game/tile_panel.h). */
@@ -346,6 +357,27 @@ typedef struct App {
     int build_hover_type;
     bool show_game_menu; /* Game menu (game/game_menu.h): the game is paused meanwhile. */
     bool show_settings;  /* Settings window, opened from the game menu (paused too). */
+    /* Saves (game/saves.h): their folder (ends with a separator; empty: none),
+     * the save to load at the start of the next frame (empty: none), and the
+     * day of the game autosaved last (UINT64_MAX: take the day without
+     * saving, a game begins). */
+    char saves_folder[1100];
+    char pending_load[SAVE_FILE_NAME_SIZE];
+    uint64_t autosave_day;
+    /* The saves window (game/saves_window.h), from the game menu or the title
+     * screen (the game is paused meanwhile): open, to load (else to save),
+     * the saves listed (read again when stale), and what waits for the
+     * player's yes, on which save. */
+    bool show_saves;
+    bool saves_loading;
+    bool saves_stale;
+    SaveList saves;
+    SavesConfirm saves_confirm;
+    char saves_confirm_file[SAVE_FILE_NAME_SIZE];
+    /* A message to the player (a game saved, a save refused: app_show_message())
+     * and how long it has been shown (real seconds). */
+    char message[APP_MESSAGE_SIZE];
+    double message_age;
     /* Inspector (game/inspector.h): the kind of selection shown last frame
      * (an InspectorKind), its open tab (-1: none) and how many tabs it has. */
     int inspector_kind;
@@ -454,6 +486,14 @@ uint64_t app_random_seed(void);
 /* Ends the game and goes back to the title screen at the start of the next
  * frame (the game is not kept). */
 void app_request_title(App *app);
+
+/* Asks for a save (a file of the saves folder) to replace the game, or the
+ * title screen, at the start of the next frame. If the save is refused, the
+ * game in play is kept (the player is told why). */
+void app_request_load(App *app, const char *file);
+
+/* Shows a message to the player for a few seconds (in place of the last). */
+void app_show_message(App *app, const char *text);
 
 /* Asks for a test scenario (core/test_scenario.h) to replace the game at the
  * start of the next frame: never in the middle of drawing windows. */

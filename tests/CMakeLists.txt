@@ -56,6 +56,7 @@ set(COLONY_UNIT_TESTS
     test_fog
     test_scenario
     test_save
+    test_save_files
     test_serialize
     test_settings
     test_shadow

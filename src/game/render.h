@@ -246,4 +246,9 @@ void render_colonist_portrait(SDL_Renderer *renderer, Sprites *sprites, const Co
 
 void render_shutdown(void);
 
+/* Forgets what was worked out from the world drawn (the sun's shadows, the
+ * sky each tile sees, the light of fires): another game takes its place (it
+ * lives at the same address, maybe at the same size and revisions). */
+void render_forget_world(void);
+
 #endif /* COLONY_GAME_RENDER_H */

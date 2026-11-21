@@ -10,6 +10,8 @@
 #include "game/hud.h"
 #include "game/inspector.h"
 #include "game/render.h"
+#include "game/saves.h"
+#include "game/saves_window.h"
 #include "game/stockpile_panel.h"
 #include "game/tile_panel.h"
 #include "game/title_screen.h"
@@ -23,7 +25,6 @@
 
 #define APP_WINDOW_WIDTH 1280
 #define APP_WINDOW_HEIGHT 720
-#define APP_SETTINGS_FOLDER "colony-sim" /* In the user's data folder. */
 #define APP_SETTINGS_FILE "settings.cfg"
 #define APP_INITIAL_ZOOM 48.0f
 /* Zoom (pixels per tile) a test scenario starts at: wide enough for a chase. */
@@ -643,7 +644,7 @@ static void update_window_title(App *app)
 static void find_settings_path(App *app)
 {
     app->settings_path[0] = '\0';
-    char *folder = SDL_GetPrefPath("", APP_SETTINGS_FOLDER);
+    char *folder = SDL_GetPrefPath("", APP_DATA_FOLDER);
     if (folder == NULL) {
         LOG_WARN("No folder for the settings, they will not be kept: %s", SDL_GetError());
         return;
@@ -826,6 +827,8 @@ bool app_init(App *app, const CliOptions *options)
     /* The command line wins over the saved settings, for this session. */
     find_settings_path(app);
     load_settings(app);
+    saves_init(app);
+    app->autosave_day = UINT64_MAX;
     const char *language =
         options->language[0] != '\0' ? options->language : app->settings.language;
     if (!localization_init(&app->localization, app->assets_dir, language)) {
@@ -962,6 +965,7 @@ static void close_window(App *app, AppWindow window)
         app->show_game_menu =
             app->screen == APP_SCREEN_GAME; /* Back where they were opened from. */
         break;
+    case APP_WINDOW_SAVES: saves_window_step_back(app); break;
     default: break;
     }
 }
@@ -1103,6 +1107,8 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case APP_KEY_ITEMS_MENU: app->show_items_menu = !app->show_items_menu; return;
     case APP_KEY_ANIMALS_MENU: app->show_animals_menu = !app->show_animals_menu; return;
     case APP_KEY_VISUAL_MENU: app->show_visual_menu = !app->show_visual_menu; return;
+    case APP_KEY_QUICK_SAVE: saves_quick_save(app); return;
+    case APP_KEY_QUICK_LOAD: saves_quick_load(app); return;
     case APP_KEY_SCENARIOS_MENU: app->show_scenarios_menu = !app->show_scenarios_menu; return;
     case APP_KEY_TEMPERATURE: app_toggle_temperature_view(app); return;
     case APP_KEY_LIGHT: app_toggle_light_view(app); return;
@@ -1370,7 +1376,9 @@ static void forget_game(App *app)
     app->inspector_tab = -1;
     app->next_notice = 0;
     app->notices_shown_count = 0;
+    app->autosave_day = UINT64_MAX;
     app_stop_following(app);
+    render_forget_world();
 }
 
 /* Replaces the game by the test scenario asked for (core/test_scenario.h) and
@@ -1406,6 +1414,8 @@ static void close_game_windows(App *app)
     app->show_scenarios_menu = false;
     app->show_game_menu = false;
     app->show_settings = false;
+    app->show_saves = false;
+    app->saves_confirm = SAVES_CONFIRM_NONE;
     app->build_menu_open = false;
     app->leave_confirm = false;
     app->show_temperature = false;
@@ -1447,6 +1457,65 @@ static void start_new_game(App *app)
 void app_request_title(App *app)
 {
     app->pending_title = true;
+}
+
+void app_request_load(App *app, const char *file)
+{
+    SDL_strlcpy(app->pending_load, file, sizeof(app->pending_load));
+}
+
+void app_show_message(App *app, const char *text)
+{
+    SDL_strlcpy(app->message, text, sizeof(app->message));
+    app->message_age = 0.0;
+}
+
+/* Replaces the game (or the title screen) by the save asked for
+ * (app_request_load()). A save refused by save_check() leaves the game in
+ * play as it was; one refused further on (edited by hand) leaves the title
+ * screen. */
+static void load_pending_save(App *app)
+{
+    char file[SAVE_FILE_NAME_SIZE];
+    SDL_strlcpy(file, app->pending_load, sizeof(file));
+    app->pending_load[0] = '\0';
+    size_t size = 0;
+    void *data = saves_read(app, file, &size);
+    if (data == NULL) {
+        return;
+    }
+    SaveError error = save_check(data, size);
+    if (error != SAVE_OK) {
+        saves_tell_error(app, error, save_version_of(data, size));
+        SDL_free(data);
+        return;
+    }
+    if (app->screen == APP_SCREEN_TITLE) {
+        title_screen_end(app);
+    }
+    if (app->game_ready) {
+        game_shutdown(&app->game);
+        app->game_ready = false;
+    }
+    error = game_load(&app->game, data, size);
+    SDL_free(data);
+    forget_game(app);
+    close_game_windows(app);
+    if (error != SAVE_OK) {
+        LOG_WARN("The save '%s' was refused (%d)", file, (int)error);
+        saves_tell_error(app, error, SAVE_VERSION);
+        if (!open_title_screen(app)) {
+            app->running = false;
+        }
+        return;
+    }
+    app->game_ready = true;
+    app->screen = APP_SCREEN_GAME;
+    view_start(app);
+    LOG_INFO("Save '%s' loaded: seed %" SDL_PRIu64 ", %dx%d tiles, %u colonists", file,
+             app->game.seed, app->game.map.width, app->game.map.height,
+             app->game.colonist_pool.count);
+    app_show_message(app, tr("saves.loaded"));
 }
 
 /* Leaves the game for the title screen (app_request_title()). */
@@ -2453,6 +2522,11 @@ void app_run(App *app)
         if (app->pending_title) {
             return_to_title(app);
         }
+        if (app->pending_load[0] != '\0') {
+            load_pending_save(app);
+            previous = SDL_GetTicksNS(); /* Loading is not time played. */
+        }
+        app->message_age += dt;
         if (app->screen == APP_SCREEN_TITLE && app->new_game_stage == NEW_GAME_STAGE_GENERATE) {
             start_new_game(app);
             previous = SDL_GetTicksNS(); /* Making the world is not time played. */
@@ -2473,8 +2547,10 @@ void app_run(App *app)
             }
         }
         update_camera(app, (float)dt);
-        if (!app->show_game_menu && !app->show_settings) {
-            game_update(&app->game, dt); /* The game menu and the settings pause the game. */
+        if (!app->show_game_menu && !app->show_settings && !app->show_saves) {
+            /* The game menu and the windows opened from it pause the game. */
+            game_update(&app->game, dt);
+            saves_autosave_update(app);
         }
         hud_update_notices(app, dt);
         prune_selection(app);

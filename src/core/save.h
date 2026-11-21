@@ -10,6 +10,7 @@
 
 #include "core/game.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -25,6 +26,26 @@ typedef enum SaveError {
     SAVE_ERROR_COUNT
 } SaveError;
 
+/* What a save tells of itself without being loaded (its INFO section, right
+ * after the header): for listing saves. */
+typedef struct SaveInfo {
+    uint64_t tick;     /* The game's clock when saved. */
+    uint32_t settlers; /* Alive. */
+    uint64_t seed;
+    int width, height, depth;
+    bool colony_lost;
+} SaveInfo;
+
+/* The bytes at the start of a save that hold its header and INFO section:
+ * save_read_info() needs no more. */
+#define SAVE_INFO_BYTES 64
+
+/* Reads what a save tells of itself from its first bytes (at least
+ * SAVE_INFO_BYTES of it, or all of a shorter one). False when it is no save
+ * of this version (save_version_of() tells which) or the bytes are refused.
+ * The rest of the save is not checked. */
+bool save_read_info(const void *data, size_t size, SaveInfo *info);
+
 /* The game saved into a new block of memory (the caller frees it with
  * free()), its size in `*size`. NULL when out of memory. The game is not
  * changed. */
@@ -35,6 +56,12 @@ uint8_t *game_save(const Game *game, size_t *size);
  * after game_init() (game_shutdown() frees it); otherwise it is left empty
  * (safe to shut down). The clock is paused. */
 SaveError game_load(Game *game, const void *data, size_t size);
+
+/* What game_load() checks before reading anything: the magic, the version
+ * and the hash of the whole save. SAVE_OK says the save is whole and of this
+ * version (only a hand-edited one may still be refused by game_load()):
+ * the frontend checks it before giving up the game in play. */
+SaveError save_check(const void *data, size_t size);
 
 /* The version a save was written by, or -1 when it is no save of this game
  * (for telling the player which version an old save needs). */

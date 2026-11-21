@@ -233,6 +233,24 @@ static void map_size_serialize(Serializer *s, int *width, int *height, int *dept
     ser_int_in(s, depth, 1, MAP_MAX_LEVELS);
 }
 
+static void info_serialize(Serializer *s, SaveInfo *info)
+{
+    ser_u64(s, &info->tick);
+    ser_u32_upto(s, &info->settlers, COLONIST_MAX);
+    ser_u64(s, &info->seed);
+    ser_int_in(s, &info->width, MAP_MIN_SIZE, MAP_MAX_SIZE);
+    ser_int_in(s, &info->height, MAP_MIN_SIZE, MAP_MAX_SIZE);
+    ser_int_in(s, &info->depth, 1, MAP_MAX_LEVELS);
+    ser_bool(s, &info->colony_lost);
+}
+
+static void info_section(Serializer *s, SaveInfo *info)
+{
+    size_t mark = ser_section_begin(s, "INFO");
+    info_serialize(s, info);
+    ser_section_end(s, mark);
+}
+
 uint8_t *game_save(const Game *game, size_t *size)
 {
     Game *writing = (Game *)(uintptr_t)game; /* Only read: the serializer writes it out. */
@@ -243,6 +261,16 @@ uint8_t *game_save(const Game *game, size_t *size)
     ser_bytes(&s, magic, 4);
     uint32_t version = SAVE_VERSION;
     ser_u32(&s, &version);
+    SaveInfo info = {
+        .tick = game->clock.tick,
+        .settlers = game->colonist_pool.count,
+        .seed = game->seed,
+        .width = game->map.width,
+        .height = game->map.height,
+        .depth = game->map.depth,
+        .colony_lost = game->colony_lost,
+    };
+    info_section(&s, &info);
 
     size_t mark = ser_section_begin(&s, "GAME");
     int width = game->map.width, height = game->map.height, depth = game->map.depth;
@@ -272,9 +300,25 @@ int save_version_of(const void *data, size_t size)
     return version > (uint32_t)INT32_MAX ? -1 : (int)version;
 }
 
-SaveError game_load(Game *game, const void *data, size_t size)
+bool save_read_info(const void *data, size_t size, SaveInfo *info)
 {
-    memset(game, 0, sizeof(*game));
+    memset(info, 0, sizeof(*info));
+    if (save_version_of(data, size) != SAVE_VERSION) {
+        return false;
+    }
+    Serializer s;
+    ser_reader_init(&s, data, size);
+    s.at = SAVE_HEADER_SIZE;
+    info_section(&s, info);
+    if (!ser_ok(&s)) {
+        memset(info, 0, sizeof(*info));
+        return false;
+    }
+    return true;
+}
+
+SaveError save_check(const void *data, size_t size)
+{
     int version = save_version_of(data, size);
     if (version < 0) {
         return SAVE_ERROR_NOT_A_SAVE;
@@ -293,9 +337,22 @@ SaveError game_load(Game *game, const void *data, size_t size)
     if (hash != hash_fnv1a64(HASH_FNV1A64_INIT, data, body)) {
         return SAVE_ERROR_DAMAGED;
     }
+    return SAVE_OK;
+}
 
+SaveError game_load(Game *game, const void *data, size_t size)
+{
+    memset(game, 0, sizeof(*game));
+    SaveError check = save_check(data, size);
+    if (check != SAVE_OK) {
+        return check;
+    }
+    size_t body = size - SAVE_FOOTER_SIZE;
+    Serializer s;
     ser_reader_init(&s, data, body);
     s.at = SAVE_HEADER_SIZE;
+    SaveInfo info = {0}; /* Read only to be skipped (checked, though). */
+    info_section(&s, &info);
     size_t mark = ser_section_begin(&s, "GAME");
     int width = 0, height = 0, depth = 0;
     map_size_serialize(&s, &width, &height, &depth);

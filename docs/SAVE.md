@@ -2,7 +2,8 @@
 
 A game is saved to a file and loaded back exactly: a game loaded and played
 on gives, tick for tick, what the game would have given had it never been
-saved. This document is the design; §6 is what was built, §7 the steps.
+saved. This document is the design; §6 and §7 are what was built, §8 the
+steps.
 
 ## 1. Principles
 
@@ -31,7 +32,8 @@ saved. This document is the design; §6 is what was built, §7 the steps.
 ## 2. The file
 
 ```
-header   "THMR" magic, u32 SAVE_VERSION, u32 section count
+header   "THMR" magic, u32 SAVE_VERSION
+INFO     what the save tells of itself (for the list of saves)
 section  4-byte tag, u32 byte length, the module's bytes   (repeated)
 footer   u64 FNV-1a hash of everything before it
 ```
@@ -41,7 +43,7 @@ footer   u64 FNV-1a hash of everything before it
   count past its array, an enum past its count, a map larger than allowed)
   refuses the save. Nothing read is trusted: a damaged or hand-edited file
   must never crash the loading (see §6 for what is checked).
-- The first section (`GAME`) holds what the others need to be allocated: the
+- The first section after INFO (`GAME`) holds what the others need to be allocated: the
   map's size and levels, the seed, the game's flags.
 - No compression for now: a 256 × 256 map of 8 levels is a few megabytes.
   Run-length encoding of the layers may come if files prove large.
@@ -80,9 +82,13 @@ round-trip test (§5) shows they come back the same; otherwise they are saved.
 - `core/save.h`: `game_save()` (a game into a buffer) and `game_load()` (a
   buffer into a new game, which owns its memory as after `game_init()`), and
   the reasons a save is refused (`SaveError`) for the frontend to tell.
-- Frontend (step S2): *Save* and *Load* in the pause menu, *Load game* on
-  the title screen, saves in the user's data folder (`SDL_GetPrefPath()`), a
-  quick save and an autosave every in-game day *(tuning)*.
+- `core/save_files.h`: the names of the files (`save-001.sav`...,
+  `quicksave.sav`, `autosave.sav`, `autosave-previous.sav`).
+- Frontend (`game/saves.h`, `game/saves_window.h`, docs/UI.md *Saves*):
+  *Save* and *Load* in the game menu, *Load game* on the title screen, the
+  files in `saves/` in the user's data folder (`SDL_GetPrefPath()`:
+  `~/.local/share/colony-sim/saves/` on Linux), a quick save (F8, F9) and
+  an autosave at each new day of the game (the previous one kept).
 
 ## 5. Tests
 
@@ -137,10 +143,38 @@ round-trip test (§5) shows they come back the same; otherwise they are saved.
   with their hash made right; the size of 79 structs. Leaving a field out of
   a settler's save fails them (checked by hand).
 
-## 7. Steps
+## 7. As built (S2)
+
+- **INFO**, right after the header: the tick, the settlers alive, the seed,
+  the map's size, whether the colony is lost. `save_read_info()` reads it
+  from the first `SAVE_INFO_BYTES` of a file: the saves window lists saves
+  without loading them. `save_check()` is what `game_load()` checks first
+  (magic, version, hash).
+- **Writing**: `game_save()`, then `SDL_SaveFile()` to `name.sav.tmp`, then
+  `SDL_RenamePath()` over `name.sav`: a save cut short (the game killed, a
+  disk full) never replaces a whole one. The autosave first renames the last
+  one to `autosave-previous.sav`.
+- **Loading** waits for the start of the next frame (never while windows are
+  drawn). The whole file is read and checked (`save_check()`); a save refused
+  there leaves the game in play, with a message (damaged, another version
+  with its number, not a save). Then the game is shut down and loaded in
+  place (`App.game`: the game holds pointers into itself, so it is never
+  copied); a save that passes the hash but is refused further on (edited by
+  hand) leaves the title screen. The view goes to the first settler, the
+  game paused.
+- **Autosave**: when the day of the game changes (`tick / TICKS_PER_DAY`),
+  counted from the day a game began or was loaded; it costs a frame (90 ms on
+  a 256 × 256 map).
+- **Tests**: `test_save` (INFO read back, `save_check()` on damaged saves),
+  `test_save_files` (names and numbers). The windows were checked by hand.
+
+## 8. Steps
 
 1. **S1, the core (done).** The serializer, every module's `_serialize()`,
    `game_save()` and `game_load()`, the tests of §5. Measured: the time to
    save and load a 256 × 256 game, the file's size.
-2. **S2, the frontend.** The menus, the files, quick save and autosave,
-   errors told to the player.
+2. **S2, the frontend (done).** The menus, the files, quick save and
+   autosave, errors told to the player.
+3. Later: a name typed for a save, a picture of the colony in the list,
+   migrations between versions (with the first public release), saving on
+   another thread if large maps make the autosave hitch.

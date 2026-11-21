@@ -2,6 +2,8 @@
 
 #include "core/i18n.h"
 #include "core/log.h"
+#include "game/hud.h"
+#include "game/saves_window.h"
 #include "game/settings_window.h"
 
 #include <math.h>
@@ -26,6 +28,7 @@
 #define BUTTON_WIDTH 300.0f
 #define BUTTON_HEIGHT 50.0f
 #define BUTTON_GAP 14.0f
+#define TITLE_BUTTONS 4 /* New game, Load game, Settings, Quit. */
 #define ORNAMENT_LENGTH 70.0f
 #define COLUMN_MIN_WIDTH 280.0f
 #define COLUMN_GAP 32.0f
@@ -94,6 +97,7 @@ void title_screen_begin(App *app)
     app->new_game_open = false;
     app->new_game_stage = NEW_GAME_STAGE_NONE;
     app->show_settings = false;
+    app->show_saves = false;
     if (app->new_game.world.width == 0) {
         new_game_default_params(&app->new_game); /* The first visit. */
     }
@@ -197,6 +201,8 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
         }
         if (app->show_settings) {
             app->show_settings = false;
+        } else if (app->show_saves) {
+            saves_window_step_back(app);
         } else {
             close_new_game(app);
         }
@@ -674,7 +680,7 @@ void title_screen_draw(App *app)
     if (!title_fonts(app)) {
         return;
     }
-    bool window = app->new_game_open || app->show_settings;
+    bool window = app->new_game_open || app->show_settings || app->show_saves;
     float h = ui->screen_height, w = ui->screen_width;
     float bottom = 0.0f;
     if (!window) {
@@ -694,24 +700,29 @@ void title_screen_draw(App *app)
         draw_new_game(app);
     } else if (app->show_settings) {
         settings_window_draw(app);
+    } else if (app->show_saves) {
+        saves_window_draw(app);
     } else {
         float button_w = SDL_floorf(BUTTON_WIDTH * scale);
         float button_h = SDL_floorf(BUTTON_HEIGHT * scale);
         float gap = SDL_floorf(BUTTON_GAP * scale);
-        const char *labels[3] = {tr("title.new_game"), tr("settings.title"), tr("title.quit")};
-        for (int i = 0; i < 3; i++) {
+        const char *labels[TITLE_BUTTONS] = {tr("title.new_game"), tr("title.load_game"),
+                                             tr("settings.title"), tr("title.quit")};
+        for (int i = 0; i < TITLE_BUTTONS; i++) {
             button_w = SDL_max(button_w, text_width_of(app->title_subtext, labels[i]) +
                                              4.0f * ui->theme.button_padding);
         }
         float x = SDL_floorf((w - button_w) * 0.5f);
         float y = SDL_floorf(SDL_max(bottom + 60.0f * scale, h * 0.52f));
-        ui_region(ui, (SDL_FRect){x, y, button_w, button_h * 3.0f + gap * 2.0f});
-        for (int i = 0; i < 3; i++) {
+        ui_region(
+            ui, (SDL_FRect){x, y, button_w, button_h * TITLE_BUTTONS + gap * (TITLE_BUTTONS - 1)});
+        for (int i = 0; i < TITLE_BUTTONS; i++) {
             SDL_FRect rect = {x, y + (float)i * (button_h + gap), button_w, button_h};
             if (title_button(app, rect, labels[i])) {
                 switch (i) {
                 case 0: open_new_game(app); break;
-                case 1: app->show_settings = true; break;
+                case 1: saves_window_open(app, true); break;
+                case 2: app->show_settings = true; break;
                 default: app->running = false; break;
                 }
             }
@@ -723,6 +734,7 @@ void title_screen_draw(App *app)
     ui_label_rgba(ui, version, w - margin - ui_text_width(ui, version),
                   h - margin - (float)text_line_height(ui->text),
                   (SDL_Color){MIST.r, MIST.g, MIST.b, 150});
+    hud_draw_message(app, margin * 2.0f);
     ui_draw_popup(ui);
     ui_draw_tooltip(ui);
 }

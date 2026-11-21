@@ -358,6 +358,16 @@ static void batch_shape(SDL_Renderer *renderer, SDL_Color color, const SDL_FPoin
     batch_count++;
 }
 
+void render_forget_world(void)
+{
+    if (shadow_field_started) {
+        shadow_field_free(&shadow_field);
+        shadow_field_started = false;
+    }
+    sky_field_free(&sky_field);
+    fire_light_free(&fire_light);
+}
+
 void render_shutdown(void)
 {
     if (below_texture != NULL) {

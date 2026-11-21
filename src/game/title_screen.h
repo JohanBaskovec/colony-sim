@@ -2,8 +2,8 @@
  * The title screen (docs/UI.md), shown when the game starts without a game
  * option on the command line (cli_starts_game()) and when a game is left
  * from the game menu: a world of its own drifts slowly under a veil, with the
- * name of the game in large spaced letters, a tagline, and New game,
- * Settings and Quit.
+ * name of the game in large spaced letters, a tagline, and New game, Load
+ * game (game/saves_window.h), Settings and Quit.
  *
  * New game opens a window with the options of the world to make
  * (core/new_game.h) in three columns (World, Relief, Life): sliders, the flat

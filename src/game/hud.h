@@ -77,6 +77,11 @@ bool hud_site_line(const ConstructionSite *site, int line, char *out, size_t siz
  * screen by `dt` real seconds. */
 void hud_update_notices(App *app, double dt);
 
+/* The message to the player (app_show_message()), centered at `y`, fading
+ * out at the end of its time; whether one is shown. */
+void hud_draw_message(App *app, float y);
+bool hud_message_shown(const App *app);
+
 /* Windows open now, back to front (the last one is in front). Returns how many. */
 int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT]);
 

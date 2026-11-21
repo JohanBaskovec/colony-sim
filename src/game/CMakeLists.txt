@@ -22,6 +22,8 @@ add_executable(colony_sim
     main.c
     render.c
     resources_list.c
+    saves.c
+    saves_window.c
     scenarios_panel.c
     settings_window.c
     sprites.c

@@ -363,9 +363,9 @@ settlers, animals, a scenario, cheats, the render benchmark:
   its plains, without markers, under a cold veil (darker at the top and the
   bottom, the sides a little darker).
 - The name of the game in large spaced capitals (closer on a narrow window),
-  a tagline between two thin amber strokes, then three large buttons: New
-  game, Settings (the settings window, as from the game menu), Quit; the
-  version in the bottom right corner.
+  a tagline between two thin amber strokes, then four large buttons: New
+  game, Load game (the saves window, below), Settings (the settings window,
+  as from the game menu), Quit; the version in the bottom right corner.
 
 **New game** opens a window in three columns, every option of the world to
 make (`core/new_game.h`), each a label with its value and a slider under it,
@@ -386,10 +386,32 @@ Escape goes back). The options are kept until the game quits. Start shows
 
 ### Game menu
 
-A centered window: Resume, Controls (the old "?" help, F1), Settings, Main
-menu, Quit. Main menu asks first (the game is not saved: Leave the game, or
-Keep playing), then goes back to the title screen. Later: save, load. The
+A centered window: Resume, Save, Load, Controls (the old "?" help, F1),
+Settings, Main menu, Quit. Main menu asks first (what is not saved is lost:
+Leave the game, or Keep playing), then goes back to the title screen. The
 game is paused while it is open.
+
+### Saves
+
+The saves window (`game/saves_window.h`, docs/SAVE.md §4) opens from Save or
+Load in the game menu, which it replaces (closing it, with × or Escape, goes
+back to the menu; the game stays paused), or from Load game on the title
+screen. It lists the saves newest first, each with its name (Save 3, Quick
+save, Autosave, Previous autosave) and a dim line: the date in the game, the
+settlers (or "colony lost") and when it was written; a save of another
+version says which, a file that cannot be read says so.
+
+- **To save**: New save on top (the next number), Overwrite on each save
+  (asks first). The window closes on the game menu once saved.
+- **To load**: Load and Delete on each save (Delete asks first; Load asks
+  first in a game, since what is not saved of it is lost). A save refused
+  (damaged, of another version, not a save) leaves the game in play as it
+  was, and a message tells why.
+
+F8 writes the quick save, F9 loads it (no question). A new day of the game
+writes the autosave, the one before it kept as the previous autosave. A
+line under the colonist bar (over the windows) tells for a few seconds what
+went right or wrong: game saved, saved automatically, loaded, or why not.
 
 ### Settings
 

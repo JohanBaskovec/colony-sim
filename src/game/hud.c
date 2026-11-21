@@ -27,6 +27,7 @@
 #include "game/thought_tooltip.h"
 #include "game/ui_layout.h"
 #include "game/resources_list.h"
+#include "game/saves_window.h"
 #include "game/settings_window.h"
 #include "game/stockpile_panel.h"
 #include "game/tile_panel.h"
@@ -2144,6 +2145,8 @@ static void help_window(App *app)
               tr("designation.deconstruct"));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.follow"), app_key_name(APP_KEY_FOLLOW));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.draft"), app_key_name(APP_KEY_DRAFT));
+    TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.saves"),
+              app_key_name(APP_KEY_QUICK_SAVE), app_key_name(APP_KEY_QUICK_LOAD));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.levels"),
               app_key_name(APP_KEY_LEVEL_UP), app_key_name(APP_KEY_LEVEL_DOWN));
     TR_FORMAT(panel_add(&help), HUD_LINE_SIZE, tr("hud.help.debug"),
@@ -2173,6 +2176,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_SCENARIOS: scenarios_panel_draw(app); break;
     case APP_WINDOW_GAME_MENU: game_menu_draw(app); break;
     case APP_WINDOW_SETTINGS: settings_window_draw(app); break;
+    case APP_WINDOW_SAVES: saves_window_draw(app); break;
     default: break;
     }
 }
@@ -2226,6 +2230,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_settings) {
         out[count++] = APP_WINDOW_SETTINGS;
+    }
+    if (app->show_saves) {
+        out[count++] = APP_WINDOW_SAVES;
     }
     /* Insertion sort, back to front. */
     for (int i = 1; i < count; i++) {
@@ -2297,12 +2304,29 @@ static float draw_notice_line(App *app, const char *text, float y, float alpha)
     return y + box.h + 2.0f;
 }
 
+bool hud_message_shown(const App *app)
+{
+    return app->message[0] != '\0' && app->message_age < APP_MESSAGE_SECONDS;
+}
+
+void hud_draw_message(App *app, float y)
+{
+    if (hud_message_shown(app)) {
+        double left = APP_MESSAGE_SECONDS - app->message_age;
+        draw_notice_line(app, app->message, y,
+                         (float)SDL_clamp(left / NOTICE_FADE_SECONDS, 0.0, 1.0));
+    }
+}
+
 /* The notices on screen, centered under the colonist bar, oldest first; each
  * fades out at the end of its time. Once the colony is lost, that stays on
  * top. */
 static void draw_notices(App *app)
 {
     float y = colonist_bar_bottom(app) + HUD_MARGIN;
+    if (hud_message_shown(app)) {
+        y += (float)text_line_height(app->text) + HUD_PADDING + 2.0f; /* Its place, above. */
+    }
     if (app->game.colony_lost) {
         y = draw_notice_line(app, tr("hud.colony_lost"), y, 1.0f);
     }
@@ -2403,6 +2427,8 @@ void hud_draw(App *app)
     build_menu_draw(app);
     view_controls_draw(app);
     bottom_bar_draw(app);
+    /* Over the windows: it tells what one did (a game saved). */
+    hud_draw_message(app, colonist_bar_bottom(app) + HUD_MARGIN);
     ui_draw_popup(&app->ui);
     ui_draw_tooltip(&app->ui);
 }

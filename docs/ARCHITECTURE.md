@@ -93,7 +93,8 @@ simulation:
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain, rainfall in mm, the air's dew point and relative humidity |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
 | `serialize`  | The `Serializer`: one function per module walks its fields to write them into a growing buffer or read them back, fixed sizes and little-endian whatever the platform, map layers run-length encoded, sections, every value read checked (see *Saves*) |
-| `save`       | Saving and loading a game (`game_save()`, `game_load()`): a header, a section per module, a hash; a game loaded plays on exactly as it would have (docs/SAVE.md) |
+| `save`       | Saving and loading a game (`game_save()`, `game_load()`): a header, a section per module, a hash; a game loaded plays on exactly as it would have (docs/SAVE.md); what a save tells of itself from its first bytes (`save_read_info()`), the checks before loading (`save_check()`) |
+| `save_files` | The names of the save files (numbered player's saves, the quick save, the autosave and the one before it), and the number of the next save |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `sun`        | Where the sun stands: elevation, azimuth and direction (map axes, metres) from the day, the hour and the latitude; its declination gives the clock's day lengths at the default latitude; its rays (`sun_lit()`): how much direct sun reaches a point of the volume, through rock, walls, doors, floors and roofs (nothing) and foliage (its share by the length crossed) (see `docs/SHADOWS.md`) |
 | `sky`        | The light of the sky: how much of the sky a surface sees (`sky_open()`, 16 rays over the dome through blocks, floors and foliage), and a field of it per column for the screen, worked out again where the map changed (see *Light and shade*) |
@@ -136,9 +137,11 @@ simulation:
 | `resources_list` | Top left: the stock by item category (`Game.stock`), groups folded with a click, tooltips with where the items lie and the days of food |
 | `colonist_bar` | Top center: portrait, name and current action per colonist; click selects, double click centers the view |
 | `view_controls` | Bottom right: temperature overlay, speeds, level slider (date and weather beside it) |
-| `title_screen` | The title screen at launch (unless the command line asks for a game, `cli_starts_game()`) and after leaving a game: a world of its own drifting behind a veil, the name in large letters, New game / Settings / Quit; the New game window (`core/new_game.h`: three columns of sliders, the seed typed, Start), then a frame telling the world is being made before `app.c` makes it |
-| `game_menu`    | Game menu (Menu button or Escape): resume, controls, settings, main menu (asks first, then back to the title screen), quit; pauses the game |
+| `title_screen` | The title screen at launch (unless the command line asks for a game, `cli_starts_game()`) and after leaving a game: a world of its own drifting behind a veil, the name in large letters, New game / Load game / Settings / Quit; the New game window (`core/new_game.h`: three columns of sliders, the seed typed, Start), then a frame telling the world is being made before `app.c` makes it |
+| `game_menu`    | Game menu (Menu button or Escape): resume, save, load, controls, settings, main menu (asks first, then back to the title screen), quit; pauses the game |
 | `settings_window` | Settings (from the game menu): interface size, colors, language, applied at once and saved |
+| `saves` | Save files (docs/SAVE.md §4): the `saves` folder in the user's data folder, games written to a temporary file then renamed, listed with what each tells of itself (`save_read_info()`), deleted, read for `app.c` to load at the start of a frame; quick save (F8, F9) and the autosave at each new day, the previous one kept; messages to the player |
+| `saves_window` | The saves window (from the game menu or the title screen): a new save or one overwritten, or a save loaded or deleted; questions before overwriting, deleting and loading in a game |
 | `inspector`    | Bottom left: summary box of the selection, tabs opening a panel above it, action buttons beside it; dispatches to the panels below (colonists: `hud`) |
 | `stockpile_panel` | Stockpile zone in the inspector: size and priority; Storage tab (radius slider, condition sliders, filters); build another, delete |
 | `gather_zone_panel` | Gathering zone in the inspector: size and priority; Resources tab (foldable groups and their resources: tri-state check boxes, how many are available, the full harvest icon, column titles; a goal made of a mode dropdown, target and unit, then what lies in the colony; an apply to all button on a group; warnings); build another, delete |
@@ -346,7 +349,16 @@ the screen shows (the last blows, the chat counts) and the clock's speed (a
 game loaded is paused). `tests/test_save.c` plays games N ticks, saves, plays
 M more, loads and plays the same M: both saves must be the same bytes; it
 also guards the size of every struct saved, so that a field added to one
-fails until it is serialized and `SAVE_VERSION` raised.
+fails until it is serialized and `SAVE_VERSION` raised. Right after the
+header, a small INFO section (the tick, the settlers alive, the seed, the
+map's size, the colony lost) lets the frontend list saves from their first
+bytes (`save_read_info()`). The frontend (`game/saves.h`) loads at the start
+of a frame, never while windows are drawn: it checks the whole file first
+(`save_check()`: magic, version, hash) so that a refused save leaves the
+game in play; the game is then shut down and `game_load()` reads into
+`App.game` in place (the game holds pointers into itself: it is never copied).
+What the renderer worked out from the world (shadows, sky, fires) is
+forgotten at every change of game (`render_forget_world()`).
 
 **Relief** (`core/worldgen.h`): the elevation noise decides each column's
 ground level. The plains lie on `Map.surface_level` (`underground_levels`,

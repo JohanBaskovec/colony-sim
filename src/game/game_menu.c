@@ -1,11 +1,14 @@
 #include "game/game_menu.h"
 
 #include "core/i18n.h"
+#include "game/saves_window.h"
 #include "game/ui_layout.h"
 
 typedef enum MenuChoice {
     MENU_NONE,
     MENU_RESUME,
+    MENU_SAVE,
+    MENU_LOAD,
     MENU_CONTROLS,
     MENU_SETTINGS,
     MENU_MAIN_MENU, /* Asks first (App.leave_confirm). */
@@ -36,6 +39,12 @@ static void menu_rows(UiLayout *layout, void *userdata)
     if (ui_layout_wide_button(layout, tr("game_menu.resume"))) {
         rows->picked = MENU_RESUME;
     }
+    if (ui_layout_wide_button(layout, tr("game_menu.save"))) {
+        rows->picked = MENU_SAVE;
+    }
+    if (ui_layout_wide_button(layout, tr("game_menu.load"))) {
+        rows->picked = MENU_LOAD;
+    }
     if (ui_layout_wide_button(layout, tr("help.title"))) {
         rows->picked = MENU_CONTROLS;
     }
@@ -61,6 +70,11 @@ void game_menu_draw(App *app)
                      &rows, &open);
     switch (rows.picked) {
     case MENU_RESUME: open = false; break;
+    case MENU_SAVE:
+    case MENU_LOAD:
+        open = false; /* Back to the menu when the saves window closes. */
+        saves_window_open(app, rows.picked == MENU_LOAD);
+        break;
     case MENU_CONTROLS:
         open = false;
         app->show_help = true;
