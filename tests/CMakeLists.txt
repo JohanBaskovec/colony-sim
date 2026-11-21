@@ -62,6 +62,7 @@ set(COLONY_UNIT_TESTS
     test_shadow
     test_sky
     test_reservation
+    test_river
     test_rng
     test_soil
     test_stockpile

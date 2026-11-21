@@ -2,6 +2,7 @@
 
 #include "core/colonist.h"
 #include "core/map.h"
+#include "core/river.h"
 #include "core/scenario.h"
 
 #include <errno.h>
@@ -20,15 +21,15 @@ void cli_default_options(CliOptions *options)
 bool cli_starts_game(const CliOptions *options)
 {
     return options->has_seed || options->map_size > 0 || options->colonist_count > 0 ||
-           options->has_wildlife || options->scenario != SCENARIO_NONE || options->debug != 0 ||
-           options->bench_render_frames > 0;
+           options->has_wildlife || options->river > 0 || options->scenario != SCENARIO_NONE ||
+           options->debug != 0 || options->bench_render_frames > 0;
 }
 
 const char *cli_usage(void)
 {
     return "Usage: colony_sim [options]\n"
-           "  Without a game option (seed, size, colonists, animals, scenario, debug,\n"
-           "  bench-render), the title screen opens; with one, the game starts at once.\n"
+           "  Without a game option (seed, size, colonists, animals, river, scenario,\n"
+           "  debug, bench-render), the title screen opens; with one, the game starts at once.\n"
            "  --lang <code>   Interface language (e.g. en, fr). Default: the saved setting,\n"
            "                  else the system locale.\n"
            "  --seed <n>      World seed (unsigned integer). Default: random.\n"
@@ -38,30 +39,46 @@ const char *cli_usage(void)
                              "  --animals <n>   Wild animals, in percent of the usual number "
                              "(0-400, 0: none).\n"
                              "                  Default: 100.\n"
-                             "  --scenario <n>  Test situation set up at the start, as in "
-                             "bench_simulation:\n"
-                             "                  0 none, 1 gathering, 2 unreachable jobs, 3 "
-                             "construction, 4 feuds, 5 cooking.\n"
-                             "  --debug <list>  Cheats on from the start, separated by commas: "
-                             "instant_build,\n"
-                             "                  free_crafts, no_tools, instant_deconstruct, "
-                             "learn_all,\n"
-                             "                  instant_fell_and_mine, vision (overlay of what "
-                             "a settler sees),\n"
-                             "                  see_everything (no fog of war), character_editor "
-                             "(- and + "
-                             "buttons),\n"
-                             "                  god_mode (the six first cheats of the menu and the "
-                             "editor), or all.\n"
-                             "  --ui-scale <n>  Interface scale in percent (75-200). Default: "
-                             "the saved setting, else 100.\n"
-                             "  --no-vsync      Draw frames as fast as possible.\n"
-                             "  --bench-render <n>  Render benchmark: draws n frames from each of "
-                             "a few fixed\n"
-                             "                  views (simulation paused, no vsync), prints the "
-                             "frame times\n"
-                             "                  and quits. Use with a fixed --seed.\n"
-                             "  --help          Show this message.\n";
+                             "  --river <n>     A river across the map, its channel n tiles wide "
+                             "(0-" STRINGIFY(
+                                 RIVER_MAX_WIDTH) ", 0: none).\n"
+                                                  "                  Default: 0.\n"
+                                                  "  --scenario <n>  Test situation set up at the "
+                                                  "start, as in "
+                                                  "bench_simulation:\n"
+                                                  "                  0 none, 1 gathering, 2 "
+                                                  "unreachable jobs, 3 "
+                                                  "construction, 4 feuds, 5 cooking.\n"
+                                                  "  --debug <list>  Cheats on from the start, "
+                                                  "separated by commas: "
+                                                  "instant_build,\n"
+                                                  "                  free_crafts, no_tools, "
+                                                  "instant_deconstruct, "
+                                                  "learn_all,\n"
+                                                  "                  instant_fell_and_mine, vision "
+                                                  "(overlay of what "
+                                                  "a settler sees),\n"
+                                                  "                  see_everything (no fog of "
+                                                  "war), character_editor "
+                                                  "(- and + "
+                                                  "buttons),\n"
+                                                  "                  god_mode (the six first "
+                                                  "cheats of the menu and the "
+                                                  "editor), or all.\n"
+                                                  "  --ui-scale <n>  Interface scale in percent "
+                                                  "(75-200). Default: "
+                                                  "the saved setting, else 100.\n"
+                                                  "  --no-vsync      Draw frames as fast as "
+                                                  "possible.\n"
+                                                  "  --bench-render <n>  Render benchmark: draws n "
+                                                  "frames from each of "
+                                                  "a few fixed\n"
+                                                  "                  views (simulation paused, no "
+                                                  "vsync), prints the "
+                                                  "frame times\n"
+                                                  "                  and quits. Use with a fixed "
+                                                  "--seed.\n"
+                                                  "  --help          Show this message.\n";
 }
 
 /* Names of the CLI_DEBUG_* bits, in bit order. */
@@ -214,6 +231,14 @@ bool cli_parse(CliOptions *options, int argc, char **argv, char *error, size_t e
             }
             options->has_wildlife = true;
             options->wildlife = (int)percent;
+        } else if ((match = match_option("--river", argc, argv, &i, &value)) != 0) {
+            uint64_t width = 0;
+            if (match < 0 || !parse_u64(value, &width) || width > RIVER_MAX_WIDTH) {
+                snprintf(error, error_size, "--river expects an integer between 0 and %d",
+                         RIVER_MAX_WIDTH);
+                return false;
+            }
+            options->river = (int)width;
         } else if ((match = match_option("--scenario", argc, argv, &i, &value)) != 0) {
             uint64_t scenario = 0;
             if (match < 0 || !parse_u64(value, &scenario) || scenario >= SCENARIO_COUNT) {

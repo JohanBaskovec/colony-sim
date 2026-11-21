@@ -27,6 +27,7 @@ void worldgen_default_params(WorldGenParams *params)
     params->flat = false;
     params->tree_density = 0.5f;
     params->feature_scale = 48.0f;
+    river_default_params(&params->river);
 }
 
 /* Derives independent 32-bit noise seeds from the 64-bit world seed. */
@@ -805,6 +806,34 @@ static int ground_height(const WorldGenParams *params, float step, float elevati
     return height;
 }
 
+/* The river at a column `distance` tiles from the middle of its course: its
+ * channel (deep in the middle when wide, shallows on its sides, no deeper
+ * than a lake already there), banks of sand along it, and the walls of its
+ * valley rising a level every RIVER_VALLEY_TILES tiles from the banks (the
+ * hills cut down to them; what lies lower stays). */
+static void lay_river(const RiverParams *river, float distance, int surface_level, Terrain *surface,
+                      Lake *lake, int *height)
+{
+    float half = (float)river->width * 0.5f;
+    if (distance < half) {
+        Lake channel = distance < half - 1.5f ? LAKE_DEEP : LAKE_SHALLOWS;
+        *lake = channel > *lake ? channel : *lake;
+        *surface = TERRAIN_SILT;
+        *height = surface_level + (*lake == LAKE_DEEP ? -2 : -1);
+        return;
+    }
+    if (*lake != LAKE_NONE) {
+        return;
+    }
+    int wall = surface_level + (int)((distance - half) / (float)RIVER_VALLEY_TILES);
+    *height = *height > wall ? wall : *height;
+    if (distance < half + 1.0f && *height == surface_level) {
+        *surface = TERRAIN_SAND;
+    } else if (*height <= surface_level && *surface == TERRAIN_ROUGH_STONE) {
+        *surface = TERRAIN_GRAVEL; /* No outcrop left standing in the valley's floor. */
+    }
+}
+
 /* The water of a lake over its bed at `index`, at rest: every lake's surface
  * WORLDGEN_LAKE_MM over the floor of its shallows, so deep water fills the
  * level of its bed and that much of the level above (docs/WATER.md W1). A
@@ -1110,6 +1139,18 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
         }
     }
     const float step = level_step(params, top_elevation);
+    /* The river: how far each column lies from the middle of its course. */
+    RiverParams river;
+    river_resolve(&params->river, params->seed, &river);
+    float *river_distance = NULL;
+    if (!params->flat && river.width > 0) {
+        river_distance = malloc(columns * sizeof(*river_distance));
+        if (river_distance == NULL ||
+            !river_distances(&river, params->seed, params->width, params->height, river_distance)) {
+            free(river_distance);
+            river_distance = NULL;
+        }
+    }
     int highest = 0;
     for (int y = 0; y < params->height; y++) {
         for (int x = 0; x < params->width; x++) {
@@ -1124,6 +1165,9 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
             int height =
                 clampi(surface_level + ground_height(params, step, elevation, surface, lake), 0,
                        MAP_MAX_LEVELS - 1);
+            if (river_distance != NULL) {
+                lay_river(&river, river_distance[column], surface_level, &surface, &lake, &height);
+            }
             heights[column] = (uint8_t)height;
             surfaces[column] = (uint8_t)surface;
             lakes[column] = (uint8_t)lake;
@@ -1131,6 +1175,7 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
             highest = height > highest ? height : highest;
         }
     }
+    free(river_distance);
     water_distances(lakes, params->width, params->height, shores);
     /* Open levels over the highest ground: room for the tallest trees, and
      * for roofs everywhere. A world with relief has WORLDGEN_LEVELS_ABOVE levels

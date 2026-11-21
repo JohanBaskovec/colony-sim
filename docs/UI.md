@@ -375,7 +375,8 @@ its note as a tooltip:
 |---|---|---|
 | Seed (typed: a number or any word; empty: random) and Random | Relief (0 %: a plain without hills nor rock; 50 %: the usual land; 100 %: rugged) | Trees (percent) |
 | Width, height (64 to 256 tiles) | Water (how much of the land lies under it; 0 %: no lakes) | Settlers (1 to 64) |
-| Landscape scale (the size of lakes, woods, hills) | Depth (levels under the plains) | Wild animals (0 to 400 % of the usual number) |
+| Landscape scale (the size of lakes, woods, hills) | River (0: none, 3 a stream, up to 12 tiles wide; 6 by default) | Wild animals (0 to 400 % of the usual number) |
+| | Depth (levels under the plains) | |
 | | *Advanced options* (folded): hills from, hill height, bare rock from | |
 
 Lakes lie in hollows whatever the relief: no relief and no water gives

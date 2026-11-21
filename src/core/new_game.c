@@ -18,6 +18,9 @@ static const NewGameOptionDef OPTION_DEFS[NEW_GAME_OPTION_COUNT] = {
                          NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 0, 100, 1},
     [NEW_GAME_WATER] = {"water", N_("new_game.water"), N_("new_game.water.note"),
                         NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 0, 100, 5},
+    [NEW_GAME_RIVER] = {"river", N_("new_game.river"), N_("new_game.river.note"),
+                        NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_TILES, 0, RIVER_MAX_WIDTH,
+                        RIVER_STREAM_WIDTH, false, N_("new_game.river.none")},
     [NEW_GAME_UNDERGROUND] = {"underground", N_("new_game.underground"),
                               N_("new_game.underground.note"), NEW_GAME_SECTION_RELIEF,
                               NEW_GAME_UNIT_LEVELS, 2, WORLDGEN_MAX_UNDERGROUND, 1},
@@ -56,6 +59,7 @@ void new_game_default_params(NewGameParams *params)
 {
     game_default_params(params);
     params->wildlife = GAME_WILDLIFE_DENSITY;
+    params->world.river.width = NEW_GAME_RIVER_USUAL;
 }
 
 /* An elevation (0 .. 1) in percent, and back. */
@@ -131,6 +135,7 @@ int new_game_option_value(const NewGameParams *params, NewGameOption option)
     case NEW_GAME_WATER:
         return (int)lroundf(world->water_level * 100.0f * 100.0f /
                             (float)NEW_GAME_WATER_MAX_ELEVATION);
+    case NEW_GAME_RIVER: return world->river.width;
     case NEW_GAME_HILLS: return percent_of(world->hill_level);
     case NEW_GAME_HILL_HEIGHT: return world->hill_height;
     case NEW_GAME_ROCK: return percent_of(world->mountain_level);
@@ -168,6 +173,7 @@ void new_game_option_set(NewGameParams *params, NewGameOption option, int value)
             world->mountain_level = world->hill_level; /* The rock moves up with them. */
         }
         break;
+    case NEW_GAME_RIVER: world->river.width = value; break;
     case NEW_GAME_HILL_HEIGHT: world->hill_height = value; break;
     case NEW_GAME_ROCK:
         world->mountain_level = share_of(value);
@@ -187,6 +193,7 @@ bool new_game_option_applies(const NewGameParams *params, NewGameOption option)
 {
     switch (option) {
     case NEW_GAME_RELIEF:
+    case NEW_GAME_RIVER:
     case NEW_GAME_HILLS:
     case NEW_GAME_ROCK:
     case NEW_GAME_UNDERGROUND: return !params->world.flat;

@@ -446,6 +446,10 @@ static bool title_button(App *app, SDL_FRect rect, const char *label)
 static void option_text(char *out, size_t size, NewGameOption option, int value)
 {
     const NewGameOptionDef *def = new_game_option_def(option);
+    if (value == 0 && def->zero_key != NULL) {
+        SDL_strlcpy(out, tr(def->zero_key), size);
+        return;
+    }
     char number[32], shown[48];
     tr_integer(number, sizeof(number), value);
     if (def->unit == NEW_GAME_UNIT_PERCENT) {

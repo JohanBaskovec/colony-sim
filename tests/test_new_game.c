@@ -157,9 +157,10 @@ static size_t count_sand(const Map *map)
     return sand;
 }
 
-/* Without relief nor water, the ground is all flat on the plains' level, all
- * dry, without beaches (sandy ground stays where it is dry) nor rock
- * outcrops; with water, the lakes lie in hollows and the rest stays flat. */
+/* Without relief, water nor river, the ground is all flat on the plains'
+ * level, all dry, without beaches (sandy ground stays where it is dry) nor
+ * rock outcrops; with water, the lakes lie in hollows and the rest stays
+ * flat. */
 static void test_a_world_without_relief_is_flat(void)
 {
     NewGameParams params;
@@ -169,6 +170,7 @@ static void test_a_world_without_relief_is_flat(void)
     new_game_option_set(&params, NEW_GAME_HEIGHT, 64);
     new_game_option_set(&params, NEW_GAME_RELIEF, 0);
     new_game_option_set(&params, NEW_GAME_WATER, 0);
+    new_game_option_set(&params, NEW_GAME_RIVER, 0);
     Map map;
     REQUIRE(worldgen_generate(&map, &params.world));
     CHECK_EQ_INT(map.top_ground_level, map.surface_level);
@@ -206,6 +208,44 @@ static void test_a_world_without_relief_is_flat(void)
     }
     CHECK_EQ_UINT(above, 0);
     CHECK(hollows > 0);
+    map_free(&map);
+}
+
+/* The river: a game as played has one, set in tiles across on steps of a
+ * stream's width, 0 for none (its label says so); on a plain without water
+ * it lies in its hollow and the rest stays flat. */
+static void test_the_river_option(void)
+{
+    NewGameParams params;
+    new_game_default_params(&params);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_RIVER), NEW_GAME_RIVER_USUAL);
+    new_game_option_set(&params, NEW_GAME_RIVER, 7);
+    CHECK_EQ_INT(params.world.river.width, 6);
+    new_game_option_set(&params, NEW_GAME_RIVER, 100);
+    CHECK_EQ_INT(params.world.river.width, RIVER_MAX_WIDTH);
+    new_game_option_set(&params, NEW_GAME_RIVER, 0);
+    CHECK_EQ_INT(params.world.river.width, 0);
+    CHECK(new_game_option_def(NEW_GAME_RIVER)->zero_key != NULL);
+    CHECK(new_game_option_applies(&params, NEW_GAME_RIVER));
+
+    params.world.seed = 4;
+    new_game_option_set(&params, NEW_GAME_WIDTH, 64);
+    new_game_option_set(&params, NEW_GAME_HEIGHT, 64);
+    new_game_option_set(&params, NEW_GAME_RELIEF, 0);
+    new_game_option_set(&params, NEW_GAME_WATER, 0);
+    new_game_option_set(&params, NEW_GAME_RIVER, 6);
+    Map map;
+    REQUIRE(worldgen_generate(&map, &params.world));
+    size_t above = 0, hollows = 0;
+    for (int y = 0; y < map.height; y++) {
+        for (int x = 0; x < map.width; x++) {
+            int z = map_ground_level(&map, x, y);
+            above += z > map.surface_level;
+            hollows += z < map.surface_level;
+        }
+    }
+    CHECK_EQ_UINT(above, 0);
+    CHECK(hollows > 64 * 4); /* Across the map, about six tiles wide. */
     map_free(&map);
 }
 
@@ -269,6 +309,7 @@ int main(void)
     RUN_TEST(test_usual_relief_and_water);
     RUN_TEST(test_relief_sets_the_advanced_options);
     RUN_TEST(test_a_world_without_relief_is_flat);
+    RUN_TEST(test_the_river_option);
     RUN_TEST(test_seed_from_text);
     RUN_TEST(test_extreme_worlds_generate);
     return test_summary();

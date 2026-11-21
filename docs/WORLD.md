@@ -177,7 +177,7 @@ Before the world (any time, each useful on its own):
   the rain parameters of the weather instead of constants; New game
   options (later the cell's values).
 - **G0c, the river as parameters** (W3c): edge in, edge out, where along
-  them, discharge.
+  them (done with W3c-1: `RiverParams`), discharge.
 - **G0d, a coast**: the sea along chosen edges of the map (W3b's edges with
   a fixed level), salt water.
 

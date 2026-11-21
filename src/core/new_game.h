@@ -13,7 +13,8 @@
  * begin. Rock never begins below the hills (setting one moves the other
  * along if needed): the hills would sink into the ground otherwise. Water is
  * how much of the land lies under it (0 %: no lakes); lakes always lie in
- * hollows, so a world without relief nor water is all flat.
+ * hollows, so a world without relief nor water is all flat. The river is the
+ * width of its channel (0: none), its course from the seed (core/river.h).
  */
 #ifndef COLONY_CORE_NEW_GAME_H
 #define COLONY_CORE_NEW_GAME_H
@@ -30,6 +31,7 @@ typedef enum NewGameOption {
     NEW_GAME_FEATURE_SCALE,
     NEW_GAME_RELIEF,
     NEW_GAME_WATER,
+    NEW_GAME_RIVER,
     NEW_GAME_UNDERGROUND,
     NEW_GAME_HILLS, /* Advanced, as the next two. */
     NEW_GAME_HILL_HEIGHT,
@@ -62,8 +64,9 @@ typedef struct NewGameOptionDef {
     const char *note_key; /* Translation key of what it does. */
     NewGameSection section;
     NewGameUnit unit;
-    int min, max, step; /* The default is on a step from `min`. */
-    bool advanced;      /* Shown only with the advanced options. */
+    int min, max, step;   /* The default is on a step from `min`. */
+    bool advanced;        /* Shown only with the advanced options. */
+    const char *zero_key; /* Translation key of the whole label at 0 (NULL: as any value). */
 } NewGameOptionDef;
 
 /* The relief of worldgen_default_params(), and how much of the land lies
@@ -75,7 +78,11 @@ const NewGameOptionDef *new_game_option_def(NewGameOption option);
 /* Translation key of a section's heading. */
 const char *new_game_section_key(NewGameSection section);
 
-/* The params of a game as played: game_default_params() with wild animals. */
+/* The river of a game as played, tiles across. */
+#define NEW_GAME_RIVER_USUAL 6
+
+/* The params of a game as played: game_default_params() with wild animals
+ * and a river. */
 void new_game_default_params(NewGameParams *params);
 
 /* The value of an option, in its unit. */

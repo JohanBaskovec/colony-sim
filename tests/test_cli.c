@@ -75,6 +75,22 @@ static void test_wildlife_option(void)
     CHECK(!cli_parse(&options, ARGC(text), text, error, sizeof(error)));
 }
 
+static void test_river_option(void)
+{
+    CliOptions options;
+    char error[128];
+    char *none[] = {"colony_sim"};
+    CHECK(cli_parse(&options, ARGC(none), none, error, sizeof(error)));
+    CHECK_EQ_INT(options.river, 0);
+    char *argv[] = {"colony_sim", "--river", "6"};
+    CHECK(cli_parse(&options, ARGC(argv), argv, error, sizeof(error)));
+    CHECK_EQ_INT(options.river, 6);
+    CHECK(cli_starts_game(&options));
+    char *wide[] = {"colony_sim", "--river=13"};
+    CHECK(!cli_parse(&options, ARGC(wide), wide, error, sizeof(error)));
+    CHECK(strstr(error, "--river") != NULL);
+}
+
 static void test_all_options_both_syntaxes(void)
 {
     char *argv[] = {"colony_sim", "--lang", "fr", "--seed=18446744073709551615", "--size", "256"};
@@ -223,6 +239,7 @@ int main(void)
     RUN_TEST(test_test_options);
     RUN_TEST(test_ui_scale);
     RUN_TEST(test_wildlife_option);
+    RUN_TEST(test_river_option);
     RUN_TEST(test_starts_game);
     return test_summary();
 }

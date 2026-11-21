@@ -59,6 +59,7 @@ add_library(colony_core STATIC
     tile_light.c
     tree.c
     reservation.c
+    river.c
     rng.c
     stockpile.c
     tool.c

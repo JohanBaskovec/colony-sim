@@ -382,6 +382,24 @@ to it. Lakes from the elevation noise stay as they are today. The river is
 an option of the New game menu ("River": none, stream, river, for a
 channel 3, 6 or 12 tiles wide) *(tuning)*.
 
+*As built (W3c-1, the bed):* `core/river.h` gives the course: the edge it
+comes in by and the one it leaves by (the opposite one two times in three,
+else a neighbouring one), where along them (within their middle 60 %), all
+from the seed until the world map sets them (`RiverParams`, docs/WORLD.md
+G0c); a cubic curve square to both edges, swung aside by a noise (at most
+14 % of the map's smaller side, a swing every 70 tiles or so, none at its
+ends), kept inside the map. World generation lays it from each column's
+distance to the middle of the course: within half its width, the channel at
+the lakes' level (deep water two levels down more than 1.5 tiles inside its
+edge, shallows one level down: a stream of 3 tiles is all shallows), filled
+at rest; a tile of sand along its banks; the walls of its valley rising a
+level every `RIVER_VALLEY_TILES` (3) tiles from the banks, cut through the
+hills (outcrops on the valley's floor become gravel). The New game window's
+*River* is the channel's width (0 none, 3 to 12, 6 by default; `--river` on
+the command line, none by default, so that tests and benchmarks are
+unchanged). The flat world of the tests has none. At rest, the river is a
+long lake cut by the edges at both ends: it does not flow yet (W3c-2).
+
 The level upstream follows the river's discharge, which comes from the
 weather over its catchment, outside the map:
 
@@ -836,8 +854,18 @@ Each step is tested, measured against the baseline (`bench_simulation`,
      evening out, the weather shared, a save made while water flows out
      playing on alike.
    - **W3c, the river** laid by world generation (a New game option) with
-     its discharge and its floods. Tests: the river's steady flow, a flood
-     spilling over the banks.
+     its discharge and its floods, in three steps:
+     - **W3c-1, the bed (done)**: the course as parameters (`core/river.h`),
+       the channel, banks and valley, the New game option. Tests: the edges
+       from the seed, the course joining its edges, the channel at the
+       lakes' level, the valley's floor, the river lying at rest in a game.
+     - **W3c-2, the current**: the level held higher beyond the upstream
+       end, the downstream end an outlet, and blocks that fall asleep when
+       nothing changes any more in them, not only when nothing flows (a
+       steady river would keep its blocks awake for ever). Tests: the
+       river's steady flow, its cost.
+     - **W3c-3, the discharge over time**: the seasons, the rain of the last
+       days, floods spilling over the banks.
 5. **W4, water in the ground.** §5: the pore water of every block, the
    new layers (sand, gravel, clay), the water table laid by world
    generation, drainage and Darcy flow, seepage, the root zone draining into

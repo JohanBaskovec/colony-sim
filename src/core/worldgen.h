@@ -2,8 +2,10 @@
  * Procedural map generation. Fully deterministic: the same parameters always
  * produce the same map (see map_hash()). The relief decides the map's depth:
  * plains on Map.surface_level, with `underground_levels` below; lakes and
- * rivers in hollows (shallows one level down, deep water two, filled with
+ * a river in hollows (shallows one level down, deep water two, filled with
  * water at rest over a bed of silt; beaches of sand on the plains around);
+ * the river runs in a valley whose walls rise a level every
+ * RIVER_VALLEY_TILES tiles from its banks, cut through the hills;
  * hills rising level by level with natural slopes, rock outcrops one level
  * higher behind cliffs. The inside of the ground is earth near the surface
  * and rock deeper down (rock all the way under stony ground). Open levels
@@ -27,6 +29,7 @@
 #define COLONY_CORE_WORLDGEN_H
 
 #include "core/map.h"
+#include "core/river.h"
 #include "core/tile_light.h"
 
 #include <stdbool.h>
@@ -69,6 +72,10 @@ typedef struct WorldGenParams {
     bool flat;
     float tree_density;  /* 0 (no trees) .. 1 (dense forests). */
     float feature_scale; /* Typical size of terrain features, in tiles. */
+    /* A river across the map (none by default; not in a flat world): its
+     * channel at the lakes' level, deep in its middle when wide, banks of
+     * sand, in a valley cut through the hills (core/river.h). */
+    RiverParams river;
 } WorldGenParams;
 
 void worldgen_default_params(WorldGenParams *params);

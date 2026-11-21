@@ -8,6 +8,8 @@
 
 #include "test_framework.h"
 
+#include <stdlib.h>
+
 static WorldGenParams params_for_seed(uint64_t seed)
 {
     WorldGenParams params;
@@ -295,6 +297,67 @@ static void test_lakes_at_rest(void)
 
 /* Slopes lead up onto soft hills and out of the shallows; rock outcrops and
  * deep water stand behind cliffs. */
+/* A river crosses the map in its channel, at the lakes' level and at rest,
+ * deep in its middle when wide, in a valley whose floor stays on the plains;
+ * the flat world of the tests has none. */
+static void test_a_river_crosses_the_map(void)
+{
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        params.river.width = seed % 2 == 0 ? RIVER_MAX_WIDTH : 6;
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        RiverParams course;
+        river_resolve(&params.river, seed, &course);
+        size_t columns = (size_t)map.width * (size_t)map.height;
+        float *distance = malloc(columns * sizeof(*distance));
+        REQUIRE(distance != NULL);
+        REQUIRE(river_distances(&course, seed, map.width, map.height, distance));
+        const int surface = map.surface_level;
+        const long level = (long)(surface - 1) * WATER_CELL_FULL + WORLDGEN_LAKE_MM;
+        float half = (float)course.width * 0.5f;
+        size_t channel = 0, deep = 0, wrong = 0, valley_high = 0;
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                float d = distance[(size_t)y * (size_t)map.width + (size_t)x];
+                int ground = map_ground_level(&map, x, y);
+                size_t floor = map_index(&map, x, y, ground);
+                if (d < half) {
+                    channel++;
+                    deep += ground == surface - 2;
+                    int top = ground;
+                    while (top + 1 < map.depth && map_water(&map, x, y, top + 1) > 0) {
+                        top++;
+                    }
+                    long surface_mm = (long)top * WATER_CELL_FULL + map_water(&map, x, y, top);
+                    wrong += map.terrain[floor] != TERRAIN_SILT || ground >= surface ||
+                             surface_mm != level;
+                } else if (d < half + (float)RIVER_VALLEY_TILES) {
+                    valley_high += ground > surface; /* The valley's floor. */
+                }
+            }
+        }
+        CHECK(channel > (size_t)(course.width * map.width) / 3);
+        CHECK_EQ_UINT(wrong, 0);
+        CHECK_EQ_UINT(valley_high, 0);
+        if (course.width == RIVER_MAX_WIDTH) {
+            CHECK(deep > channel / 2);
+        }
+        free(distance);
+        map_free(&map);
+    }
+    /* None in a flat world. */
+    WorldGenParams flat = params_for_seed(3);
+    flat.flat = true;
+    Map without, with;
+    REQUIRE(worldgen_generate(&without, &flat));
+    flat.river.width = 6;
+    REQUIRE(worldgen_generate(&with, &flat));
+    CHECK_EQ_UINT(map_hash(&with), map_hash(&without));
+    map_free(&without);
+    map_free(&with);
+}
+
 static void test_slopes(void)
 {
     static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
@@ -671,6 +734,7 @@ int main(void)
     RUN_TEST(test_relief);
     RUN_TEST(test_hill_height);
     RUN_TEST(test_lakes_at_rest);
+    RUN_TEST(test_a_river_crosses_the_map);
     RUN_TEST(test_slopes);
     RUN_TEST(test_flat);
     RUN_TEST(test_trees);

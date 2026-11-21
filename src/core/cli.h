@@ -45,6 +45,7 @@ typedef struct CliOptions {
      * (0: none), when `has_wildlife`. */
     bool has_wildlife;
     int wildlife;
+    int river;      /* Tiles across the river's channel (--river), 0: none. */
     int scenario;   /* A Scenario (core/scenario.h), SCENARIO_NONE by default. */
     unsigned debug; /* CLI_DEBUG_* bits. */
     bool no_vsync;  /* Frames as fast as possible (frame time measurements). */
@@ -64,7 +65,7 @@ bool cli_parse(CliOptions *options, int argc, char **argv, char *error, size_t e
 
 /*
  * Whether the game starts at once, without the title screen: an option about
- * the game itself was given (seed, size, settlers, animals, scenario, cheats,
+ * the game itself was given (seed, size, settlers, animals, river, scenario, cheats,
  * render benchmark). The interface options (language, scale, vsync) leave the
  * title screen.
  */

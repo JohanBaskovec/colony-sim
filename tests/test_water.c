@@ -602,6 +602,28 @@ static void test_water_flows_in_a_game(void)
     game_shutdown(&game);
 }
 
+/* A river as world generation lays it lies at rest, cut by the map's edges
+ * at both ends: nothing flows, nothing crosses. */
+static void test_a_river_lies_at_rest(void)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 11;
+    params.world.width = 96;
+    params.world.height = 96;
+    params.world.river.width = RIVER_MAX_WIDTH;
+    params.colonist_count = 0;
+    Game game;
+    REQUIRE(game_init(&game, &params));
+    for (int tick = 0; tick < 300; tick++) {
+        game.weather.type = WEATHER_CLEAR;
+        game_tick(&game);
+    }
+    CHECK_EQ_UINT(game.water.active_count, 0);
+    CHECK_EQ_INT(game.water.edge_in, 0);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_water_at_rest_stays_asleep);
@@ -622,5 +644,6 @@ int main(void)
     RUN_TEST(test_the_map_learns_where_open_water_spread);
     RUN_TEST(test_water_is_deterministic);
     RUN_TEST(test_water_flows_in_a_game);
+    RUN_TEST(test_a_river_lies_at_rest);
     return test_summary();
 }

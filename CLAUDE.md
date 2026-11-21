@@ -43,6 +43,7 @@ cmake --preset debug && cmake --build --preset debug && ctest --preset debug    
 ./build/debug/bin/colony_sim --seed 42 --colonists 8 --scenario 3 --debug instant_build,learn_all  # test setup
 ./build/debug/bin/colony_sim --seed 42 --debug see_everything                          # no fog of war (docs/VISION.md)
 ./build/debug/bin/colony_sim --seed 42 --debug see_everything --animals 300            # three times the wild animals (0: none; 256 at most live at once)
+./build/debug/bin/colony_sim --seed 7 --river 12 --debug see_everything                 # a river 12 tiles wide (0: none, the default on the command line; 6 in a New game)
 ./build/debug/bin/colony_sim --ui-scale 150         # larger interface (75 to 200 percent)
 ctest --preset debug -R i18n          # only one test (regex on the test name)
 ctest --preset headless -R test_game.test_plant_conditions  # one function of a split file (COLONY_SPLIT_TESTS)
