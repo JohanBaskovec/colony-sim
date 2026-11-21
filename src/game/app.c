@@ -182,6 +182,7 @@ typedef enum ClickTarget {
     CLICK_STOCKPILE,
     CLICK_GATHER_ZONE,
     CLICK_GRASS,
+    CLICK_TILE, /* The tile itself, after everything on it. */
     CLICK_TARGET_COUNT
 } ClickTarget;
 
@@ -220,6 +221,7 @@ bool app_thing_at(const App *app, TileThing thing, int x, int y, int z)
     case THING_ITEM_BOX:
         return app->selected_box_item_count > 0; /* (See prune_tile_selection().) */
     case THING_PLANT_BOX: return app->selected_plant_count > 0;
+    case THING_TILE: return true;
     case THING_COUNT: break;
     }
     return false;
@@ -235,8 +237,20 @@ static TileThing click_thing(ClickTarget target)
     case CLICK_ITEMS: return THING_ITEMS;
     case CLICK_PLANT:
     case CLICK_GRASS: return THING_PLANT;
+    case CLICK_TILE: return THING_TILE;
     default: return THING_COUNT;
     }
+}
+
+/* Whether the plant standing on this very tile is drawn with a sprite of its own, so that a click
+ * picks it by the sprite and not by the tile. */
+static bool plant_picked_by_sprite(const App *app, int x, int y, int z)
+{
+    const Map *map = game_view_map(&app->game);
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    return plant->type != PLANT_NONE && !plant_is_dormant(plant) &&
+           sprite_plant((PlantType)plant->type, plant_growth_stage(plant), plant_has_food(plant)) >=
+               0;
 }
 
 static bool click_target_at(const App *app, ClickTarget target, int x, int y, int z)
@@ -250,11 +264,14 @@ static bool click_target_at(const App *app, ClickTarget target, int x, int y, in
     case CLICK_ITEMS: return app_thing_at(app, click_thing(target), x, y, z);
     case CLICK_PLANT: {
         PlantType plant = app_plant_type_at(app, x, y, z);
-        return plant != PLANT_NONE && plant != PLANT_GRASS;
+        /* A plant with a sprite is picked by the sprite (click_plants()): by the tile only what
+         * has none (a grown tree's blocks) or is not drawn (dormant). */
+        return plant != PLANT_NONE && plant != PLANT_GRASS && !plant_picked_by_sprite(app, x, y, z);
     }
     case CLICK_STOCKPILE: return stockpile_at(&game->stockpiles, x, y, z) != STOCKPILE_NONE;
     case CLICK_GATHER_ZONE: return gather_zone_at(&game->gather_zones, x, y, z) != GATHER_ZONE_NONE;
     case CLICK_GRASS: return app_plant_type_at(app, x, y, z) == PLANT_GRASS;
+    case CLICK_TILE: return game_tile_explored(game, x, y, z);
     case CLICK_TARGET_COUNT: break;
     }
     return false;
@@ -277,6 +294,7 @@ static ClickTarget click_target_selected(const App *app, int x, int y, int z)
         case THING_ITEMS: return CLICK_ITEMS;
         case THING_PLANT:
             return app_plant_type_at(app, x, y, z) == PLANT_GRASS ? CLICK_GRASS : CLICK_PLANT;
+        case THING_TILE: return CLICK_TILE;
         case THING_ITEM: /* Not things of the tile's: see select_at_point(). */
         case THING_ITEM_BOX:
         case THING_PLANT_BOX:
@@ -1204,14 +1222,21 @@ static int click_picks(const App *app, int x, int y, ClickPick *out, int max)
     int count = 0;
     for (int z = shown; z >= seen; z--) {
         for (int target = 0; target < CLICK_TARGET_COUNT && count < max; target++) {
-            if (click_reaches((ClickTarget)target, z, shown, seen) &&
+            if (target != CLICK_TILE && click_reaches((ClickTarget)target, z, shown, seen) &&
                 click_target_at(app, (ClickTarget)target, x, y, z)) {
                 out[count++] = (ClickPick){(ClickTarget)target, z};
             }
         }
     }
+    /* The tile itself comes last: the ground seen there, not the open air over it. */
+    if (count < max && click_target_at(app, CLICK_TILE, x, y, seen)) {
+        out[count++] = (ClickPick){CLICK_TILE, seen};
+    }
     return count;
 }
+
+/* Plants a click may pick under the cursor at most (their sprites overlap). */
+#define CLICK_PLANTS_MAX 16
 
 /* Items a click may pick under the cursor at most. */
 #define CLICK_ITEMS_MAX 32
@@ -1264,6 +1289,11 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     int x = (int)floorf(world_x), y = (int)floorf(world_y);
     ItemPick items[CLICK_ITEMS_MAX];
     int item_count = click_items(app, world_x, world_y, x, y, items);
+    /* The plants whose sprite is under the cursor, whatever tile they stand on, after the items
+     * and before what is picked by the tile. */
+    TilePos plants[CLICK_PLANTS_MAX];
+    int plant_count = render_plants_at_point(app->sprites, &app->game, &app->camera, screen_x,
+                                             screen_y, plants, CLICK_PLANTS_MAX);
     ClickPick picks[CLICK_PICK_MAX];
     int pick_count = click_picks(app, x, y, picks, CLICK_PICK_MAX);
     /* Where the selection stands among them, the items first (-1: not here). */
@@ -1275,9 +1305,16 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             current = i;
         }
     }
+    for (int i = 0; i < plant_count && current < 0; i++) {
+        if (app->tile_selected && app->selected_thing == THING_PLANT &&
+            app->selected_tile_x == plants[i].x && app->selected_tile_y == plants[i].y &&
+            app->selected_tile_z == plants[i].z) {
+            current = item_count + i;
+        }
+    }
     for (int i = 0; i < pick_count && current < 0; i++) {
         if (click_target_selected(app, x, y, picks[i].z) == picks[i].target) {
-            current = item_count + i;
+            current = item_count + plant_count + i;
         }
     }
     /* A click on the selected animal goes on to what is under it. */
@@ -1303,15 +1340,20 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             app->selected_animal = animal;
             return;
         }
-        if (item_count + pick_count == 0) {
+        if (item_count + plant_count + pick_count == 0) {
             return;
         }
-        int next = (current + 1) % (item_count + pick_count);
+        int next = (current + 1) % (item_count + plant_count + pick_count);
         if (next < item_count) {
             select_item(app, items[next]);
             return;
         }
-        ClickPick pick = picks[next - item_count];
+        if (next < item_count + plant_count) {
+            TilePos foot = plants[next - item_count];
+            select_thing(app, THING_PLANT, foot.x, foot.y, foot.z);
+            return;
+        }
+        ClickPick pick = picks[next - item_count - plant_count];
         switch (pick.target) {
         case CLICK_STATION:
             select_station(app, workstation_at(&app->game.workstations, x, y, pick.z));
@@ -1321,7 +1363,8 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
         case CLICK_SITE:
         case CLICK_ITEMS:
         case CLICK_PLANT:
-        case CLICK_GRASS: select_thing(app, click_thing(pick.target), x, y, pick.z); break;
+        case CLICK_GRASS:
+        case CLICK_TILE: select_thing(app, click_thing(pick.target), x, y, pick.z); break;
         case CLICK_STOCKPILE:
             select_stockpile(app, stockpile_at(&app->game.stockpiles, x, y, pick.z));
             break;
@@ -2355,9 +2398,14 @@ static void render_frame(App *app)
             TilePos at = app->selected_plants[i];
             if (at.z == app->camera.level ||
                 map_view_level(game_view_map(&app->game), at.x, at.y, app->camera.level) == at.z) {
-                render_tile_selection(app->renderer, &app->camera, at.x, at.y);
+                render_plant_selection(app->renderer, app->sprites, &app->game, &app->camera, at.x,
+                                       at.y, at.z);
             }
         }
+    } else if (app->tile_selected && app->selected_thing == THING_PLANT) {
+        /* A ring around the plant, not a square around its tile. */
+        render_plant_selection(app->renderer, app->sprites, &app->game, &app->camera,
+                               app->selected_tile_x, app->selected_tile_y, app->selected_tile_z);
     } else if (app->tile_selected) {
         render_tile_selection(app->renderer, &app->camera, app->selected_tile_x,
                               app->selected_tile_y);

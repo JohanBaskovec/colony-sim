@@ -103,6 +103,7 @@ static ForbidTarget thing_forbid_target(TileThing thing)
     case THING_ITEM: /* (Items one by one: see thing_actions().) */
     case THING_ITEM_BOX:
     case THING_PLANT_BOX: /* (Plants together: see thing_actions().) */
+    case THING_TILE:
     case THING_COUNT: break;
     }
     return FORBID_TARGET_COUNT;
@@ -176,6 +177,13 @@ static void thing_title(const ThingRows *rows, char *out, size_t size)
     case THING_PLANT_BOX:
         SDL_strlcpy(out, tr(plant_def((PlantType)rows->app->selected_plant_type)->name_key), size);
         break;
+    case THING_TILE: {
+        char a[32], b[32];
+        tr_integer(a, sizeof(a), x);
+        tr_integer(b, sizeof(b), y);
+        TR_FORMAT(out, size, tr("hud.tile.position"), a, b);
+        break;
+    }
     case THING_COUNT: break;
     }
 }
@@ -532,7 +540,7 @@ static void thing_rows(UiLayout *layout, void *userdata)
     int x = rows->x, y = rows->y, z = rows->z;
     char text[TEXT_SIZE];
     if (game->fog_on && rows->thing != THING_ITEM_BOX && rows->thing != THING_PLANT_BOX &&
-        !game_tile_seen(game, x, y, z)) {
+        rows->thing != THING_TILE && !game_tile_seen(game, x, y, z)) {
         ui_layout_label(layout, tr("hud.tile.remembered"), 0.0f, true);
     }
     switch (rows->thing) {
@@ -632,6 +640,7 @@ static void thing_rows(UiLayout *layout, void *userdata)
         ui_layout_label(layout, text, 0.0f, false);
         break;
     }
+    case THING_TILE: hud_tile_rows(layout, rows->app, x, y, z); break;
     case THING_PLANT: {
         plant_rows(layout, rows);
         TilePos foot;
@@ -912,6 +921,7 @@ static void thing_actions(App *app, const ThingRows *rows)
         break;
     }
     case THING_PLANT_BOX: plant_box_actions(app, &slot); break;
+    case THING_TILE:
     case THING_COUNT: break;
     }
     if ((rows->thing == THING_STRUCTURE || rows->thing == THING_ROOF ||
@@ -1008,6 +1018,7 @@ bool tile_panel_cancel(App *app)
         }
         return cancelled > 0;
     }
+    case THING_TILE:
     case THING_COUNT: break;
     }
     return false;

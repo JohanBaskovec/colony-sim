@@ -196,10 +196,12 @@ typedef enum TileThing {
     THING_ROOF,      /* The roof the tile is. */
     THING_SITE,      /* A construction site (a structure's or a workstation's). */
     THING_ITEMS,     /* The stack lying there. */
-    THING_PLANT,     /* The plant (grass too), or the tree whose trunk or foliage it is. */
+    THING_PLANT,     /* The plant (grass too), or the tree whose trunk or foliage it is: picked by
+                      * its drawn sprite, or by the tile for grass and a grown tree's blocks. */
     THING_ITEM,      /* One item lying there (App.selected_item; the tile follows it). */
     THING_ITEM_BOX,  /* Several items lying about, picked by a box (App.selected_box_items). */
     THING_PLANT_BOX, /* Plants of one kind, picked by a double click (App.selected_plants). */
+    THING_TILE,      /* The tile itself, on its own: what is known of it. */
     THING_COUNT
 } TileThing;
 

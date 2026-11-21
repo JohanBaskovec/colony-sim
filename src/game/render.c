@@ -4506,6 +4506,90 @@ static void render_plant(Sprites *sprites, const Camera *camera, const Map *map,
     sprites_draw(sprites, id, sx, sy, color, (tile_variation(x, y) & 4) != 0);
 }
 
+/* Where a plant's sprite is drawn on the screen, as render_plant() draws it (false: it has no
+ * sprite, or is not drawn). */
+static bool plant_sprite_rect(const Sprites *sprites, const Camera *camera, const Plant *plant,
+                              int x, int y, SDL_FRect *rect)
+{
+    if (plant->type == PLANT_NONE || plant_is_dormant(plant)) {
+        return false;
+    }
+    SpriteId id =
+        sprite_plant((PlantType)plant->type, plant_growth_stage(plant), plant_has_food(plant));
+    if (id < 0) {
+        return false;
+    }
+    float sx, sy, width, height;
+    camera_world_to_screen(camera, (float)x + 0.5f, (float)(y + 1), &sx, &sy);
+    sprites_size(sprites, id, &width, &height);
+    *rect = (SDL_FRect){sx - width * 0.5f, sy - height, width, height};
+    return true;
+}
+
+int render_plants_at_point(const Sprites *sprites, const Game *game, const Camera *camera,
+                           float screen_x, float screen_y, TilePos *out, int max)
+{
+    const Map *map = game_view_map(game);
+    const int shown = camera->level;
+    float world_x, world_y;
+    camera_screen_to_world(camera, screen_x, screen_y, &world_x, &world_y);
+    int px = (int)floorf(world_x), py = (int)floorf(world_y);
+    SDL_FPoint point = {screen_x, screen_y};
+    int count = 0;
+    /* A plant stands on the tile its sprite's foot is on: its sprite reaches up from there. */
+    for (int y = py + SPRITE_OVERFLOW_ROWS; y >= py - 1 && count < max; y--) {
+        for (int x = px - SPRITE_OVERFLOW_COLUMNS; x <= px + SPRITE_OVERFLOW_COLUMNS; x++) {
+            if (x < 0 || y < 0 || x >= map->width || y >= map->height) {
+                continue;
+            }
+            int seen = map_view_level(map, x, y, shown);
+            for (int z = shown; z >= 0 && z >= seen && count < max; z--) {
+                if (z != shown && z != seen) {
+                    continue;
+                }
+                const Plant *plant = &map->plants[map_index(map, x, y, z)];
+                SDL_FRect rect;
+                if (plant->type == PLANT_GRASS ||
+                    !plant_sprite_rect(sprites, camera, plant, x, y, &rect)) {
+                    continue;
+                }
+                /* As hides_colonist(): the middle of the sprite only, its canvas has empty corners.
+                 */
+                SDL_FRect core = {rect.x + rect.w * 0.15f, rect.y, rect.w * 0.7f, rect.h * 0.9f};
+                if (SDL_PointInRectFloat(&point, &core)) {
+                    out[count++] = (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+                }
+            }
+        }
+    }
+    return count;
+}
+
+void render_plant_selection(SDL_Renderer *renderer, const Sprites *sprites, const Game *game,
+                            const Camera *camera, int x, int y, int z)
+{
+    const Map *map = game_view_map(game);
+    if (!map_in_bounds(map, x, y, z)) {
+        return;
+    }
+    SDL_FRect rect;
+    float cx, cy, radius;
+    if (plant_sprite_rect(sprites, camera, &map->plants[map_index(map, x, y, z)], x, y, &rect)) {
+        cx = rect.x + rect.w * 0.5f;
+        cy = rect.y + rect.h * 0.55f;
+        radius = SDL_max(rect.w, rect.h * 0.8f) * 0.5f + 2.0f;
+    } else {
+        SDL_FRect tile = tile_rect(camera, x, y);
+        cx = tile.x + tile.w * 0.5f;
+        cy = tile.y + tile.h * 0.5f;
+        radius = tile.w * 0.6f;
+    }
+    ring(renderer, cx, cy, radius + 2.0f, (SDL_Color){0, 0, 0, 160}); /* Seen on light ground. */
+    for (float r = radius; r < radius + 2.0f; r += 1.0f) {
+        ring(renderer, cx, cy, r, SELECTION_COLOR);
+    }
+}
+
 /* A small speech bubble over the head of colonists who are chatting. */
 static void render_chat_bubbles(SDL_Renderer *renderer, const Game *game, const Camera *camera)
 {

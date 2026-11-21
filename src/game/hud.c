@@ -527,11 +527,11 @@ static void add_animal_ghosts(App *app, Panel *panel, int x, int y, int z)
     }
 }
 
-static void build_tile_panel(App *app, Panel *panel)
+/* What is known of the tile (x, y, z): the readout under the cursor, and the rows of a tile
+ * selected. */
+static void build_tile_panel(App *app, Panel *panel, int x, int y, int z)
 {
-    const int z = app->camera.level; /* The level shown. */
     const Map *map = game_view_map(&app->game);
-    int x = app->hover_x, y = app->hover_y;
     size_t index = map_index(map, x, y, z);
     char a[32], b[32];
 
@@ -797,6 +797,15 @@ static void build_tile_panel(App *app, Panel *panel)
     } else {
         tr_decimal(a, sizeof(a), cost, 2);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.move_cost"), a);
+    }
+}
+
+void hud_tile_rows(UiLayout *layout, App *app, int x, int y, int z)
+{
+    Panel panel = {0};
+    build_tile_panel(app, &panel, x, y, z);
+    for (int i = 1; i < panel.count; i++) { /* The first line is the position: the title. */
+        ui_layout_label(layout, panel.lines[i], 0.0f, false);
     }
 }
 
@@ -2425,7 +2434,7 @@ void hud_draw(App *app)
     if (app->hover_valid && inspector_kind(app) == INSPECT_NONE && !app->show_work_panel &&
         !app->show_log) {
         Panel tile = {0};
-        build_tile_panel(app, &tile);
+        build_tile_panel(app, &tile, app->hover_x, app->hover_y, app->camera.level);
         panel_size(app, &tile, &width, &height);
         float tile_y = menu_top - height - HUD_MARGIN;
         panel_draw_colored(app, &tile, HUD_MARGIN, tile_y, THEME_COLOR(app, THEME_READOUT));

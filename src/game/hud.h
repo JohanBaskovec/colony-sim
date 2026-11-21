@@ -85,6 +85,10 @@ bool hud_message_shown(const App *app);
 /* Windows open now, back to front (the last one is in front). Returns how many. */
 int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT]);
 
+/* The rows of a tile selected on its own (what is known of it, as the readout under the cursor
+ * tells), under the title that says where it is (hud.tile.position). */
+void hud_tile_rows(UiLayout *layout, App *app, int x, int y, int z);
+
 /* Names under the colonists, drawn in the world (before the HUD panels). */
 void hud_draw_world_labels(App *app);
 

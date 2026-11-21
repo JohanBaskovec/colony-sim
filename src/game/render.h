@@ -207,6 +207,18 @@ void render_tile_selection(SDL_Renderer *renderer, const Camera *camera, int x, 
 
 /* A selected item lying on the ground: drawn again over whatever covers it,
  * with a ring around it (where a click picks it). */
+/* The plants whose drawn sprite is under a point of the screen, the frontmost first, as the tiles
+ * they stand on (`out`, at most `max`): a click on a plant picks it whatever tile its sprite
+ * overlaps. Grass, plants not drawn (dormant) and grown trees (trunk and foliage blocks, picked
+ * by their tiles) are not among them. Returns how many. */
+int render_plants_at_point(const Sprites *sprites, const Game *game, const Camera *camera,
+                           float screen_x, float screen_y, TilePos *out, int max);
+
+/* A white ring around the plant standing on (x, y, z): around its sprite, or around the tile for
+ * what has no sprite of its own (a grown tree). */
+void render_plant_selection(SDL_Renderer *renderer, const Sprites *sprites, const Game *game,
+                            const Camera *camera, int x, int y, int z);
+
 void render_item_selection(SDL_Renderer *renderer, Sprites *sprites, const Camera *camera, int x,
                            int y, const Item *item);
 
