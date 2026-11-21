@@ -495,20 +495,32 @@ static WindowMetrics window_metrics(App *app)
         option_text(text, sizeof(text), (NewGameOption)i, def->max);
         column = SDL_max(column, ui_text_width(ui, text));
     }
-    column = SDL_max(column, ui_checkbox_width(ui, tr("new_game.flat")));
+    column = SDL_max(column, m.row + m.gap + ui_text_width(ui, tr("new_game.advanced")));
     for (int s = 0; s < NEW_GAME_SECTION_COUNT; s++) {
         column = SDL_max(column, ui_text_width(ui, tr(new_game_section_key((NewGameSection)s))));
     }
     m.column = SDL_ceilf(column);
-    /* Column heights: the World column has the seed, Relief the flat world. */
-    int options[NEW_GAME_SECTION_COUNT] = {0};
+    /* Column heights: the World column has the seed, a column with advanced
+     * options the row that shows them (and them when shown). */
+    float heights[NEW_GAME_SECTION_COUNT] = {0};
+    bool advanced[NEW_GAME_SECTION_COUNT] = {false};
     for (int i = 0; i < NEW_GAME_OPTION_COUNT; i++) {
-        options[new_game_option_def((NewGameOption)i)->section]++;
+        const NewGameOptionDef *def = new_game_option_def((NewGameOption)i);
+        if (def->advanced) {
+            advanced[def->section] = true;
+        }
+        if (!def->advanced || app->new_game_advanced) {
+            heights[def->section] += m.option;
+        }
     }
-    float world = m.heading + m.row * 2.0f + m.gap + options[NEW_GAME_SECTION_WORLD] * m.option;
-    float relief = m.heading + m.row + m.gap + options[NEW_GAME_SECTION_RELIEF] * m.option;
-    float life = m.heading + options[NEW_GAME_SECTION_LIFE] * m.option;
-    m.columns_height = SDL_max(world, SDL_max(relief, life));
+    m.columns_height = 0.0f;
+    for (int s = 0; s < NEW_GAME_SECTION_COUNT; s++) {
+        heights[s] += m.heading + (advanced[s] ? m.row + m.gap : 0.0f);
+        if (s == NEW_GAME_SECTION_WORLD) {
+            heights[s] += m.row * 2.0f + m.gap;
+        }
+        m.columns_height = SDL_max(m.columns_height, heights[s]);
+    }
     m.width = m.column * NEW_GAME_SECTION_COUNT + m.column_gap * (NEW_GAME_SECTION_COUNT - 1);
     m.height = m.columns_height + m.gap * 2.0f + m.row;
     return m;
@@ -587,6 +599,22 @@ static void draw_seed_field(App *app, SDL_FRect rect)
     ui_take_click(ui, rect); /* Typing goes there anyway. */
 }
 
+/* The row that shows or hides the advanced options of a column: a small
+ * triangle and its label, both clickable. True when clicked. */
+static bool draw_advanced_toggle(App *app, const WindowMetrics *m, float x, float y)
+{
+    Ui *ui = &app->ui;
+    float box = SDL_floorf(m->row * 0.7f);
+    SDL_FRect triangle = {x, y + SDL_floorf((m->row - box) * 0.5f), box, box};
+    bool clicked = ui_disclosure(ui, triangle, app->new_game_advanced);
+    SDL_FRect row = {x, y, m->column, m->row};
+    ui_label_rgba(ui, tr("new_game.advanced"), x + box + m->gap, y + m->text_offset,
+                  ui_hovered(ui, row) ? ICE : MIST);
+    clicked = ui_take_click(ui, row) == SDL_BUTTON_LEFT || clicked;
+    tooltip_if_hovered(ui, row, "new_game.advanced.note");
+    return clicked;
+}
+
 typedef enum NewGameChoice {
     CHOICE_NONE,
     CHOICE_DEFAULTS,
@@ -621,17 +649,27 @@ static void draw_new_game(App *app)
             label.w = field.w;
             tooltip_if_hovered(ui, label, "new_game.seed.note");
             y += m.row + m.gap;
-        } else if (s == NEW_GAME_SECTION_RELIEF) {
-            if (ui_checkbox(ui, x, y, m.column,
-                            app->new_game.world.flat ? UI_CHECKED : UI_UNCHECKED,
-                            tr("new_game.flat"))) {
-                app->new_game.world.flat = !app->new_game.world.flat;
-            }
-            tooltip_if_hovered(ui, (SDL_FRect){x, y, m.column, m.row}, "new_game.flat.note");
-            y += m.row + m.gap;
         }
+        bool has_advanced = false;
         for (int i = 0; i < NEW_GAME_OPTION_COUNT; i++) {
-            if (new_game_option_def((NewGameOption)i)->section == (NewGameSection)s) {
+            const NewGameOptionDef *def = new_game_option_def((NewGameOption)i);
+            if (def->section == (NewGameSection)s) {
+                has_advanced = has_advanced || def->advanced;
+                if (!def->advanced) {
+                    y = draw_option(app, &m, (NewGameOption)i, x, y);
+                }
+            }
+        }
+        if (!has_advanced) {
+            continue;
+        }
+        if (draw_advanced_toggle(app, &m, x, y)) {
+            app->new_game_advanced = !app->new_game_advanced;
+        }
+        y += m.row + m.gap;
+        for (int i = 0; app->new_game_advanced && i < NEW_GAME_OPTION_COUNT; i++) {
+            const NewGameOptionDef *def = new_game_option_def((NewGameOption)i);
+            if (def->section == (NewGameSection)s && def->advanced) {
                 y = draw_option(app, &m, (NewGameOption)i, x, y);
             }
         }

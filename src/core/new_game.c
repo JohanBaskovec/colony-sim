@@ -14,18 +14,20 @@ static const NewGameOptionDef OPTION_DEFS[NEW_GAME_OPTION_COUNT] = {
     [NEW_GAME_FEATURE_SCALE] = {"feature_scale", N_("new_game.feature_scale"),
                                 N_("new_game.feature_scale.note"), NEW_GAME_SECTION_WORLD,
                                 NEW_GAME_UNIT_TILES, 16, 128, 8},
+    [NEW_GAME_RELIEF] = {"relief", N_("new_game.relief"), N_("new_game.relief.note"),
+                         NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 0, 100, 1},
     [NEW_GAME_WATER] = {"water", N_("new_game.water"), N_("new_game.water.note"),
-                        NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 0, 60, 1},
-    [NEW_GAME_HILLS] = {"hills", N_("new_game.hills"), N_("new_game.hills.note"),
-                        NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 30, 100, 1},
-    [NEW_GAME_HILL_HEIGHT] = {"hill_height", N_("new_game.hill_height"),
-                              N_("new_game.hill_height.note"), NEW_GAME_SECTION_RELIEF,
-                              NEW_GAME_UNIT_LEVELS, 2, WORLDGEN_MAX_HILL_HEIGHT, 1},
-    [NEW_GAME_ROCK] = {"rock", N_("new_game.rock"), N_("new_game.rock.note"),
-                       NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 30, 100, 1},
+                        NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 0, 100, 5},
     [NEW_GAME_UNDERGROUND] = {"underground", N_("new_game.underground"),
                               N_("new_game.underground.note"), NEW_GAME_SECTION_RELIEF,
                               NEW_GAME_UNIT_LEVELS, 2, WORLDGEN_MAX_UNDERGROUND, 1},
+    [NEW_GAME_HILLS] = {"hills", N_("new_game.hills"), N_("new_game.hills.note"),
+                        NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 30, 100, 1, true},
+    [NEW_GAME_HILL_HEIGHT] = {"hill_height", N_("new_game.hill_height"),
+                              N_("new_game.hill_height.note"), NEW_GAME_SECTION_RELIEF,
+                              NEW_GAME_UNIT_LEVELS, 2, WORLDGEN_MAX_HILL_HEIGHT, 1, true},
+    [NEW_GAME_ROCK] = {"rock", N_("new_game.rock"), N_("new_game.rock.note"),
+                       NEW_GAME_SECTION_RELIEF, NEW_GAME_UNIT_PERCENT, 30, 100, 1, true},
     [NEW_GAME_TREES] = {"trees", N_("new_game.trees"), N_("new_game.trees.note"),
                         NEW_GAME_SECTION_LIFE, NEW_GAME_UNIT_PERCENT, 0, 100, 5},
     [NEW_GAME_COLONISTS] = {"colonists", N_("new_game.colonists"), N_("new_game.colonists.note"),
@@ -67,6 +69,57 @@ static float share_of(int percent)
     return (float)percent / 100.0f;
 }
 
+/* The relief at its ends and in the middle (the usual one is
+ * worldgen_default_params()'s): where hills begin, where rock begins, how
+ * tall the hills rise. */
+typedef struct Relief {
+    float hills, rock;
+    int height;
+} Relief;
+
+static const Relief PLAIN = {1.0f, 1.0f, 2}; /* Nothing rises over the plains. */
+static const Relief RUGGED = {0.35f, 0.6f, WORLDGEN_MAX_HILL_HEIGHT};
+
+static Relief usual_relief(void)
+{
+    WorldGenParams usual;
+    worldgen_default_params(&usual);
+    return (Relief){usual.hill_level, usual.mountain_level, usual.hill_height};
+}
+
+/* From a to b, b exactly at t = 1. */
+static float mix(float a, float b, float t)
+{
+    return (1.0f - t) * a + t * b;
+}
+
+static void set_relief(WorldGenParams *world, int value)
+{
+    Relief from = PLAIN, to = usual_relief();
+    float t = (float)value / (float)NEW_GAME_RELIEF_USUAL;
+    if (value > NEW_GAME_RELIEF_USUAL) {
+        from = to;
+        to = RUGGED;
+        t = (float)(value - NEW_GAME_RELIEF_USUAL) / (float)(100 - NEW_GAME_RELIEF_USUAL);
+    }
+    world->hill_level = mix(from.hills, to.hills, t);
+    world->mountain_level = mix(from.rock, to.rock, t);
+    world->hill_height = (int)lroundf(mix((float)from.height, (float)to.height, t));
+}
+
+/* The relief read back from where the hills begin. */
+static int relief_of(const WorldGenParams *world)
+{
+    float usual = usual_relief().hills, hills = world->hill_level, relief;
+    if (hills >= usual) {
+        relief = (PLAIN.hills - hills) / (PLAIN.hills - usual) * (float)NEW_GAME_RELIEF_USUAL;
+    } else {
+        relief = (float)NEW_GAME_RELIEF_USUAL +
+                 (usual - hills) / (usual - RUGGED.hills) * (float)(100 - NEW_GAME_RELIEF_USUAL);
+    }
+    return clampi((int)lroundf(relief), 0, 100);
+}
+
 int new_game_option_value(const NewGameParams *params, NewGameOption option)
 {
     const WorldGenParams *world = &params->world;
@@ -74,7 +127,10 @@ int new_game_option_value(const NewGameParams *params, NewGameOption option)
     case NEW_GAME_WIDTH: return world->width;
     case NEW_GAME_HEIGHT: return world->height;
     case NEW_GAME_FEATURE_SCALE: return (int)lroundf(world->feature_scale);
-    case NEW_GAME_WATER: return percent_of(world->water_level);
+    case NEW_GAME_RELIEF: return relief_of(world);
+    case NEW_GAME_WATER:
+        return (int)lroundf(world->water_level * 100.0f * 100.0f /
+                            (float)NEW_GAME_WATER_MAX_ELEVATION);
     case NEW_GAME_HILLS: return percent_of(world->hill_level);
     case NEW_GAME_HILL_HEIGHT: return world->hill_height;
     case NEW_GAME_ROCK: return percent_of(world->mountain_level);
@@ -101,7 +157,11 @@ void new_game_option_set(NewGameParams *params, NewGameOption option, int value)
     case NEW_GAME_WIDTH: world->width = value; break;
     case NEW_GAME_HEIGHT: world->height = value; break;
     case NEW_GAME_FEATURE_SCALE: world->feature_scale = (float)value; break;
-    case NEW_GAME_WATER: world->water_level = share_of(value); break;
+    case NEW_GAME_RELIEF: set_relief(world, value); break;
+    case NEW_GAME_WATER:
+        /* In whole percents of elevation: the usual 40 % is exactly 0.24. */
+        world->water_level = share_of(value * NEW_GAME_WATER_MAX_ELEVATION / 100);
+        break;
     case NEW_GAME_HILLS:
         world->hill_level = share_of(value);
         if (percent_of(world->mountain_level) < value) {
@@ -126,9 +186,11 @@ void new_game_option_set(NewGameParams *params, NewGameOption option, int value)
 bool new_game_option_applies(const NewGameParams *params, NewGameOption option)
 {
     switch (option) {
+    case NEW_GAME_RELIEF:
     case NEW_GAME_HILLS:
-    case NEW_GAME_HILL_HEIGHT:
+    case NEW_GAME_ROCK:
     case NEW_GAME_UNDERGROUND: return !params->world.flat;
+    case NEW_GAME_HILL_HEIGHT: return !params->world.flat && params->world.hill_level < 1.0f;
     default: return (unsigned)option < NEW_GAME_OPTION_COUNT;
     }
 }

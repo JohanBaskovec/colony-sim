@@ -243,6 +243,7 @@ theme and migration plan).
 - [ ] Settings menu (language, resolution, volume, key bindings) persisted in the user preferences folder
 - [x] Title screen (Thawmoor, a world drifting behind it): New game, Settings, Quit; the game menu's Main menu goes back to it (after asking); any game option on the command line skips it
 - [x] New game options: the seed (typed, any word), the size, the landscape scale, water, hills, slope, bare rock, depth, flat world, trees, settlers, wild animals (`core/new_game.h`)
+- [x] New game options simplified: Relief (0 % a plain, 50 % the usual land, 100 % rugged) and Water (0 %: no lakes) in place of the flat world, the hills, their height and the rock under *Advanced options*; lakes always in hollows, so no relief and no water gives flat ground, and no relief with water a plain with sunk lakes; no beaches without water. The flat world stays for tests and benchmarks
 - [ ] New game, later: difficulty; temperature and the length of the seasons (the latitude, SHADOWS.md step 7); a preview of the map before starting; the options remembered between sessions
 - [ ] Sound and music
 - [x] Sprites (128 × 128 pixels per tile) in a texture atlas with halved copies for zoomed-out views: trees, hazels and brambles (5 growth stages, hazels and brambles with and without fruit), low plants (3 stages), mushrooms, colonists in 4 layers (naked limbless body in 3 shapes, head with 4 expressions, beard, hair) in front view, a moving fist (with the tool of the job) while working
@@ -331,7 +332,7 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
     - [x] W3a: rain and snowmelt beyond the soil's intake lie as free water, puddles evaporate and soak in, frozen ground takes nothing, rough stone drinks a storm into its cracks, roofs shed their rain; storms of various intensity and downpours (*Downpour* in the weather shown); an exchange wakes the flow only where it sets water moving (`bench_simulation 12 4 1`: 27 → 30 µs a tick)
     - [ ] W3b: the map's edges
     - [ ] W3c: a river laid by world generation (New game option) with its discharge and floods
-    - [ ] Lakes of a flat world: nothing holds them once woken (a tree growing on the shore), they spread over the plain and soak in within days; a hollow for them (docs/WATER.md §9)
+    - [x] Lakes of a flat world: nothing holds them once woken; no longer a player's world (Relief 0 % gives a plain with its lakes in hollows), only the tests' flat world keeps them, which do not need them held (docs/WATER.md §3.7)
   - [ ] W4: water in the ground: pore water in every block, layers of sand, gravel and clay, the water table, drainage and Darcy flow, seepage and springs, the soil's root zone draining into the ground (its banks go), damp walls, wells, mud
   - [ ] W5: water in play: floodgates, dams of earth, cisterns, irrigation ditches, floating items carried away, alerts for a rising river and a flooding gallery
   - [ ] W6, later: pressure (U-bends, artesian wells), swimming and drowning, ice

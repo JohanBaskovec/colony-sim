@@ -6,8 +6,9 @@
  * game (game/saves_window.h), Settings and Quit.
  *
  * New game opens a window with the options of the world to make
- * (core/new_game.h) in three columns (World, Relief, Life): sliders, the flat
- * world, and the seed typed on the keyboard (any text; empty: a random one).
+ * (core/new_game.h) in three columns (World, Relief, Life): sliders (the
+ * relief's advanced ones folded under a row that shows them), and the seed
+ * typed on the keyboard (any text; empty: a random one).
  * Start (or Enter) shows that the world is being made for a frame, then
  * app.c makes it and the game begins.
  */

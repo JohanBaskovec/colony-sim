@@ -46,8 +46,12 @@ static void test_set_clamps_and_steps(void)
     new_game_option_set(&params, NEW_GAME_HEIGHT, 0);
     CHECK_EQ_INT(params.world.height, 64);
     new_game_option_set(&params, NEW_GAME_WATER, 37);
-    CHECK_NEAR(params.world.water_level, 0.37, 1e-6);
-    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_WATER), 37);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_WATER), 35); /* Steps of 5. */
+    CHECK_NEAR(params.world.water_level, 0.21, 1e-6);                 /* 35 % of 0.6. */
+    new_game_option_set(&params, NEW_GAME_WATER, 100);
+    CHECK_NEAR(params.world.water_level, NEW_GAME_WATER_MAX_ELEVATION / 100.0, 1e-6);
+    new_game_option_set(&params, NEW_GAME_RELIEF, 120);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_RELIEF), 100);
     new_game_option_set(&params, NEW_GAME_TREES, 42);
     CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_TREES), 40);
     new_game_option_set(&params, NEW_GAME_WILDLIFE, 260);
@@ -85,20 +89,124 @@ static void test_hills_and_rock_keep_their_order(void)
     CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_ROCK), 90);
 }
 
-/* A flat world has no hills nor levels under the plains. */
-static void test_flat_world_options(void)
+/* The usual world is at 50 % of relief and 40 % of water. */
+static void test_usual_relief_and_water(void)
 {
     NewGameParams params;
     new_game_default_params(&params);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_RELIEF), NEW_GAME_RELIEF_USUAL);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_WATER), 40);
     for (int option = 0; option < NEW_GAME_OPTION_COUNT; option++) {
         CHECK(new_game_option_applies(&params, (NewGameOption)option));
     }
+    /* Away and back: the usual world exactly. */
+    NewGameParams usual = params;
+    new_game_option_set(&params, NEW_GAME_RELIEF, 0);
+    new_game_option_set(&params, NEW_GAME_WATER, 0);
+    new_game_option_set(&params, NEW_GAME_RELIEF, NEW_GAME_RELIEF_USUAL);
+    new_game_option_set(&params, NEW_GAME_WATER, 40);
+    CHECK(memcmp(&params, &usual, sizeof(params)) == 0);
+}
+
+/* The relief sets the hills and the rock (the advanced options), and is read
+ * back from where the hills begin, whatever sets it. */
+static void test_relief_sets_the_advanced_options(void)
+{
+    NewGameParams params;
+    new_game_default_params(&params);
+    new_game_option_set(&params, NEW_GAME_RELIEF, 0);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_HILLS), 100);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_ROCK), 100);
+    CHECK(!new_game_option_applies(&params, NEW_GAME_HILL_HEIGHT)); /* No hills. */
+    new_game_option_set(&params, NEW_GAME_RELIEF, 100);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_HILLS), 35);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_ROCK), 60);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_HILL_HEIGHT), WORLDGEN_MAX_HILL_HEIGHT);
+    int previous = -1;
+    for (int relief = 0; relief <= 100; relief++) { /* Read back as set, ever higher. */
+        new_game_option_set(&params, NEW_GAME_RELIEF, relief);
+        CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_RELIEF), relief);
+        int hills = new_game_option_value(&params, NEW_GAME_HILLS);
+        CHECK(hills <= new_game_option_value(&params, NEW_GAME_ROCK));
+        CHECK(previous < 0 || hills <= previous);
+        previous = hills;
+    }
+    new_game_option_set(&params, NEW_GAME_RELIEF, 25);
+    CHECK(new_game_option_value(&params, NEW_GAME_HILL_HEIGHT) < WORLDGEN_HILL_HEIGHT);
+    /* An advanced option moves the relief. */
+    new_game_option_set(&params, NEW_GAME_HILLS, 55);
+    CHECK_EQ_INT(new_game_option_value(&params, NEW_GAME_RELIEF), NEW_GAME_RELIEF_USUAL);
+    /* The flat world of the tests has no relief to set. */
     params.world.flat = true;
+    CHECK(!new_game_option_applies(&params, NEW_GAME_RELIEF));
     CHECK(!new_game_option_applies(&params, NEW_GAME_HILLS));
-    CHECK(!new_game_option_applies(&params, NEW_GAME_HILL_HEIGHT));
     CHECK(!new_game_option_applies(&params, NEW_GAME_UNDERGROUND));
     CHECK(new_game_option_applies(&params, NEW_GAME_WATER));
     CHECK(new_game_option_applies(&params, NEW_GAME_TREES));
+}
+
+/* The sandy tiles of the plains' level. */
+static size_t count_sand(const Map *map)
+{
+    size_t sand = 0;
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            sand += map->terrain[map_index(map, x, y, map->surface_level)] == TERRAIN_SAND;
+        }
+    }
+    return sand;
+}
+
+/* Without relief nor water, the ground is all flat on the plains' level, all
+ * dry, without beaches (sandy ground stays where it is dry) nor rock
+ * outcrops; with water, the lakes lie in hollows and the rest stays flat. */
+static void test_a_world_without_relief_is_flat(void)
+{
+    NewGameParams params;
+    new_game_default_params(&params);
+    params.world.seed = 4;
+    new_game_option_set(&params, NEW_GAME_WIDTH, 64);
+    new_game_option_set(&params, NEW_GAME_HEIGHT, 64);
+    new_game_option_set(&params, NEW_GAME_RELIEF, 0);
+    new_game_option_set(&params, NEW_GAME_WATER, 0);
+    Map map;
+    REQUIRE(worldgen_generate(&map, &params.world));
+    CHECK_EQ_INT(map.top_ground_level, map.surface_level);
+    size_t off_level = 0, wet = 0, rock = 0;
+    for (int y = 0; y < map.height; y++) {
+        for (int x = 0; x < map.width; x++) {
+            int z = map_ground_level(&map, x, y);
+            size_t index = map_index(&map, x, y, map.surface_level);
+            off_level += z != map.surface_level;
+            wet += map.water[index] > 0;
+            rock += map.terrain[index] == TERRAIN_ROUGH_STONE;
+        }
+    }
+    CHECK_EQ_UINT(off_level, 0);
+    CHECK_EQ_UINT(wet, 0);
+    CHECK_EQ_UINT(rock, 0);
+    CHECK_EQ_INT(map.slope_count, 0);
+    size_t dry_sand = count_sand(&map);
+    map_free(&map);
+    /* A trace of water brings beaches along the lowest ground. */
+    params.world.water_level = 0.0001f;
+    REQUIRE(worldgen_generate(&map, &params.world));
+    CHECK(count_sand(&map) > dry_sand);
+    map_free(&map);
+
+    new_game_option_set(&params, NEW_GAME_WATER, 60);
+    REQUIRE(worldgen_generate(&map, &params.world));
+    size_t above = 0, hollows = 0;
+    for (int y = 0; y < map.height; y++) {
+        for (int x = 0; x < map.width; x++) {
+            int z = map_ground_level(&map, x, y);
+            above += z > map.surface_level;
+            hollows += z < map.surface_level;
+        }
+    }
+    CHECK_EQ_UINT(above, 0);
+    CHECK(hollows > 0);
+    map_free(&map);
 }
 
 static void test_seed_from_text(void)
@@ -144,7 +252,7 @@ static void test_extreme_worlds_generate(void)
     REQUIRE(worldgen_generate(&map, &params.world));
     CHECK(map.depth <= MAP_MAX_LEVELS);
     map_free(&map);
-    new_game_option_set(&params, NEW_GAME_WATER, 60);
+    new_game_option_set(&params, NEW_GAME_WATER, 100);
     new_game_option_set(&params, NEW_GAME_ROCK, 100);
     new_game_option_set(&params, NEW_GAME_TREES, 100);
     params.world.flat = true;
@@ -158,7 +266,9 @@ int main(void)
     RUN_TEST(test_defaults_are_on_the_steps);
     RUN_TEST(test_set_clamps_and_steps);
     RUN_TEST(test_hills_and_rock_keep_their_order);
-    RUN_TEST(test_flat_world_options);
+    RUN_TEST(test_usual_relief_and_water);
+    RUN_TEST(test_relief_sets_the_advanced_options);
+    RUN_TEST(test_a_world_without_relief_is_flat);
     RUN_TEST(test_seed_from_text);
     RUN_TEST(test_extreme_worlds_generate);
     return test_summary();

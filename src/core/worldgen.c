@@ -129,8 +129,8 @@ static Terrain pick_terrain(const WorldGenParams *params, float elevation, float
     if (pick_lake(params, elevation) != LAKE_NONE) {
         return TERRAIN_SILT; /* The bed of the water. */
     }
-    if (elevation < params->water_level + BEACH_ELEVATION) {
-        return TERRAIN_SAND;
+    if (params->water_level > 0.0f && elevation < params->water_level + BEACH_ELEVATION) {
+        return TERRAIN_SAND; /* Beaches, where there is water. */
     }
     if (elevation > params->mountain_level) {
         return TERRAIN_ROUGH_STONE;

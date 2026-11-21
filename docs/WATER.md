@@ -312,10 +312,12 @@ from the design above:
 
 Left: slopes; walking out of a wide flood; waking only around the changes of
 an overflowed log; batching far blocks if floods cost too much (§9). Lakes
-of a flat world lie on the level of their banks, and their deep water
-(`WORLDGEN_FLAT_DEEP_MM`) beside their shallows: nothing holds them once
-woken (a tree growing on the shore is enough), and they spread over the
-plain and soak into it within days. They need a hollow (§9).
+of the tests' flat world (`WorldGenParams.flat`, a single level) lie on
+the level of their banks, their deep water (`WORLDGEN_FLAT_DEEP_MM`) beside
+their shallows: nothing holds them once woken (a tree growing on the shore
+is enough), and they spread over the plain. Players do not get that world:
+a relief of 0 % in the New game window makes a plain with its lakes in
+hollows (docs/UI.md), held as any other.
 
 ## 4. Where water comes from and where it goes
 
@@ -748,10 +750,6 @@ disappeared (no saves yet).
   same results: same steps, only batched) if real floods prove costly.
 - Whether the hourly ground-water pass needs to look at every column, or
   only those that changed (W4 measure).
-- How the lakes of a flat world are held (§3.7): the flat world given a
-  level under its ground for its lakes (as the hilly worlds' hollows), or
-  beds of silt lying a lake's depth under the floors around them (a sunk
-  floor the flow would know of).
 
 ## 10. Steps
 

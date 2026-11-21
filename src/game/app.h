@@ -256,7 +256,8 @@ typedef struct App {
     /* The title screen (game/title_screen.h): its fonts (the big title, the
      * tagline and buttons) and the interface size they were made for; how
      * long (real seconds) the world behind has drifted; the New game window,
-     * what it sets and the seed typed (empty: a random one). */
+     * what it sets, the seed typed (empty: a random one) and whether its
+     * advanced options are shown. */
     TextRenderer *title_text;
     TextRenderer *title_subtext;
     float title_text_scale;
@@ -264,6 +265,7 @@ typedef struct App {
     bool new_game_open;
     NewGameParams new_game;
     char new_game_seed[NEW_GAME_SEED_TEXT_SIZE];
+    bool new_game_advanced;
     NewGameStage new_game_stage;
     bool pending_title; /* Back to the title screen before the next update (the game ends). */
     bool leave_confirm; /* The game menu asks before leaving for the title screen. */

@@ -373,13 +373,18 @@ its note as a tooltip:
 
 | World | Relief | Life |
 |---|---|---|
-| Seed (typed: a number or any word; empty: random) and Random | Flat world | Trees (percent) |
-| Width, height (64 to 256 tiles) | Water (the elevation below which it is water) | Settlers (1 to 64) |
-| Landscape scale (the size of lakes, woods, hills) | Hills from, slope (elevation per level), bare rock from | Wild animals (0 to 400 % of the usual number) |
-| | Depth (levels under the plains) | |
+| Seed (typed: a number or any word; empty: random) and Random | Relief (0 %: a plain without hills nor rock; 50 %: the usual land; 100 %: rugged) | Trees (percent) |
+| Width, height (64 to 256 tiles) | Water (how much of the land lies under it; 0 %: no lakes) | Settlers (1 to 64) |
+| Landscape scale (the size of lakes, woods, hills) | Depth (levels under the plains) | Wild animals (0 to 400 % of the usual number) |
+| | *Advanced options* (folded): hills from, hill height, bare rock from | |
 
-A flat world dims the options it has no use for (hills, slope, depth); the
-hills and the rock keep their order (setting one moves the other). Along the
+Lakes lie in hollows whatever the relief: no relief and no water gives
+ground all flat, no relief with water a plain with lakes sunk into it. The
+relief sets the advanced options it stands for, and moves when one of them
+is set (it is read from where the hills begin); the hill height is dimmed
+without hills; the hills and the rock keep their order (setting one moves
+the other). The advanced options stay unfolded or folded from one visit to
+the next. Along the
 bottom: Defaults on the left, Back and Start on the right (Enter starts,
 Escape goes back). The options are kept until the game quits. Start shows
 "Generating the world..." for a frame, then the game begins, fog of war on.
