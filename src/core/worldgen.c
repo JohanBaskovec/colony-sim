@@ -56,36 +56,80 @@ static float stretch(float value)
 
 /*
  * Stones: every stony tile (see TerrainDef.stony) gets 0 to MAP_STONES_MAX
- * stones. On flint patches, some of them are flint: where the flint noise is
- * above FLINT_NOISE_THRESHOLD, the share of flint rises to FLINT_MAX_CHANCE
- * percent at the top of the noise, scaled by the ground (flint weathers out
- * of rock: plenty on gravel and under rock walls, less on soil, little under
- * the deep rich soil). Shares below FLINT_MIN_CHANCE are dropped, so that
- * patches have clear edges; even a rich patch gives cobbles too.
+ * stones, a few of them cobbles (COBBLE_RARITY).
+ *
+ * Flint is found where erosion has gathered it (docs/KNOWLEDGE.md §4.2): flint nodules come out of
+ * chalk and limestone, and what the water and the slopes carry off ends up on the beaches and
+ * the banks of rivers and lakes, on the alluvial terraces of the plains beside them, and at the
+ * foot of cliffs and steep slopes. Elsewhere there is none. Within those places a noise field
+ * makes patches of it, scaled by the ground (plenty on gravel and shingle beaches, less on
+ * soil, little under the deep rich soil); shares below FLINT_MIN_CHANCE are dropped, so that
+ * deposits have clear edges, and a tile holds FLINT_PER_TILE_MAX nodules at most.
  */
-#define FLINT_NOISE_THRESHOLD 0.85f
 #define FLINT_MIN_CHANCE 5
-#define FLINT_MAX_CHANCE 60
+#define FLINT_MAX_CHANCE 40
+#define FLINT_PER_TILE_MAX 3
+/* The noise above which a deposit has flint, and over how much of it the share rises. */
+#define FLINT_NOISE_FROM 0.62f
+#define FLINT_NOISE_SPAN 0.28f
+/* Beaches and banks: this close to open water (tiles), the best of it; terraces beyond them, up
+ * to FLINT_TERRACE_TILES from the water on the low ground of the plains; the foot of a cliff:
+ * higher ground within FLINT_CLIFF_TILES. */
+/* A cliff rises this many levels at once (a gentle slope climbs one). */
+#define FLINT_CLIFF_LEVELS 2
+#define FLINT_BANK_TILES 2
+/* (A column that far from the water or farther is SOIL_WET_FAR.) */
+#define FLINT_TERRACE_TILES (SOIL_WET_FAR - 1)
+/* How much a cliff's foot gathers, against 1 on a beach or a bank. */
+#define FLINT_CLIFF_DEPOSIT 0.5f
+#define FLINT_CLIFF_TILES 1
+
+/* How much a column's place gathers flint, 0 .. 1: a bank or a beach, a terrace, the foot of a
+ * cliff, or nothing. */
+static float flint_deposit(const uint8_t *heights, int width, int height, int x, int y,
+                           int surface_level, int shore)
+{
+    float deposit = 0.0f;
+    if (shore <= FLINT_BANK_TILES) {
+        deposit = 1.0f;
+    } else if (shore <= FLINT_TERRACE_TILES &&
+               heights[(size_t)y * (size_t)width + (size_t)x] <= surface_level) {
+        /* Fading with the distance from the water. */
+        deposit = 0.5f * (float)(FLINT_TERRACE_TILES + 1 - shore) /
+                  (float)(FLINT_TERRACE_TILES - FLINT_BANK_TILES);
+    }
+    int own = heights[(size_t)y * (size_t)width + (size_t)x];
+    for (int dy = -FLINT_CLIFF_TILES; dy <= FLINT_CLIFF_TILES && deposit < FLINT_CLIFF_DEPOSIT;
+         dy++) {
+        for (int dx = -FLINT_CLIFF_TILES; dx <= FLINT_CLIFF_TILES; dx++) {
+            int nx = x + dx, ny = y + dy;
+            if (nx >= 0 && ny >= 0 && nx < width && ny < height &&
+                heights[(size_t)ny * (size_t)width + (size_t)nx] >= own + FLINT_CLIFF_LEVELS) {
+                deposit = deposit > FLINT_CLIFF_DEPOSIT ? deposit : FLINT_CLIFF_DEPOSIT;
+                break;
+            }
+        }
+    }
+    return deposit;
+}
 
 static float flint_ground_factor(Terrain terrain)
 {
     switch (terrain) {
     case TERRAIN_GRAVEL:
     case TERRAIN_ROUGH_STONE: return 1.0f;
+    case TERRAIN_SAND: return 0.9f; /* Shingle. */
     case TERRAIN_SOIL: return 0.7f;
     case TERRAIN_RICH_SOIL: return 0.3f;
     default: return 0.0f;
     }
 }
 
-static int flint_chance(Terrain terrain, float noise)
+/* The share of flint among the stones of a tile, in percent. */
+static int flint_chance(Terrain terrain, float deposit, float noise)
 {
-    float strength = (noise - FLINT_NOISE_THRESHOLD) / (1.0f - FLINT_NOISE_THRESHOLD);
-    if (strength <= 0.0f) {
-        return 0;
-    }
-    int chance = (int)((float)FLINT_MAX_CHANCE * clampf(strength * 1.5f, 0.0f, 1.0f) *
-                       flint_ground_factor(terrain));
+    float patch = clampf((noise - FLINT_NOISE_FROM) / FLINT_NOISE_SPAN, 0.0f, 1.0f);
+    int chance = (int)((float)FLINT_MAX_CHANCE * deposit * patch * flint_ground_factor(terrain));
     return chance >= FLINT_MIN_CHANCE ? chance : 0;
 }
 
@@ -93,20 +137,21 @@ static int flint_chance(Terrain terrain, float noise)
  * that lies there (every one is an item of its own: docs/ITEMS.md). */
 #define COBBLE_RARITY 50
 
-/* Stones of a stony tile, each one flint with `chance` percent; of the
- * others, few cobbles. */
-static void place_stones(Map *map, int x, int y, int z, Rng *rng, int chance)
+/* Stones of a stony tile, each one flint with `chance` percent (the tile's nodules capped at
+ * FLINT_PER_TILE_MAX); of the others, few cobbles (none when `cobbles` is false: a beach). */
+static void place_stones(Map *map, int x, int y, int z, Rng *rng, int chance, bool cobbles)
 {
     int stones = rng_range_i32(rng, 0, MAP_STONES_MAX);
     int flint = 0;
     for (int i = 0; i < stones && chance > 0; i++) {
         flint += rng_range_i32(rng, 0, 99) < chance;
     }
-    int cobbles = 0;
-    for (int i = flint; i < stones; i++) {
-        cobbles += rng_range_i32(rng, 1, COBBLE_RARITY) == 1;
+    flint = flint < FLINT_PER_TILE_MAX ? flint : FLINT_PER_TILE_MAX;
+    int cobble_count = 0;
+    for (int i = flint; i < stones && cobbles; i++) {
+        cobble_count += rng_range_i32(rng, 1, COBBLE_RARITY) == 1;
     }
-    map_set_stones(map, x, y, z, cobbles, flint);
+    map_set_stones(map, x, y, z, cobble_count, flint);
 }
 
 /* The sand along the water, up to this elevation above the water level, lies
@@ -1306,9 +1351,15 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
                 rng_next_float(&rng);
                 continue;
             }
-            if (terrain_def(terrain)->stony) {
-                float flint = stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
-                place_stones(map, x, y, z, &stone_rng, flint_chance(terrain, flint));
+            bool stony = terrain_def(terrain)->stony;
+            if (stony || terrain == TERRAIN_SAND) { /* (A sandy beach holds flint, no cobbles.) */
+                float noise = stretch(noise_fbm2d(flint_seed, nx * 3.0f, ny * 3.0f, 3, 2.0f, 0.5f));
+                float deposit = flint_deposit(heights, params->width, params->height, x, y,
+                                              surface_level, shores[column]);
+                int chance = flint_chance(terrain, deposit, noise);
+                if (stony || chance > 0) {
+                    place_stones(map, x, y, z, &stone_rng, chance, stony);
+                }
             }
             if (terrain == TERRAIN_ROUGH_STONE) {
                 if (params->flat) { /* Rock walls on the only level. */

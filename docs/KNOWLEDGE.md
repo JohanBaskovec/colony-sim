@@ -451,11 +451,20 @@ with its own use.
   stones *(tuning)*, cobbles and flint nodules, lying as items from the
   start, that never come back. They are hauled and used like any item: no
   gathering order is needed.
-- **Flint patches**: flint is only found on some tiles. World generation
-  marks them (a noise field, more on gravel and rough stone, rare on rich
-  soil): on a flint patch, each stone of a tile is flint with the patch's
-  share (up to 60%) *(tuning)*, a cobble otherwise; elsewhere only cobbles.
-  Later, flint comes with the geology (chalk and limestone, §13).
+- **Where flint lies**: flint nodules come out of chalk and limestone, and what the water and
+  the slopes carry off piles up where erosion gathers it: on the beaches and the banks of rivers
+  and lakes (shingle), on the alluvial terraces of the plains beside the water, and at the foot
+  of cliffs and steep slopes (scree). World generation (`flint_deposit()`) puts flint nowhere
+  else: a bank or a beach (within two tiles of open water) gathers the most, a terrace less
+  (fading over the next few tiles, on the low ground), the foot of a cliff (ground rising two
+  levels or more next to it) about half as much; a noise field makes patches of it within those
+  places, scaled by the ground (gravel, shingle and rough stone best, soil less, little under the
+  deep rich soil). On a patch each stone of a tile is flint with the patch's share (up to 40%)
+  *(tuning)*, at most three nodules a tile, a cobble otherwise (none on a sandy beach); a
+  seed's world holds about a quarter of what a patch field scattered anywhere gave. The
+  first settlers' flint patch near their arrival point (§4.1) is laid by the game
+  (`ensure_flint_near()`) when none lies within reach. Later, flint comes with the geology
+  (chalk and limestone, §13).
 - **Branches**: dead or cut branches, the main material of the start: fuel,
   walls, roofs, spears, digging sticks, torches. Quality = straightness.
 - **Twigs**: kindling to light a fire, quick fuel, filling for branch screens.

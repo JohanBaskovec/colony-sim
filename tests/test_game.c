@@ -969,6 +969,14 @@ static void test_items_in_hand_are_kept(void)
             map_set_terrain(&game.map, x, y, z, TERRAIN_SOIL);
         }
     }
+    /* Nothing else lies about for the haulers to take first (stones of the world). */
+    for (int y = cy - 32; y <= cy + 32; y++) {
+        for (int x = cx - 32; x <= cx + 32; x++) {
+            while (map_in_bounds(&game.map, x, y, z) && items_get(&game.items, x, y, z).count > 0) {
+                items_remove(&game.items, x, y, z, items_get(&game.items, x, y, z).count);
+            }
+        }
+    }
     REQUIRE(game_add_stockpile_rect(&game, cx - 1, cy - 1, cx + 1, cy + 1, z, STOCKPILE_NONE) !=
             STOCKPILE_NONE);
     /* Logs of two qualities, a little way off. */

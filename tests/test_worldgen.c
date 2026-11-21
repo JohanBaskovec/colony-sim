@@ -147,7 +147,7 @@ static void test_ground_layers(void)
     CHECK(clay * 20 > lens_columns && clay * 4 < lens_columns); /* About a fifth. */
 }
 
-/* Stones: none on sand or water, 0 to MAP_STONES_MAX on stony ground, with
+/* Stones: no cobbles on sand or water, 0 to MAP_STONES_MAX on stony ground, with
  * every count from 0 to the most turning up, and flint on some tiles only. */
 static void test_stones(void)
 {
@@ -165,7 +165,8 @@ static void test_stones(void)
                 Terrain type = (Terrain)map.terrain[map_index(&map, x, y, z)];
                 const TerrainDef *terrain = terrain_def(type);
                 if (!terrain->stony) {
-                    CHECK_EQ_INT(cobbles + flint, 0);
+                    CHECK_EQ_INT(cobbles, 0);
+                    CHECK(flint == 0 || type == TERRAIN_SAND); /* Shingle on a beach. */
                     continue;
                 }
                 CHECK(cobbles + flint <= MAP_STONES_MAX);
@@ -187,6 +188,69 @@ static void test_stones(void)
     CHECK(flint_tiles < tiles / 4);
     CHECK(!terrain_def(TERRAIN_SAND)->stony);
     CHECK(terrain_def(TERRAIN_GRAVEL)->stony);
+}
+
+/* Whether the ground of a column is water (a lake or the river), or the shallows of it. */
+static bool is_water_column(const Map *map, int x, int y)
+{
+    int z = map_ground_level(map, x, y);
+    /* Deep water fills its bed's level and wets the level above it. */
+    return map_water_depth_at(map, map_index(map, x, y, z)) > 0 ||
+           (z + 1 < map->depth && map_water_depth_at(map, map_index(map, x, y, z + 1)) > 0);
+}
+
+/* Flint lies where erosion gathers it: on beaches and banks, on the terraces beside the water,
+ * at the foot of higher ground; and not a lot of it. */
+static void test_flint_lies_where_erosion_gathers_it(void)
+{
+    long ground = 0, flint_tiles = 0, flint_total = 0, banks = 0, elsewhere = 0, footonly = 0;
+    for (uint64_t seed = 1; seed <= 6; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                int z = map_ground_level(&map, x, y);
+                ground++;
+                int flint = map_stones(&map, x, y, z, ITEM_FLINT);
+                if (flint == 0) {
+                    continue;
+                }
+                flint_tiles++;
+                flint_total += flint;
+                CHECK(flint <= 4);
+                int water = 99;
+                bool foot = false;
+                for (int dy = -10; dy <= 10; dy++) {
+                    for (int dx = -10; dx <= 10; dx++) {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) {
+                            continue;
+                        }
+                        int d = abs(dx) > abs(dy) ? abs(dx) : abs(dy);
+                        if (is_water_column(&map, nx, ny) && d < water) {
+                            water = d;
+                        }
+                        foot = foot || (d <= 3 && map_ground_level(&map, nx, ny) >= z + 2);
+                    }
+                }
+                if (water <= 2) {
+                    banks++;
+                } else if (foot) {
+                    footonly++;
+                }
+                if (water > 10 && !foot) {
+                    elsewhere++;
+                }
+            }
+        }
+        map_free(&map);
+    }
+    CHECK(flint_tiles > 0);
+    CHECK_EQ_INT((int)elsewhere, 0);      /* Nowhere else. */
+    CHECK(banks > 0 && footonly > 0);     /* Both the banks and the cliffs have some. */
+    CHECK(flint_tiles * 20 < ground);     /* Under a tile in 20 holds some. */
+    CHECK(flint_total < flint_tiles * 3); /* A few nodules a tile. */
 }
 
 /* Sanity check of the overall composition over several seeds. */
@@ -834,6 +898,7 @@ int main(void)
     RUN_TEST(test_ground_layers);
     RUN_TEST(test_the_water_table_at_the_lakes_level);
     RUN_TEST(test_stones);
+    RUN_TEST(test_flint_lies_where_erosion_gathers_it);
     RUN_TEST(test_relief);
     RUN_TEST(test_hill_height);
     RUN_TEST(test_lakes_at_rest);

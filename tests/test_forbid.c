@@ -817,8 +817,22 @@ static void test_what_falls_from_trees_lands_forbidden_far_away(void)
     CHECK(far_found > 0);
     CHECK_EQ_INT(wrong, 0);
     /* Not for the other drops: what a settler puts down far away stays allowed. */
-    items_drop(&game.items, &game.map, far_x, ay + 8, 0, item_stack_pristine(ITEM_COBBLE, 1));
-    CHECK(!items_forbidden(&game.items, far_x, ay + 8, 0));
+    ItemStack axe = item_stack_pristine(ITEM_HAND_AXE, 1); /* None lies about in a new world. */
+    REQUIRE(items_drop(&game.items, &game.map, far_x, ay + 8, 0, axe) == 1);
+    bool allowed = false, seen = false;
+    for (int y = ay + 4; y <= ay + 12; y++) {
+        for (int x = far_x - 4 > 0 ? far_x - 4 : 0; x <= far_x + 4 && x < 40; x++) {
+            for (const Item *item = items_first(&game.items, map_index(&game.map, x, y, 0));
+                 item != NULL; item = items_next(&game.items, item)) {
+                if (item->type == ITEM_HAND_AXE) {
+                    seen = true;
+                    allowed |= item->forbidden == 0;
+                }
+            }
+        }
+    }
+    CHECK(seen);
+    CHECK(allowed);
     game_shutdown(&game);
 }
 
