@@ -16,3 +16,7 @@ colony_configure_target(bench_vision)
 add_executable(bench_social bench_social.c)
 target_link_libraries(bench_social PRIVATE colony_core)
 colony_configure_target(bench_social)
+
+add_executable(bench_water bench_water.c)
+target_link_libraries(bench_water PRIVATE colony_core)
+colony_configure_target(bench_water)

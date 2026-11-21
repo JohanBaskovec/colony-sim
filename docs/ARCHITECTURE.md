@@ -88,6 +88,7 @@ simulation:
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths, the microclimate under the sky (sun, shade, evaporation, heat stored in the ground) |
 | `soil`       | The water in the ground of each tile (a bucket by terrain: rain and snowmelt, interception by crowns, drainage, evaporation and transpiration, banks near water), and what the microclimate needs from it (see `docs/CLIMATE.md`) |
+| `water`      | The flow of the free water (`Game.water`, docs/WATER.md §3): falling between levels and virtual pipes between tiles in 1/256 mm, only in active blocks of 16 × 16 tiles woken by the map's logs and asleep at rest; the class changes told to the map at most once a second |
 | `vision`     | Who sees what: sight in 3D through the map's volume (rock, walls and floors block it, no range limit), fields of view per settler, how many see each tile (see *Vision*) |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain, rainfall in mm, the air's dew point and relative humidity |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
@@ -275,8 +276,41 @@ stockpile goes in open water. `map_set_water()` keeps the revisions: a
 topology change when a tile becomes passable or not, or open water or not
 (drinking spots), and `water_revision` for the latter. The known world copies
 the layer like the others, and vision tracks the surface of water over a drop.
-Water does not move yet (W1 of docs/WATER.md): what world generation lays
-stays, but for rock placed over it (the water is gone).
+What world generation lays is at rest; rock placed over water takes its place
+(the water is gone).
+
+**The flow of water** (`core/water.h`, docs/WATER.md §3): `Game.water` steps
+every tick, first thing (so that the regions see the classes it changed in
+the same tick). Only **active blocks** of 16 × 16 tiles of a level are
+worked out, in the order of their numbers; a block holds the flows of the
+pipes east and south of its tiles and what the map was last told of their
+classes, and is freed when it falls asleep (nothing larger than a ripple
+moving for 60 steps). Blocks wake from the map's logs: `water_log` (new:
+water set from outside the flow, `map_set_water()` and rock), the topology
+and build logs (dug, built, a door kept open or shut), each waking the blocks
+around the change when water lies within a tile of it; a log overflowed or a
+change "anywhere" wakes every block holding water. Before each step an
+active block wakes the sleeping neighbours its water would reach (a flow
+larger than a ripple, water falling into the block below or from the one
+above), so that the flow never writes into a sleeping block. A step: water
+falls out of floorless tiles into the tile below as far as it has room; each
+pipe keeps 15/16 of its flow and gains a quarter of the difference of the
+surfaces; what leaves a tile is scaled down to what it holds (a pipe has a
+single source, so the order does not matter); the flows are applied, and a
+tile past full passes the rest up to an open tile above it. The flow works in
+1/256 mm (`WATER_FINE`): the millimetres stay in `Map.water`, the fraction of
+each tile in `Water.fine` (hashed once some is set); in whole millimetres
+water stopped on slopes of 3 mm a tile and a channel ended 12 cm below its
+lake. The flow writes `Map.water` itself: the passable and open-water changes
+of an active block's tiles are told to the map (`map_water_class_changed()`,
+topology log and `water_revision`) every 60 steps and when it falls asleep
+(instead of the hysteresis of the design), the walking cost following the
+depth at once; the topology log's entries the flow wrote itself wake
+nothing. `water_settle()` takes the water as it lies for water at rest
+(tests that lay a pond on a plain). The state hash is unchanged while all
+water is at rest. `bench_water` measures a dam opened, a pond spreading over
+a plain and a channel: about 4 µs a block a step, 1 ms a step for a whole
+256 × 256 level awake.
 
 **Relief** (`core/worldgen.h`): the elevation noise decides each column's
 ground level. The plains lie on `Map.surface_level` (`underground_levels`,

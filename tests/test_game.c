@@ -489,6 +489,7 @@ static void test_plants_do_not_spread_onto_parched_ground(void)
     for (int y = 25; y <= 35; y++) {
         map->plants[map_index(map, 22, y, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
     }
+    water_settle(&game.water, map); /* Water left on the new soil stays where it is. */
     const SoilDef *loam = soil_def(TERRAIN_SOIL);
     for (int day = 0; day < 20; day++) {
         for (int y = 20; y <= 40; y++) {

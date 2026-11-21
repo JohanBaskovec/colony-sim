@@ -668,6 +668,11 @@ bool game_init(Game *game, const NewGameParams *params)
     game_count_knowledge(game); /* Who knows what at the start: no notice for it. */
     /* Last: the light where the arrival's camp changed the map. */
     tile_light_refresh(&game->light, &game->map, game->clock.tick);
+    /* The water as laid lies at rest: the flow starts asleep everywhere. */
+    if (!water_init(&game->water, &game->map)) {
+        game_shutdown(game);
+        return false;
+    }
     return true;
 }
 
@@ -716,6 +721,7 @@ void game_shutdown(Game *game)
     game->fog_on = false;
     temperatures_free(&game->temperatures);
     soil_free(&game->soil);
+    water_free(&game->water);
     tile_light_free(&game->light);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
@@ -1740,6 +1746,36 @@ static void sync_known(Game *game)
     }
 }
 
+/* The water of the active blocks in view is copied into the known world every
+ * tick: the slices of sync_known() would show it flowing by jerks. */
+static void sync_known_water(Game *game)
+{
+    const Water *water = &game->water;
+    const Map *map = &game->map;
+    const uint64_t *seen = game->vision.seen_bits;
+    Map *known = &game->known.map;
+    for (uint32_t i = 0; i < water->active_count; i++) {
+        uint32_t number = water->active[i];
+        int bx = (int)(number % (uint32_t)water->blocks_x);
+        int by = (int)(number / (uint32_t)water->blocks_x % (uint32_t)water->blocks_y);
+        int z = (int)(number / (uint32_t)water->blocks_x / (uint32_t)water->blocks_y);
+        int x1 =
+            (bx + 1) * WATER_BLOCK_SIZE < map->width ? (bx + 1) * WATER_BLOCK_SIZE : map->width;
+        int y1 =
+            (by + 1) * WATER_BLOCK_SIZE < map->height ? (by + 1) * WATER_BLOCK_SIZE : map->height;
+        for (int y = by * WATER_BLOCK_SIZE; y < y1; y++) {
+            for (int x = bx * WATER_BLOCK_SIZE; x < x1; x++) {
+                size_t index = map_index(map, x, y, z);
+                if ((seen[index / 64] >> (index % 64) & 1u) != 0 &&
+                    known->water[index] != map->water[index]) {
+                    known->water[index] = map->water[index];
+                    known->water_revision++;
+                }
+            }
+        }
+    }
+}
+
 /* Puts every settler where it stands in the vision (fields are recast when it
  * moved or fell asleep), and takes away those who are gone or unconscious. */
 /* Doors somebody stands in are open for the light and the sight, the others
@@ -1817,6 +1853,7 @@ static void update_vision(Game *game)
     }
     if (game->fog_on) {
         sync_known(game);
+        sync_known_water(game);
         known_update_animals(&game->known, &game->animals, &game->vision, game->clock.tick);
     }
 }
@@ -2780,6 +2817,9 @@ void game_tick(Game *game)
     if (game->debug.instant_build) {
         finish_constructions_now(game);
     }
+    /* The water first: where it got deep or open is known to the regions at once.
+     * Out of memory, a step is not taken whole: the water waits. */
+    (void)water_step(&game->water, &game->map);
     regions_update(&game->regions, &game->map); /* Nothing to do unless the map changed. */
     /* Every tick for the bills that count it, else now and then. */
     if (game->clock.tick % GAME_STOCK_INTERVAL == 0 || stock_counted(game)) {
@@ -2957,6 +2997,7 @@ uint64_t game_hash(const Game *game)
     hash = hash_fnv1a64(hash, game->teach, sizeof(game->teach));
     hash = temperatures_hash(&game->temperatures, hash);
     hash = soil_hash(&game->soil, hash);
+    hash = water_hash(&game->water, hash); /* Nothing while the water lies at rest. */
     hash = weather_hash(&game->weather, hash);
     if (game->debug.instant_build || game->debug.free_crafts || game->debug.no_tools ||
         game->debug.instant_deconstruct) {

@@ -65,6 +65,7 @@ add_library(colony_core STATIC
     sun.c
     util.c
     vision.c
+    water.c
     weather.c
     work.c
     workstation.c

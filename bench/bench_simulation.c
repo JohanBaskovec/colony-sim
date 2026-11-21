@@ -256,7 +256,9 @@ int main(int argc, char **argv)
      * cut to them (perf report --time begin,end). */
     bool timestamps = getenv("BENCH_TIMESTAMPS") != NULL;
     bool check_items = getenv("BENCH_CHECK_ITEMS") != NULL;
-    long slow_ticks = 0; /* Ticks over one millisecond. */
+    long slow_ticks = 0;            /* Ticks over one millisecond. */
+    long water_ticks = 0;           /* Ticks with some water flowing. */
+    uint32_t water_most_blocks = 0; /* The most blocks of water awake at once. */
     double begin = now_seconds();
     double cpu_begin = cpu_seconds();
     for (long i = 0; i < ticks; i++) {
@@ -266,6 +268,12 @@ int main(int argc, char **argv)
         double elapsed = cpu_seconds() - tick_begin;
         double end = timestamps ? monotonic_seconds() : 0.0;
         times[i] = (TickTime){(long)game.clock.tick, elapsed, start, end};
+        if (game.water.active_count > 0) {
+            water_ticks++;
+            if (game.water.active_count > water_most_blocks) {
+                water_most_blocks = game.water.active_count;
+            }
+        }
         if (elapsed > 1e-3) {
             slow_ticks++;
         }
@@ -319,6 +327,9 @@ int main(int argc, char **argv)
            game.constructions.used_count,
            (int)map_tile_count(&game.map) - game.map.structure_counts[STRUCTURE_NONE]);
     printf("  connectivity regions rebuilt %u times\n", game.regions.rebuilds);
+    printf("  water: flowing %ld ticks, %u blocks awake at most, %llu woken, %llu times all\n",
+           water_ticks, water_most_blocks, (unsigned long long)game.water.wakes,
+           (unsigned long long)game.water.wake_alls);
     if (animals_slot_count(&game.animals) > 0) {
         print_animals(&game);
     }

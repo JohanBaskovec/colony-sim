@@ -492,6 +492,7 @@ static void test_drinking(void)
             map_set_water(&game.map, x, y, 0, WATER_DEEP_MM);
         }
     }
+    water_settle(&game.water, &game.map); /* A pond at rest, as if in a hollow. */
     deer->search_cooldown[ANIMAL_SEARCH_WATER] = 0;
     decide_now(deer);
     run(&game, 3);

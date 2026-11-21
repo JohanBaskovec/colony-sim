@@ -58,6 +58,7 @@ cmake --preset headless-release && cmake --build --preset headless-release  # op
 ./build/release/bench/bench_simulation 12 4 1 200 42 - fog-revealed  # the fog's own cost (`fog`: settlers also search in vain for what they have not found)
 ./build/release/bench/bench_simulation 12 4 1 200 42 - - wildlife   # with wild animals (none otherwise): their cost, and how they fare
 ./build/release/bench/bench_vision 200 100 1      # field of view: cost of a whole cast and of a near cast, tiles seen, ray steps
+./build/headless-release/bench/bench_water 256 5000  # water flow: a dam opened, a pond spreading over a plain, a channel (cost a step, blocks awake, water kept)
 ./build/release/bin/colony_sim --seed 42 --bench-render 300  # render benchmark: frame and drawing times of fixed views, no vsync, then quits
 ./build/release/bin/colony_sim --no-vsync           # uncapped frame rate; F3 also shows the drawing time per frame
 cmake --preset profile && cmake --build --preset profile  # optimized + debug symbols + frame pointers, for perf

@@ -91,13 +91,17 @@ static int run_until_done(Game *game, int x, int y, int max_ticks)
 }
 
 /* Turns every column from `x0` to the right edge into shallow water. */
-static void add_water_band(Map *map, int x0)
+/* Shallows from x0 to the east edge, lying at rest as if in a hollow (on the
+ * flat plain they would spread). */
+static void add_water_band(Game *game, int x0)
 {
+    Map *map = &game->map;
     for (int y = 0; y < map->height; y++) {
         for (int x = x0; x < map->width; x++) {
             map_set_water(map, x, y, 0, WATER_SHALLOWS_MM);
         }
     }
+    water_settle(&game->water, map);
 }
 
 /* Owner of the work reservation on a tile (RESERVATION_NO_OWNER if free). */
@@ -288,7 +292,7 @@ static void test_thirsty_colonist_walks_to_shore_and_drinks(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_water_band(&game.map, 30);
+    add_water_band(&game, 30);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_WATER] = 0.2f;
@@ -345,7 +349,7 @@ static void test_thirsty_colonist_without_water_retries_later(void)
 
     /* Water becomes reachable: the next search succeeds and resets the backoff. */
     set_rock_ring(&game.map, 20, 20, ROCK_NONE);
-    add_water_band(&game.map, 40);
+    add_water_band(&game, 40);
     colonist->needs[NEED_WATER] = 0.2f;
     run_ticks(&game, colonist->search_cooldown[SEARCH_WATER]);
     CHECK_EQ_INT(colonist->task, TASK_DRINK);
@@ -358,7 +362,7 @@ static void test_most_urgent_need_first(void)
     for (int thirstier = 0; thirstier <= 1; thirstier++) {
         Game game;
         REQUIRE(init_flat_game(&game));
-        add_water_band(&game.map, 30);
+        add_water_band(&game, 30);
         add_bramble(&game.map, 10, 20);
         Colonist *colonist = spawn_rested(&game, 20, 20);
         REQUIRE(colonist != NULL);
@@ -389,7 +393,7 @@ static void test_severe_thirst_wakes_sleeping_colonist(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_water_band(&game.map, 30);
+    add_water_band(&game, 30);
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
     colonist->needs[NEED_REST] = 0.2f;
@@ -441,7 +445,7 @@ static void test_colonists_drink_before_sleeping(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_water_band(&game.map, 30);
+    add_water_band(&game, 30);
     game.clock.tick = TODAY + 23 * TICKS_PER_HOUR;
     Colonist *colonist = spawn_rested(&game, 20, 20);
     REQUIRE(colonist != NULL);
@@ -1485,7 +1489,7 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game));
-    add_water_band(&game.map, 44);
+    add_water_band(&game, 44);
     for (int y = 4; y < 44; y += 3) {
         add_bramble(&game.map, 10, y);
         add_bramble(&game.map, 30, y);
@@ -1816,6 +1820,7 @@ static void test_no_search_when_region_has_no_water(void)
     /* Water appears within reach: found at the next attempt. */
     map_set_rock(&game.map, 21, 20, 0, ROCK_NONE);
     map_set_water(&game.map, 21, 20, 0, WATER_SHALLOWS_MM);
+    water_settle(&game.water, &game.map); /* A spring's pool, not water spreading. */
     colonist->search_cooldown[SEARCH_WATER] = 0;
     game_tick(&game);
     CHECK_EQ_INT(colonist->task, TASK_DRINK);

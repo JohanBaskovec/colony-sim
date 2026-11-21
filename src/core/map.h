@@ -388,6 +388,8 @@ typedef enum PlantStatus {
 /* How many recent structure and roof changes the map remembers (see
  * Map.build_log). */
 #define MAP_BUILD_LOG_SIZE 16
+/* How many recent changes of water the map remembers (see Map.water_log). */
+#define MAP_WATER_LOG_SIZE 64
 
 /* How many recent felled trees the map remembers (see Map.tree_fall_log). */
 #define MAP_TREE_FALL_LOG_SIZE 16
@@ -550,6 +552,12 @@ typedef struct Map {
     uint8_t bare;
     /* The change that led to revision r is at index r % MAP_TOPOLOGY_LOG_SIZE. */
     MapTopologyChange topology_log[MAP_TOPOLOGY_LOG_SIZE];
+    /* Incremented whenever map_set_water() (or rock taking a tile's place)
+     * changes the water of a tile from outside the flow (core/water.h wakes the
+     * water around it); change r is at index r % MAP_WATER_LOG_SIZE. Not part
+     * of map_hash(). */
+    uint32_t water_log_revision;
+    TilePos water_log[MAP_WATER_LOG_SIZE];
     /* Incremented whenever a tree is felled: who stood where it came down is
      * the game's business. Fall number r is at index r % MAP_TREE_FALL_LOG_SIZE.
      * Not part of map_hash(). */
@@ -1194,6 +1202,12 @@ WaterClass map_water_class(const Map *map, int x, int y, int z);
  * rock), keeping the revisions up to date: where one can walk, where open
  * water is. */
 void map_set_water(Map *map, int x, int y, int z, int mm);
+/* For the flow (core/water.h), which writes Map.water itself and tells the
+ * map afterwards, as map_set_water() would: a tile became passable or stopped
+ * being it (`opened`: it became passable), became open water or stopped
+ * being it. */
+void map_water_class_changed(Map *map, int x, int y, int z, bool passable_changed, bool opened,
+                             bool water_changed);
 
 /* Open water: Shallows or deeper (false out of bounds). */
 bool map_is_water(const Map *map, int x, int y, int z);

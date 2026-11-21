@@ -14,8 +14,9 @@ coming out again (a water table, springs, wells, damp galleries); and a
 moisture of their own for items (grass that dries into hay, wood that
 seasons, a bundle of twigs that gets soaked in the rain).
 
-Status: steps W1 (the water layer at rest) and W1b (the moisture of
-items, §7) are built (§10); the rest is design. Values marked *(tuning)*
+Status: steps W1 (the water layer at rest), W1b (the moisture of
+items, §7) and W2 (the surface flow, §3, as built in §3.7) are built (§10);
+the rest is design. Values marked *(tuning)*
 are first guesses.
 
 ## 1. Principles
@@ -102,9 +103,10 @@ depth wavering at a boundary does not change the paths every tick
 drink, what the temperature counts as open water, what the banks of the soil
 look for until step W4 replaces them (§5.4). From W3, when rain leaves
 puddles, puddles can be drunk too (a thirsty settler in a storm), but
-searches for water prefer the Shallows *(tuning)*. The hysteresis of the
-classes comes with W2: in W1 water does not move, so the classes are worked
-out from the depth alone.
+searches for water prefer the Shallows *(tuning)*. As built (W2, §3.7),
+there is no hysteresis: the classes are worked out from the depth alone,
+and the flow tells the map of the changes at most once every
+`WATER_CLASS_MIN_TICKS` steps instead.
 
 The classes and the walking costs are the only things the pathfinder and
 the connectivity regions see. `Map.topology_revision` is bumped only when a
@@ -233,6 +235,56 @@ the change is larger than a film (a puddle drying does not need the flow).
   No path ever goes into Deep water.
 - Searches for water (thirst, animals) look for Shallows or deeper, then for
   Puddles, as they look for water tiles today.
+
+### 3.7 As built (W2), and what is left
+
+`core/water.c`, `Game.water`, stepped first thing every tick. What differs
+from the design above:
+
+- **Fine units.** The flow works in 1/256 mm (`WATER_FINE`): the
+  millimetres stay in `Map.water`, the fraction of each tile is kept by the
+  flow (`Water.fine`). In whole millimetres the gain of a pipe is 0 below a
+  difference of 4 mm, so water stopped on slopes of 3 mm a tile: a channel
+  of 40 tiles ended 12 cm below its lake. The pipes are `int32_t`.
+- **Rest.** A block falls asleep after 60 steps in which no pipe carried
+  and no tile changed by more than `WATER_QUIET_FLOW` (1/16 mm); a sleeping
+  neighbour is woken only for a flow larger than that (else two blocks at
+  rest would wake each other in turn).
+- **Waking.** From the map's logs: a new `Map.water_log` (water set from
+  outside the flow), the topology log and the build log, each change waking
+  the blocks around it when water lies within a tile. A log overflowed in a
+  tick, or a change "anywhere" (`map_topology_changed()`), wakes every block
+  holding water: the lakes as laid then fall asleep again without a
+  millimetre moved. An active block wakes the sleeping blocks its water
+  would reach before each step, so the flow never writes into a sleeping
+  one.
+- **Classes.** No hysteresis (§2.3): each active block remembers what the
+  map was told of its tiles (passable, open water) and tells it of the
+  changes every `WATER_CLASS_MIN_TICKS` steps and when it falls asleep
+  (`map_water_class_changed()`); the walking cost follows the depth at
+  once. The topology log's entries the flow wrote wake nothing.
+- **Past full.** A tile past `WATER_CELL_FULL` (a wave, inflow into a full
+  tile) passes the rest to the open tile above it, else keeps it until it
+  flows away. A wave reaching the brim of a pit may so splash onto the
+  level above.
+- **Slopes** are flat floors: water does not run down a ramp to the level
+  below (follow-up).
+- **Beings.** No path goes into Deep water; one may start from it (the
+  pathfinder does not check the tile it starts on), and an idle settler on a
+  tile turning Deep steps to a free neighbour (`step_out_of_blocked_tile()`).
+  Further out of a flood waits for swimming (W6); animals do not step out.
+- **Water laid by hand.** `water_settle()` takes the water as it lies for
+  water at rest: tests that put a pond on a plain without banks.
+- **Cost** (`bench_water`, 256 × 256): about 4 µs a block a step, so 1 ms a
+  step for a whole level awake (a dam opened: a lake 1.5 m deep over half
+  the map pouring through a 16-tile breach, still levelling after 20 000
+  steps; a pond spreading over the plain, at rest after 2 400). Lakes at
+  rest cost nothing: `bench_simulation` is unchanged in cost and state hash.
+  Water levels slowly through a narrow breach or a long channel (the flow
+  stays near the difference of the surfaces); fine for now.
+
+Left: slopes; walking out of a wide flood; waking only around the changes of
+an overflowed log; batching far blocks if floods cost too much (§9).
 
 ## 4. Where water comes from and where it goes
 
@@ -651,10 +703,10 @@ disappeared (no saves yet).
 
 ## 9. Open questions
 
-- The cost of a flood across the whole plains of a 256 × 256 map: tens of
-  thousands of active cells. Measure at W2 and decide between a step every
-  tick and every second tick, and whether blocks far from view can step
-  less often (they must keep the same results: same steps, only batched).
+- The cost of a flood across the whole plains of a 256 × 256 map: measured
+  at W2, 1 ms a step for a whole level awake (§3.7): a step every tick for
+  now. Whether blocks far from view can step less often (they must keep the
+  same results: same steps, only batched) if real floods prove costly.
 - Whether the hourly ground-water pass needs to look at every column, or
   only those that changed (W4 measure).
 
@@ -683,7 +735,7 @@ Each step is tested, measured against the baseline (`bench_simulation`,
    the tinted sprites. `ITEM_FRESH_GRASS` and `ITEM_WET_TWIGS` go. Tests:
    grass drying into hay in the sun and not on wet ground, twigs soaked in
    the rain, tinder refused when wet, the weight.
-3. **W2, surface flow.** §3: falling, the pipes, films, slopes, active
+3. **W2, surface flow** (built, §3.7). §3: falling, the pipes, films, slopes, active
    blocks, rest, the class changes logged with their minimum time, a being
    walking out of rising water. The debug tools to pour and empty water.
    Tests: mass kept, determinism, a channel dug from a lake filling it to

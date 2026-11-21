@@ -241,6 +241,40 @@ static void test_remembers_what_was_last_seen(void)
     game_shutdown(&game);
 }
 
+/* Water flowing in view is shown as it flows, not by the slices the rest of
+ * the view is copied in. */
+static void test_flowing_water_shows_at_once(void)
+{
+    Game game;
+    REQUIRE(walled_plain(&game));
+    int z = game.map.surface_level;
+    EntityId id = game_spawn_colonist(&game, 20, 30, z);
+    REQUIRE(game_colonist(&game, id) != NULL);
+    REQUIRE(game_set_fog(&game, true));
+    for (int i = 0; i < 5; i++) {
+        game_tick(&game);
+    }
+    REQUIRE(game_debug_pour_water(&game, 24, 30, z, 2000) == 2000);
+    int differing = 0, seen = 0;
+    for (int i = 0; i < 40; i++) {
+        game_tick(&game);
+        for (int y = 26; y <= 34; y++) {
+            for (int x = 21; x <= 28; x++) {
+                if (!game_tile_seen(&game, x, y, z)) {
+                    continue;
+                }
+                size_t index = map_index(&game.map, x, y, z);
+                seen++;
+                differing += game.known.map.water[index] != game.map.water[index];
+            }
+        }
+    }
+    CHECK(seen > 0);
+    CHECK_EQ_INT(differing, 0);
+    CHECK(map_water(&game.known.map, 26, 30, z) > 0); /* It reached there. */
+    game_shutdown(&game);
+}
+
 /* An item selected follows its tile in and out of view: the picture of it
  * out of view (as last seen, even once taken), the real one in view. */
 static void test_picked_item_follows_the_view(void)
@@ -805,5 +839,6 @@ int main(void)
     RUN_TEST(test_reveal_map);
     RUN_TEST(test_fog_off_sees_everything);
     RUN_TEST(test_remembers_what_hangs_in_the_crowns);
+    RUN_TEST(test_flowing_water_shows_at_once);
     return test_summary();
 }

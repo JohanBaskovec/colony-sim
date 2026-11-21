@@ -66,6 +66,7 @@ set(COLONY_UNIT_TESTS
     test_tool
     test_tree
     test_util
+    test_water
     test_weather
     test_structures
     test_sun

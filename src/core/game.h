@@ -37,6 +37,7 @@
 #include "core/temperature.h"
 #include "core/tile_light.h"
 #include "core/vision.h"
+#include "core/water.h"
 #include "core/weather.h"
 #include "core/workstation.h"
 #include "core/worldgen.h"
@@ -165,6 +166,7 @@ typedef struct Game {
     Regions regions;
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
     Soil soil;                 /* Water in the ground of each tile (docs/CLIMATE.md). */
+    Water water; /* The flow of the free water (docs/WATER.md §3), stepped every tick. */
     TileLight
         light; /* Sky, sun and sun hours of each tile (docs/SHADOWS.md §5): read by nobody yet. */
     /* Who sees what (core/vision.h): derived from the map and where the

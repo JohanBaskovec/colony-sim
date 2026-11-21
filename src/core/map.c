@@ -1361,6 +1361,13 @@ static void log_topology_change(Map *map, int x, int y, int z, bool opened)
         (MapTopologyChange){(int16_t)x, (int16_t)y, (int16_t)z, opened, false};
 }
 
+static void log_water_change(Map *map, int x, int y, int z)
+{
+    map->water_log_revision++;
+    map->water_log[map->water_log_revision % MAP_WATER_LOG_SIZE] =
+        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z};
+}
+
 static void log_build_change(Map *map, int x, int y, int z)
 {
     map->build_revision++;
@@ -1530,6 +1537,7 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     if (rock != ROCK_NONE && map->water[index] != 0) {
         map->water[index] = 0; /* Free water holds no room in rock (until docs/WATER.md W4). */
         map->water_revision++;
+        log_water_change(map, x, y, z);
     }
     if (old_rock != rock) {
         map_light_changed(map, x, y);
@@ -2847,6 +2855,7 @@ void map_set_water(Map *map, int x, int y, int z, int mm)
         water[i] = map_is_water_at(map, at);
     }
     map->water[index] = (uint16_t)mm;
+    log_water_change(map, x, y, z);
     bool water_changed = false;
     for (int i = 0; i < levels; i++) {
         size_t at = map_index(map, x, y, z - i);
@@ -2858,6 +2867,19 @@ void map_set_water(Map *map, int x, int y, int z, int mm)
             log_topology_change(map, x, y, z - i, false); /* Drinking spots around. */
         }
         water_changed |= now_water != water[i];
+    }
+    if (water_changed) {
+        map->water_revision++;
+    }
+}
+
+void map_water_class_changed(Map *map, int x, int y, int z, bool passable_changed, bool opened,
+                             bool water_changed)
+{
+    if (passable_changed) {
+        log_topology_change(map, x, y, z, opened);
+    } else if (water_changed) {
+        log_topology_change(map, x, y, z, false); /* Drinking spots around. */
     }
     if (water_changed) {
         map->water_revision++;
