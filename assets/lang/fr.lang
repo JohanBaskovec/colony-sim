@@ -369,6 +369,7 @@ weather.cloudy = Nuageux
 weather.fog = Brouillard
 weather.rain = Pluie
 weather.storm = Orage
+weather.downpour = Averse torrentielle
 weather.snow = Neige
 weather.snowstorm = Tempête de neige
 

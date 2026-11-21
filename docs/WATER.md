@@ -221,6 +221,33 @@ Worked out once an hour per tile, in slices with the soil (`soil_update()`):
 Changing a cell's water from these hourly passes wakes its block only when
 the change is larger than a film (a puddle drying does not need the flow).
 
+**As built (W3a).** `soil_update()` takes the flow (`Water`) and gives or
+takes free water with `water_exchange()`, in fine units (rounded to the
+nearest 1/256 mm, no dither):
+
+- On rooting ground, the rain, the snowmelt and the free water lying there
+  soak in up to the intake and the room left below saturation; frozen ground
+  (below 0 °C) takes nothing. The free water left evaporates first; the
+  ground under it then dries no more that hour.
+- Foliage lets the rain through to the ground under the crown. A roof sheds
+  its rain over the eaves (not followed). Rough stone drinks up to
+  `SOIL_CRACK_INTAKE` (1.5 mm an hour) into its cracks, down to deep ground
+  (not followed until W4), when not frozen: a storm soaks away, a downpour
+  runs off. Without the cracks, the rain of a storm lay on every outcrop and
+  ran off it, keeping hundreds of blocks awake (105 µs a tick instead of 27
+  in `bench_simulation 12 4 1`).
+- Open water (a lake on its bed of silt) takes the rain on its surface tile
+  (`water_surface_index()`: up the column of full tiles) and loses what
+  evaporates; a pond on rooting ground other than silt also soaks into it.
+- **Waking.** An exchange wakes its block only when it sets the water
+  moving: the water would fall through its tile, or flow to or from a
+  neighbour by a film's difference at least, after the exchange and not
+  before. Rain falling alike everywhere moves nothing; water asleep beside
+  lower ground (a pond laid on a plain, a lake on the level of its banks)
+  stays held as it was. The flow's own class reports do not wake it.
+- Without the flow (`NULL`), the soil behaves as before W3a: what it does
+  not take is lost.
+
 ### 3.6 Paths, regions and searches
 
 - The pathfinder reads the class of a tile's water (§2.3) for its cost and
@@ -284,7 +311,11 @@ from the design above:
   stays near the difference of the surfaces); fine for now.
 
 Left: slopes; walking out of a wide flood; waking only around the changes of
-an overflowed log; batching far blocks if floods cost too much (§9).
+an overflowed log; batching far blocks if floods cost too much (§9). Lakes
+of a flat world lie on the level of their banks, and their deep water
+(`WORLDGEN_FLAT_DEEP_MM`) beside their shallows: nothing holds them once
+woken (a tree growing on the shore is enough), and they spread over the
+plain and soak into it within days. They need a hollow (§9).
 
 ## 4. Where water comes from and where it goes
 
@@ -335,12 +366,20 @@ banks (step W5).
   saturation, as today. **What is left is free water on the tile** instead
   of being lost. On rock and on frozen ground, all of it.
 - Rain on open water adds to it.
-- Rain today is gentle (0.25 mm an hour, storms 1.2), below every soil's
-  intake. It never floods anything. Storms get an intensity of their own
-  (step W3), drawn per period: most of them 1 to 3 mm an hour, now and then
-  a **downpour** of 10 to 30 mm an hour for one to three hours, more often in
+- Rain was gentle (0.25 mm an hour, storms 1.2), below every soil's
+  intake. It never flooded anything. Storms get an intensity of their own,
+  drawn per period: most of them 1 to 3 mm an hour, now and then a
+  **downpour** of 10 to 30 mm an hour for one to three hours, more often in
   summer *(tuning)*. The rain of a season stays about what it is (the soil
   was tuned on it): the other rains get a little lighter.
+- *As built (W3a):* rain 0.22 mm an hour; a storm 0.5 to 1.1 mm an hour,
+  drawn per period (`weather_storm_rain()`); a downpour in 6 % of the storms
+  of spring and autumn, 10 % in summer, 2 % in winter, of 10 to 20 mm an
+  hour for 1 to 3 hours of the storm (`weather_downpour()`, named
+  *Downpour* in the weather shown). What falls in a season stays within
+  15 % of what it was (`test_season_rain_is_kept`). Lakes keep about their
+  level over two years without inflow: about 40 mm lower each summer, most
+  of it back by the end of autumn (−25 mm a year at seed 42).
 - A downpour on soaked ground fills the hollows. Water runs down the hills
   in sheets that gather in the valleys and into dug cellars and galleries
   whose openings face uphill.
@@ -709,6 +748,10 @@ disappeared (no saves yet).
   same results: same steps, only batched) if real floods prove costly.
 - Whether the hourly ground-water pass needs to look at every column, or
   only those that changed (W4 measure).
+- How the lakes of a flat world are held (§3.7): the flat world given a
+  level under its ground for its lakes (as the hilly worlds' hollows), or
+  beds of silt lying a lake's depth under the floors around them (a sunk
+  floor the flow would know of).
 
 ## 10. Steps
 
@@ -744,12 +787,17 @@ Each step is tested, measured against the baseline (`bench_simulation`,
    a waterfall. A benchmark (`bench_water`: a dam opened, a channel, a
    flooded plain) and `bench_simulation` unchanged in cost with lakes at
    rest.
-4. **W3, where water comes from.** §4: the edges, rain beyond the
-   soil's intake as free water, evaporation, soaking in, storms of
-   various intensity and downpours, snowmelt running off, the river laid by
-   world generation (a New game option) with its discharge and its floods.
-   Tests: the river's steady flow, a downpour filling a hollow and the
-   hollow drying in the sun, a flood spilling over the banks.
+4. **W3, where water comes from.** §4, in three steps:
+   - **W3a, exchanges (done).** Rain beyond the soil's intake as free
+     water, evaporation, soaking in, frozen ground, cracks in rough stone,
+     storms of various intensity and downpours, snowmelt running off (§3.5,
+     §4.3). Tests: a downpour lying on the ground and soaking in the hour
+     after, frozen ground, puddles on stone drying, rain on lakes and ponds,
+     exchanges waking only water they set moving, a season's rain kept.
+   - **W3b, the edges** (§4.1).
+   - **W3c, the river** laid by world generation (a New game option) with
+     its discharge and its floods. Tests: the river's steady flow, a flood
+     spilling over the banks.
 5. **W4, water in the ground.** §5: the pore water of every block, the
    new layers (sand, gravel, clay), the water table laid by world
    generation, drainage and Darcy flow, seepage, the root zone draining into

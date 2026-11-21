@@ -307,7 +307,46 @@ static uint8_t foliage_evaporation(const Soil *soil, const Map *map, size_t inde
     return (uint8_t)lroundf(clampf(share, 0.0f, 1.0f) * 255.0f);
 }
 
-void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const SoilHour *hour,
+/* 1/WATER_FINE mm of `mm`. */
+static int32_t fine_of(float mm)
+{
+    return (int32_t)lroundf(mm * (float)WATER_FINE);
+}
+
+/* Free water on a floor that is not rooting ground, or on open water: it
+ * gets the rain and snowmelt and loses what evaporates (docs/WATER.md §3.5);
+ * on a bed of rooting ground other than silt (a pond after a downpour, not
+ * a lake), the ground under it also soaks it in, rough stone some into its
+ * cracks. A roof sheds its rain over the eaves (not followed). */
+static void free_water_hour(Soil *soil, Map *map, Water *water, size_t index, const SoilHour *hour,
+                            float input, bool covered, float sun, const float *temperature)
+{
+    size_t top = water_surface_index(map, index);
+    float held = water_mm_at(water, map, top);
+    float change = input;
+    const SoilDef *bed = soil_def((Terrain)map->terrain[index]);
+    bool frozen = temperature != NULL && temperature[index] < 0.0f;
+    if (map->terrain[index] == TERRAIN_GRASS_ROOF) {
+        change = 0.0f;
+    } else if (top == index && map->terrain[index] == TERRAIN_ROUGH_STONE && !frozen) {
+        change -= fminf(SOIL_CRACK_INTAKE, held + input);
+    } else if (top == index && bed != NULL && map->terrain[index] != TERRAIN_SILT && !frozen) {
+        float ground = soil->water[index] != 0.0f ? soil->water[index] : bed->capacity;
+        float taken =
+            fminf(fminf(bed->intake, fmaxf(bed->saturation - ground, 0.0f)), held + input);
+        ground += taken;
+        if (ground > bed->capacity) {
+            ground -= (ground - bed->capacity) * bed->drainage;
+        }
+        soil->water[index] = ground;
+        change -= taken;
+    }
+    float exposure = covered ? SOIL_COVERED_EVAPORATION : sun;
+    change -= fminf(hour->pet * exposure, fmaxf(held + change, 0.0f));
+    water_exchange(water, map, top, fine_of(change));
+}
+
+void soil_update(Soil *soil, Map *map, Water *flow, size_t first, size_t last, const SoilHour *hour,
                  const float *temperature)
 {
     if (soil->water == NULL || soil->width != map->width || soil->height != map->height ||
@@ -331,14 +370,23 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
         float sun = (float)soil->sun[i] * (1.0f / 255.0f);
         const SoilDef *def = tile_def(map, i);
         Terrain terrain = (Terrain)map->terrain[i];
+        /* Rain through the crowns, and snowmelt. */
+        float input =
+            covered
+                ? 0.0f
+                : hour->rain * (SOIL_THROUGHFALL_DENSE + (1.0f - SOIL_THROUGHFALL_DENSE) * canopy) +
+                      hour->melt;
         if (def == NULL) {
             /* Water turns all its sun into vapour, foliage what its roots
              * draw; stone and roofs none. */
-            bool water = map_is_water_at(map, i);
+            bool open_water = map_is_water_at(map, i);
             if (terrain_is_foliage(terrain)) {
                 soil->evap[i] = foliage_evaporation(soil, map, i);
-            } else {
-                soil->evap[i] = water ? 255 : 0;
+                continue; /* The rain goes through to the ground. */
+            }
+            soil->evap[i] = open_water ? 255 : 0;
+            if (flow != NULL) {
+                free_water_hour(soil, map, flow, i, hour, input, covered, sun, temperature);
             }
             continue;
         }
@@ -347,14 +395,16 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
             water = def->capacity; /* Ground opened since: as damp as fresh earth. */
         }
 
-        /* Rain through the crowns, and snowmelt. */
-        if (!covered) {
-            float input =
-                hour->rain * (SOIL_THROUGHFALL_DENSE + (1.0f - SOIL_THROUGHFALL_DENSE) * canopy) +
-                hour->melt;
-            input = fminf(input, def->intake);
-            water += fminf(input, fmaxf(def->saturation - water, 0.0f));
-        }
+        /* The rain and snowmelt, and the free water lying on it, soak in up
+         * to what the ground takes in an hour and has room for; frozen ground
+         * takes nothing. Without the flow (`flow` NULL) what is left is lost;
+         * with it, it lies on the tile as free water (docs/WATER.md §3.5). */
+        float free = flow != NULL ? water_mm_at(flow, map, i) : 0.0f;
+        bool frozen = flow != NULL && temperature != NULL && temperature[i] < 0.0f;
+        float room = frozen ? 0.0f : fminf(def->intake, fmaxf(def->saturation - water, 0.0f));
+        float soaked = fminf(input + free, room);
+        water += soaked;
+        float left = input + free - soaked; /* Free water after soaking in. */
         /* Drainage above field capacity, down to the water table near open
          * water, which draws the ground up towards it. */
         float target = soil_bank_target(def, soil->wet[i]);
@@ -365,9 +415,15 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
         if (water < target) {
             water += (target - water) * SOIL_BANK_RATE;
         }
+        /* Free water evaporates first; the ground under it does not. */
+        float puddle_lost = 0.0f;
+        if (left > 0.0f) {
+            puddle_lost = fminf(left, hour->pet * (covered ? SOIL_COVERED_EVAPORATION : sun));
+            left -= puddle_lost;
+        }
         /* Evaporation and transpiration. */
         float drawn = open_to_dry(def, water);
-        float top = fminf(1.0f, water / def->capacity);
+        float top = left > 0.0f ? 0.0f : fminf(1.0f, water / def->capacity);
         float lost;
         if (covered) {
             lost = hour->pet * SOIL_COVERED_EVAPORATION * top * top;
@@ -382,6 +438,10 @@ void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const So
         }
         lost = fminf(lost, 0.9f * water); /* Never quite dry: 0 means not followed. */
         water -= lost;
+        if (flow != NULL) {
+            water_exchange(flow, map, i, fine_of(input - soaked - puddle_lost));
+        }
+        lost += puddle_lost; /* For the share of the sun turned into vapour. */
         /* Dew on cold open ground at night. */
         if (!covered && hour->night && temperature != NULL && temperature[i] < hour->dew_point) {
             water += SOIL_DEW_MM;

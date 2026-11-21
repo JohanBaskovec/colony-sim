@@ -15,10 +15,10 @@ static void flat_map(Map *map, int depth)
 }
 
 /* `hours` of the same weather over the whole map. */
-static void run_hours(Soil *soil, const Map *map, const SoilHour *hour, int hours)
+static void run_hours(Soil *soil, Map *map, const SoilHour *hour, int hours)
 {
     for (int h = 0; h < hours; h++) {
-        soil_update(soil, map, 0, map_level_tile_count(map), hour, NULL);
+        soil_update(soil, map, NULL, 0, map_level_tile_count(map), hour, NULL);
     }
 }
 
@@ -237,10 +237,10 @@ static void test_dew_at_night(void)
         cold[i] = 2.0f;
     }
     SoilHour night = {.night = true, .dew_point = 4.0f};
-    soil_update(&soil, &map, 0, map_level_tile_count(&map), &night, cold);
+    soil_update(&soil, &map, NULL, 0, map_level_tile_count(&map), &night, cold);
     CHECK_NEAR(water_at(&soil, &map, 5, 5) - soil_def(TERRAIN_SOIL)->wilting, SOIL_DEW_MM, 1e-5);
     night.dew_point = 0.0f;
-    soil_update(&soil, &map, 0, map_level_tile_count(&map), &night, cold);
+    soil_update(&soil, &map, NULL, 0, map_level_tile_count(&map), &night, cold);
     CHECK_NEAR(water_at(&soil, &map, 5, 5) - soil_def(TERRAIN_SOIL)->wilting, SOIL_DEW_MM, 1e-5);
     free(cold);
     soil_free(&soil);
@@ -266,7 +266,7 @@ static void test_crowns_transpire_from_the_ground(void)
     SoilHour sun = {.pet = 0.5f, .look_up = true};
     size_t count = map_tile_count(&map);
     size_t crown = map_index(&map, 4, 4, 2), edge = map_index(&map, 10, 10, 2);
-    soil_update(&soil, &map, 0, count, &sun, NULL);
+    soil_update(&soil, &map, NULL, 0, count, &sun, NULL);
     CHECK(soil.canopy[crown] == 255); /* Nothing over the top of the crown. */
     CHECK(soil.evap[crown] > 240);
     CHECK(soil.evap[edge] > 240);
@@ -277,7 +277,7 @@ static void test_crowns_transpire_from_the_ground(void)
             soil.water[map_index(&map, x, y, 0)] = loam->wilting;
         }
     }
-    soil_update(&soil, &map, 0, count, &sun, NULL);
+    soil_update(&soil, &map, NULL, 0, count, &sun, NULL);
     CHECK(soil.evap[crown] < 10);
     CHECK(soil.evap[edge] < 10);
     /* Moist again but the crown bare: it no longer transpires, its sun goes
@@ -288,7 +288,7 @@ static void test_crowns_transpire_from_the_ground(void)
         }
     }
     map_set_bare(&map, MAP_BARE_STEPS);
-    soil_update(&soil, &map, 0, count, &sun, NULL);
+    soil_update(&soil, &map, NULL, 0, count, &sun, NULL);
     uint8_t ground = soil.evap[map_index(&map, 10, 10, 0)];
     CHECK(ground < 200);
     CHECK(abs((int)soil.evap[edge] - (int)ground) <= 1);
@@ -362,6 +362,156 @@ static void test_moisture_in_words(void)
     map_free(&map);
 }
 
+/* Hours of the same weather with the flow of free water (not stepped: only
+ * what the ground and the air exchange with it). */
+static void run_flow_hours(Soil *soil, Map *map, Water *water, const SoilHour *hour, int hours,
+                           const float *temperature)
+{
+    for (int h = 0; h < hours; h++) {
+        soil_update(soil, map, water, 0, map_tile_count(map), hour, temperature);
+    }
+}
+
+/* A downpour gives the ground what it takes in an hour; the rest lies on it,
+ * and soaks in the hour after. */
+static void test_downpour_lies_on_the_ground(void)
+{
+    Map map;
+    flat_map(&map, 2);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 1.0f));
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    const SoilDef *loam = soil_def(TERRAIN_SOIL);
+    size_t i = map_index(&map, 8, 8, 0);
+    SoilHour downpour = {.rain = 20.0f};
+    /* Without the flow, what the ground does not take is lost, as before. */
+    Soil alone;
+    REQUIRE(soil_init(&alone, &map, 1.0f));
+    soil_update(&alone, &map, NULL, 0, map_tile_count(&map), &downpour, NULL);
+    CHECK_EQ_INT(map_water(&map, 8, 8, 0), 0);
+    run_flow_hours(&soil, &map, &water, &downpour, 1, NULL);
+    CHECK_NEAR(water_mm_at(&water, &map, i), 20.0f - loam->intake, 0.01);
+    CHECK_NEAR(soil.water[i], alone.water[i], 1e-3); /* The ground took the same. */
+    CHECK(soil.water[i] > loam->capacity);
+    SoilHour still = {0};
+    run_flow_hours(&soil, &map, &water, &still, 1, NULL);
+    CHECK_NEAR(water_mm_at(&water, &map, i), 0.0, 0.01);
+    water_free(&water);
+    soil_free(&alone);
+    soil_free(&soil);
+    map_free(&map);
+}
+
+/* Frozen ground takes no water in: the rain lies on it. */
+static void test_frozen_ground_takes_nothing(void)
+{
+    Map map;
+    flat_map(&map, 2);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 0.5f));
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    size_t i = map_index(&map, 8, 8, 0);
+    float before = soil.water[i];
+    float *cold = malloc(map_tile_count(&map) * sizeof(*cold));
+    REQUIRE(cold != NULL);
+    for (size_t t = 0; t < map_tile_count(&map); t++) {
+        cold[t] = -5.0f;
+    }
+    SoilHour rain = {.rain = 2.0f};
+    run_flow_hours(&soil, &map, &water, &rain, 1, cold);
+    CHECK_NEAR(water_mm_at(&water, &map, i), 2.0, 0.01);
+    CHECK(soil.water[i] <= before + 1e-3);
+    free(cold);
+    water_free(&water);
+    soil_free(&soil);
+    map_free(&map);
+}
+
+/* Rough stone drinks a storm's rain into its cracks; what a downpour brings
+ * beyond lies on it, and the sun dries the puddle. Frozen, it takes nothing.
+ * A roof sheds all its rain. */
+static void test_puddles_on_stone_dry_in_the_sun(void)
+{
+    Map map;
+    flat_map(&map, 2);
+    map_set_terrain(&map, 8, 8, 0, TERRAIN_ROUGH_STONE);
+    map_set_terrain(&map, 4, 4, 0, TERRAIN_ROUGH_STONE);
+    map_set_terrain(&map, 12, 12, 0, TERRAIN_GRASS_ROOF);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 0.5f));
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    size_t i = map_index(&map, 8, 8, 0);
+    SoilHour storm = {.rain = SOIL_CRACK_INTAKE};
+    run_flow_hours(&soil, &map, &water, &storm, 3, NULL);
+    CHECK_NEAR(water_mm_at(&water, &map, i), 0.0, 0.01);
+    SoilHour downpour = {.rain = SOIL_CRACK_INTAKE + 2.0f};
+    run_flow_hours(&soil, &map, &water, &downpour, 1, NULL);
+    CHECK_NEAR(water_mm_at(&water, &map, i), 2.0, 0.01);
+    CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 12, 12, 0)), 0.0, 0.01);
+    SoilHour sun = {.pet = 0.1f};
+    run_flow_hours(&soil, &map, &water, &sun, 1, NULL);
+    /* The cracks take their share of the puddle, the sun some. */
+    CHECK_NEAR(water_mm_at(&water, &map, i), 2.0 - SOIL_CRACK_INTAKE - 0.1, 0.01);
+    run_flow_hours(&soil, &map, &water, &sun, 2, NULL);
+    CHECK_EQ_INT(map_water(&map, 8, 8, 0), 0);
+    CHECK_NEAR(water_mm_at(&water, &map, i), 0.0, 0.01);
+
+    /* Frozen stone: the rain lies on it, and only the sun dries it. */
+    float *cold = malloc(map_tile_count(&map) * sizeof(*cold));
+    REQUIRE(cold != NULL);
+    for (size_t t = 0; t < map_tile_count(&map); t++) {
+        cold[t] = -5.0f;
+    }
+    size_t frozen = map_index(&map, 4, 4, 0);
+    SoilHour rain = {.rain = 1.0f};
+    run_flow_hours(&soil, &map, &water, &rain, 2, cold);
+    CHECK_NEAR(water_mm_at(&water, &map, frozen), 2.0, 0.01);
+    SoilHour cold_sun = {.pet = 0.5f};
+    run_flow_hours(&soil, &map, &water, &cold_sun, 1, cold);
+    CHECK_NEAR(water_mm_at(&water, &map, frozen), 1.5, 0.01);
+    free(cold);
+    water_free(&water);
+    soil_free(&soil);
+    map_free(&map);
+}
+
+/* A lake's bed of silt takes nothing in: the rain adds to the lake, on top
+ * of its water where it is deeper than a level. A pond on soil soaks into
+ * it. */
+static void test_rain_on_lakes_and_ponds(void)
+{
+    Map map;
+    flat_map(&map, 3);
+    map_set_terrain(&map, 4, 4, 0, TERRAIN_SILT);
+    map_set_terrain(&map, 6, 6, 0, TERRAIN_SILT);
+    map.water[map_index(&map, 4, 4, 0)] = WATER_CELL_FULL;
+    map.water[map_index(&map, 4, 4, 1)] = 400;
+    map.water[map_index(&map, 6, 6, 0)] = 300;
+    map.water[map_index(&map, 10, 10, 0)] = 150; /* A pond on soil. */
+    map_topology_changed(&map);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 1.0f));
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    const SoilDef *loam = soil_def(TERRAIN_SOIL);
+    SoilHour rain = {.rain = 1.0f};
+    run_flow_hours(&soil, &map, &water, &rain, 1, NULL);
+    CHECK_EQ_INT(map_water(&map, 4, 4, 0), WATER_CELL_FULL);
+    CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 4, 4, 1)), 401.0, 0.01);
+    CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 6, 6, 0)), 301.0, 0.01);
+    CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 10, 10, 0)), 151.0 - loam->intake, 0.01);
+    /* The sun takes from the top of the water. */
+    SoilHour sun = {.pet = 0.4f};
+    run_flow_hours(&soil, &map, &water, &sun, 1, NULL);
+    CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 4, 4, 1)), 400.6, 0.01);
+    water_free(&water);
+    soil_free(&soil);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_buckets_by_terrain);
@@ -376,5 +526,9 @@ int main(void)
     RUN_TEST(test_air_humidity);
     RUN_TEST(test_moisture_in_words);
     RUN_TEST(test_hash_follows_the_water);
+    RUN_TEST(test_downpour_lies_on_the_ground);
+    RUN_TEST(test_frozen_ground_takes_nothing);
+    RUN_TEST(test_puddles_on_stone_dry_in_the_sun);
+    RUN_TEST(test_rain_on_lakes_and_ponds);
     return test_summary();
 }

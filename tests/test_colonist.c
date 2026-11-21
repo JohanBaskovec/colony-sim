@@ -91,14 +91,17 @@ static int run_until_done(Game *game, int x, int y, int max_ticks)
 }
 
 /* Turns every column from `x0` to the right edge into shallow water. */
-/* Shallows from x0 to the east edge, lying at rest as if in a hollow (on the
- * flat plain they would spread). */
+/* Shallows from x0 to the east edge over a bed of silt (which takes no water
+ * in), lying at rest as if in a hollow (on the flat plain they would
+ * spread): deep enough that the sun does not take them out of the
+ * shallows, which would wake them. */
 static void add_water_band(Game *game, int x0)
 {
     Map *map = &game->map;
     for (int y = 0; y < map->height; y++) {
         for (int x = x0; x < map->width; x++) {
-            map_set_water(map, x, y, 0, WATER_SHALLOWS_MM);
+            map_set_terrain(map, x, y, 0, TERRAIN_SILT);
+            map_set_water(map, x, y, 0, 2 * WATER_SHALLOWS_MM);
         }
     }
     water_settle(&game->water, map);

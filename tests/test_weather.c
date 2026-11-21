@@ -5,6 +5,8 @@
 
 #include "test_framework.h"
 
+#include <string.h>
+
 #include <math.h>
 #include <stdlib.h>
 
@@ -267,6 +269,97 @@ static void test_light(void)
     CHECK_STR_EQ(weather_name_key(&weather, 0), "weather.clear");
 }
 
+/* Storms rain lightly but for their downpours, drawn from the seed: 1 to 3
+ * hours in a row within the period, far heavier, mostly in summer. */
+static void test_storms_and_downpours(void)
+{
+    int downpours[SEASON_COUNT] = {0};
+    const int periods = 20000;
+    for (int season = 0; season < SEASON_COUNT; season++) {
+        for (uint64_t period = 0; period < (uint64_t)periods; period++) {
+            StormRain rain = weather_storm_rain(77, period, (Season)season);
+            StormRain again = weather_storm_rain(77, period, (Season)season);
+            CHECK(memcmp(&rain, &again, sizeof(rain)) == 0);
+            CHECK(rain.mm >= WEATHER_STORM_MM_MIN && rain.mm <= WEATHER_STORM_MM_MAX);
+            if (rain.downpour_hours == 0) {
+                continue;
+            }
+            downpours[season]++;
+            CHECK(rain.downpour_hours <= WEATHER_DOWNPOUR_HOURS_MAX);
+            CHECK(rain.downpour_start >= 0);
+            CHECK(rain.downpour_start + rain.downpour_hours <= WEATHER_PERIOD_HOURS);
+            CHECK(rain.downpour_mm >= WEATHER_DOWNPOUR_MM_MIN &&
+                  rain.downpour_mm <= WEATHER_DOWNPOUR_MM_MAX);
+            int heavy = 0;
+            for (int hour = 0; hour < WEATHER_PERIOD_HOURS; hour++) {
+                heavy += weather_storm_rain_at(&rain, hour) == rain.downpour_mm;
+            }
+            CHECK_EQ_INT(heavy, rain.downpour_hours);
+        }
+    }
+    static const float ODDS[SEASON_COUNT] = WEATHER_DOWNPOUR_ODDS;
+    for (int season = 0; season < SEASON_COUNT; season++) {
+        CHECK_NEAR((float)downpours[season] / (float)periods, ODDS[season], 0.01);
+    }
+    CHECK(downpours[SEASON_SUMMER] > downpours[SEASON_WINTER]);
+}
+
+/* What falls in a season stays about what it was before storms had
+ * downpours (rain 0.25 mm an hour, storms 1.2). */
+static void test_season_rain_is_kept(void)
+{
+    static const float ODDS[SEASON_COUNT] = WEATHER_DOWNPOUR_ODDS;
+    float storm_mm = 0.5f * (WEATHER_STORM_MM_MIN + WEATHER_STORM_MM_MAX);
+    float downpour_mm = 0.5f * (WEATHER_DOWNPOUR_MM_MIN + WEATHER_DOWNPOUR_MM_MAX);
+    float downpour_hours = 0.5f * (1.0f + (float)WEATHER_DOWNPOUR_HOURS_MAX);
+    for (int season = 0; season < SEASON_COUNT; season++) {
+        float shares[WEATHER_TYPE_COUNT];
+        weather_season_shares((Season)season, shares);
+        float before = shares[WEATHER_RAIN] * 0.25f + shares[WEATHER_STORM] * 1.2f;
+        float storm = storm_mm + ODDS[season] * downpour_hours * (downpour_mm - storm_mm) /
+                                     (float)WEATHER_PERIOD_HOURS;
+        float now = shares[WEATHER_RAIN] * weather_def(WEATHER_RAIN)->rain_mm +
+                    shares[WEATHER_STORM] * storm;
+        CHECK(now > 0.85f * before && now < 1.15f * before);
+    }
+}
+
+/* A weather in a storm's downpour says so, and rains the downpour. */
+static void test_downpour_in_the_weather(void)
+{
+    Weather weather;
+    weather_init(&weather, 77, 0);
+    bool found = false;
+    for (uint64_t period = 0; period < 4000 && !found; period++) {
+        uint64_t start = period * WEATHER_PERIOD_TICKS;
+        Season season = game_date_from_tick(start).season;
+        StormRain rain = weather_storm_rain(77, period, season);
+        if (rain.downpour_hours == 0) {
+            continue;
+        }
+        uint64_t tick = start + (uint64_t)rain.downpour_start * TICKS_PER_HOUR;
+        weather.type = WEATHER_STORM;
+        weather.period = period;
+        if (weather_precipitation(&weather, tick) != PRECIPITATION_RAIN) {
+            continue; /* Snowing. */
+        }
+        found = true;
+        CHECK(weather_downpour(&weather, tick));
+        CHECK_NEAR(weather_rainfall(&weather, tick), rain.downpour_mm, 1e-5);
+        CHECK(strcmp(weather_name_key(&weather, tick), "weather.downpour") == 0);
+        uint64_t after =
+            start + (uint64_t)(rain.downpour_start + rain.downpour_hours) * TICKS_PER_HOUR;
+        if (rain.downpour_start + rain.downpour_hours < WEATHER_PERIOD_HOURS &&
+            weather_precipitation(&weather, after) == PRECIPITATION_RAIN) {
+            CHECK(!weather_downpour(&weather, after));
+            CHECK_NEAR(weather_rainfall(&weather, after), rain.mm, 1e-5);
+        }
+        weather.type = WEATHER_RAIN;
+        CHECK(!weather_downpour(&weather, tick));
+    }
+    CHECK(found);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -280,5 +373,8 @@ int main(void)
     RUN_TEST(test_snow_falls_and_melts);
     RUN_TEST(test_outdoor_humidity);
     RUN_TEST(test_light);
+    RUN_TEST(test_storms_and_downpours);
+    RUN_TEST(test_season_rain_is_kept);
+    RUN_TEST(test_downpour_in_the_weather);
     return test_summary();
 }

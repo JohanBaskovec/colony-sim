@@ -89,6 +89,42 @@ static void test_films_do_not_flow(void)
     map_free(&map);
 }
 
+/* What the ground and the air give or take (water_exchange()) wakes only
+ * water it sets moving: a pond laid on the level of its banks stays as it
+ * lies when the sun takes from its edge; rain on stone wakes the block once
+ * it stands a film deep. */
+static void test_exchanges_wake_only_water_they_set_moving(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 32, 32, 2));
+    for (int y = 4; y <= 12; y++) {
+        for (int x = 4; x <= 12; x++) {
+            map.water[map_index(&map, x, y, 0)] = 400; /* A pond on a flat world. */
+        }
+    }
+    map_topology_changed(&map);
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    size_t edge = map_index(&map, 4, 8, 0);
+    CHECK_EQ_INT(water_exchange(&water, &map, edge, -10 * WATER_FINE), -10 * WATER_FINE);
+    REQUIRE(water_step(&water, &map));
+    CHECK_EQ_UINT(water.wakes, 0);
+    CHECK_EQ_INT(map_water(&map, 4, 8, 0), 390);
+    CHECK_EQ_INT(map_water(&map, 3, 8, 0), 0);
+
+    size_t stone = map_index(&map, 24, 24, 0);
+    water_exchange(&water, &map, stone, 2 * WATER_FINE);
+    REQUIRE(water_step(&water, &map));
+    CHECK_EQ_UINT(water.wakes, 0); /* A film: it stays. */
+    water_exchange(&water, &map, stone, 2 * WATER_FINE);
+    REQUIRE(water_step(&water, &map));
+    CHECK_EQ_UINT(water.wakes, 1);
+    CHECK(water_block_active(&water, 24, 24, 0));
+    CHECK(!water_block_active(&water, 4, 8, 0));
+    water_free(&water);
+    map_free(&map);
+}
+
 static void test_a_channel_fills_to_the_level_of_the_lake(void)
 {
     Map map;
@@ -303,8 +339,28 @@ static void test_water_is_deterministic(void)
     }
 }
 
-/* In a game: water poured on the plain spreads tick by tick, the regions
- * learn where it got too deep to walk, and nothing else moves the water. */
+/* The water of the pit of test_water_flows_in_a_game(), mm, and whether its
+ * tiles are level (within 2 mm of their mean). */
+static int pit_water(const Map *map, bool *level)
+{
+    int total = 0;
+    for (int y = 20; y <= 21; y++) {
+        for (int x = 20; x <= 23; x++) {
+            total += map_water(map, x, y, 0);
+        }
+    }
+    *level = true;
+    for (int y = 20; y <= 21; y++) {
+        for (int x = 20; x <= 23; x++) {
+            *level &= abs(map_water(map, x, y, 0) * 8 - total) <= 16;
+        }
+    }
+    return total;
+}
+
+/* In a game: water poured into a pit spreads tick by tick and comes level,
+ * and the regions learn where it got too deep to walk. The pit's floor is a
+ * bed of silt, which takes no water in (the sun may take a little). */
 static void test_water_flows_in_a_game(void)
 {
     NewGameParams params;
@@ -319,7 +375,7 @@ static void test_water_flows_in_a_game(void)
     REQUIRE(game_init(&game, &params));
     Map *map = &game.map;
     for (size_t i = 0; i < map_level_tile_count(map); i++) {
-        map->terrain[i] = TERRAIN_SOIL;
+        map->terrain[i] = TERRAIN_SILT;
         map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
     }
@@ -330,34 +386,33 @@ static void test_water_flows_in_a_game(void)
     CHECK_EQ_INT(game_debug_pour_water(&game, 20, 20, 0, 2000), 2000);
     CHECK_EQ_INT(game_debug_pour_water(&game, 20, 21, 0, 2000), 2000);
     CHECK_EQ_INT(game_debug_pour_water(&game, 21, 20, 0, 1200), 1200);
-    uint64_t total = water_total(&game.water, map);
     game_tick(&game);
     CHECK(game.water.active_count > 0);
     for (int tick = 0; tick < 600; tick++) {
         game_tick(&game);
     }
-    CHECK_EQ_UINT(water_total(&game.water, map), total);
-    CHECK_EQ_UINT(game.water.active_count, 0);
-    /* 5200 mm over 8 tiles: 650 each, wading everywhere. */
-    CHECK(abs(map_water(map, 23, 21, 0) - 650) <= 1);
-    CHECK(abs(map_water(map, 20, 20, 0) - 650) <= 1);
+    /* About 5200 mm over 8 tiles: 650 each, wading everywhere. */
+    bool level = false;
+    int total = pit_water(map, &level);
+    CHECK(level);
+    CHECK(total > 5100 && total <= 5200);
     CHECK(map_is_passable(map, 20, 20, 0));
     CHECK(regions_at(&game.regions, map, 20, 20, 0) != REGION_NONE);
     CHECK_EQ_INT(regions_at(&game.regions, map, 20, 20, 0),
                  regions_at(&game.regions, map, 23, 21, 0));
-    /* 9750 mm over 8 tiles, 1218 each: too deep, out of every region (poured
-     * well below the brim, so that no wave splashes onto the level above). */
+    /* About 9750 mm, 1218 each: too deep, out of every region (poured well
+     * below the brim, so that no wave splashes onto the level above). */
     for (int i = 0; i < 4; i++) {
         CHECK_EQ_INT(game_debug_pour_water(&game, 20 + i, 20, 0, 800), 800);
         CHECK_EQ_INT(game_debug_pour_water(&game, 20 + i, 21, 0, i < 2 ? 338 : 337),
                      i < 2 ? 338 : 337);
     }
-    total = water_total(&game.water, map);
     for (int tick = 0; tick < 600; tick++) {
         game_tick(&game);
     }
-    CHECK_EQ_UINT(water_total(&game.water, map), total);
-    CHECK(abs(map_water(map, 22, 21, 0) - 1218) <= 1);
+    total = pit_water(map, &level);
+    CHECK(level);
+    CHECK(total > 9650 && total <= 9750);
     CHECK(!map_is_passable(map, 22, 21, 0));
     CHECK_EQ_INT(regions_at(&game.regions, map, 22, 21, 0), REGION_NONE);
     game_shutdown(&game);
@@ -368,6 +423,7 @@ int main(void)
     RUN_TEST(test_water_at_rest_stays_asleep);
     RUN_TEST(test_water_spreads_and_is_kept);
     RUN_TEST(test_films_do_not_flow);
+    RUN_TEST(test_exchanges_wake_only_water_they_set_moving);
     RUN_TEST(test_a_channel_fills_to_the_level_of_the_lake);
     RUN_TEST(test_a_shaft_fills_from_the_bottom);
     RUN_TEST(test_water_pours_down_a_shaft);

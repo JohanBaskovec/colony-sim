@@ -153,11 +153,47 @@ Precipitation weather_precipitation(const Weather *weather, uint64_t tick);
  * (0 when nothing falls). */
 float weather_wetting(const Weather *weather, uint64_t tick);
 
-/* Translation key of the sky now (snow and snowstorm when it snows). */
+/* Translation key of the sky now (snow and snowstorm when it snows, a
+ * downpour in a storm's heaviest hours). */
 const char *weather_name_key(const Weather *weather, uint64_t tick);
 
 /* Daylight let through by the sky (1: all of it). */
 float weather_light(const Weather *weather);
+
+/* The rain of a storm (docs/WATER.md §4.3), drawn per period: `mm` an hour,
+ * from WEATHER_STORM_MM_MIN to WEATHER_STORM_MM_MAX; now and then (the
+ * season's WEATHER_DOWNPOUR_ODDS of storms, most in summer) a downpour of
+ * `downpour_mm` an hour (WEATHER_DOWNPOUR_MM_MIN to _MAX) for
+ * `downpour_hours` (1 to WEATHER_DOWNPOUR_HOURS_MAX, 0: none) from
+ * `downpour_start`, hours in the period. A downpour fills the hollows: far
+ * more than any ground takes in. The storms are lighter than they were
+ * (1.2 mm an hour) and the rains too (0.25 mm), so that what falls in a
+ * season stays about what it was (tuning). Snowstorms snow as before. */
+#define WEATHER_STORM_MM_MIN 0.5f
+#define WEATHER_STORM_MM_MAX 1.1f
+#define WEATHER_DOWNPOUR_MM_MIN 10.0f
+#define WEATHER_DOWNPOUR_MM_MAX 20.0f
+#define WEATHER_DOWNPOUR_HOURS_MAX 3
+/* Spring, summer, autumn, winter. */
+#define WEATHER_DOWNPOUR_ODDS                                                                      \
+    {                                                                                              \
+        0.06f, 0.10f, 0.06f, 0.02f                                                                 \
+    }
+
+typedef struct StormRain {
+    float mm;
+    float downpour_mm;
+    int downpour_start;
+    int downpour_hours;
+} StormRain;
+
+/* The storm of `period` (tick / WEATHER_PERIOD_TICKS) in `season`, from the
+ * seed alone (weather_roll()), and its rain in an hour of the period. */
+StormRain weather_storm_rain(uint64_t seed, uint64_t period, Season season);
+float weather_storm_rain_at(const StormRain *rain, int hour);
+
+/* Whether a downpour falls at `tick` (a storm's heaviest hours). */
+bool weather_downpour(const Weather *weather, uint64_t tick);
 
 /* Water falling at `tick` as rain and as snow, in mm (of water) an hour
  * (docs/CLIMATE.md §3.1). */

@@ -981,7 +981,7 @@ static void update_soil(Game *game, size_t begin, size_t end, uint64_t phase)
         .direct_share = game_direct_share(
             game, sun_at_tick(tick - phase + TICKS_PER_HOUR / 2, SUN_LATITUDE_DEFAULT).elevation),
     };
-    soil_update(soil, &game->map, begin, end, &hour, game->temperatures.celsius);
+    soil_update(soil, &game->map, &game->water, begin, end, &hour, game->temperatures.celsius);
 }
 
 /* What hangs in the crowns: a slice of the pool each tick, every item once

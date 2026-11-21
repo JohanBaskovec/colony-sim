@@ -344,10 +344,14 @@ void water_free(Water *water)
 }
 
 /* Whether the water of a tile (an index in bounds) falls through it: open
- * space or thin foliage. */
+ * space or foliage of any density (leaves hold no water, even those one can
+ * walk on). */
 static bool floorless(const Map *map, size_t index)
 {
-    return map_sees_through_at(map, index) && !map_stops_light_at(map, index);
+    uint8_t terrain = map->terrain[index];
+    return map->rock[index] == ROCK_NONE &&
+           (terrain == TERRAIN_OPEN || terrain_is_foliage(terrain)) &&
+           !map_stops_light_at(map, index);
 }
 
 /* The water of a tile (an index in bounds), in WATER_FINE units. */
@@ -733,6 +737,105 @@ bool water_step(Water *water, Map *map)
         water->topology_seen = map->topology_revision;
     }
     return ok;
+}
+
+/* Whether a tile holding `held` would send a neighbour holding `other` at
+ * least a film's difference (WATER_FINE units). */
+static bool would_spill(int32_t held, int32_t other)
+{
+    return held >= FILM_FINE && held - other >= FILM_FINE;
+}
+
+/* Whether the water of a tile (an index in bounds, at x, y, z) holding
+ * `held` would move: fall through it, or flow to or from a neighbour by a
+ * film's difference at least. Rain falling alike on flat ground or on a
+ * lake moves nothing, nor the tenths of a millimetre the sun takes more
+ * from one tile than from the next (they even out when the block wakes for
+ * something else). */
+static bool would_move(const Water *water, const Map *map, size_t index, int32_t held, int x, int y,
+                       int z)
+{
+    if (map_stops_light_at(map, index)) {
+        return false;
+    }
+    size_t level = map_level_tile_count(map);
+    if (held > 0 && z > 0 && floorless(map, index) && !map_stops_light_at(map, index - level) &&
+        level_at(water, map, index - level) < FULL_FINE) {
+        return true;
+    }
+    static const int SIDES[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    for (int side = 0; side < 4; side++) {
+        int nx = x + SIDES[side][0], ny = y + SIDES[side][1];
+        if (!map_in_bounds(map, nx, ny, z)) {
+            continue;
+        }
+        size_t other = map_index(map, nx, ny, z);
+        if (map_stops_light_at(map, other)) {
+            continue;
+        }
+        int32_t beside = level_at(water, map, other);
+        if (would_spill(held, beside) || would_spill(beside, held)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t water_surface_index(const Map *map, size_t index)
+{
+    size_t level = map_level_tile_count(map), count = map_tile_count(map);
+    while (map->water[index] >= WATER_CELL_FULL && index + level < count &&
+           floorless(map, index + level)) {
+        index += level;
+    }
+    return index;
+}
+
+float water_mm_at(const Water *water, const Map *map, size_t index)
+{
+    return (float)level_at(water, map, index) * (1.0f / (float)WATER_FINE);
+}
+
+int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine)
+{
+    if (fine == 0 || map->rock[index] != ROCK_NONE) {
+        return 0;
+    }
+    int32_t before = level_at(water, map, index);
+    const int32_t most = (int32_t)UINT16_MAX * WATER_FINE + WATER_FINE - 1;
+    int64_t wanted = (int64_t)before + fine;
+    int32_t after = wanted < 0 ? 0 : wanted > most ? most : (int32_t)wanted;
+    if (after == before) {
+        return 0;
+    }
+    bool was_shallow = !tile_deep(map, index);
+    bool was_water = map_is_water_at(map, index);
+    set_level(water, map, index, after);
+    int x, y, z;
+    map_tile_of(map, index, &x, &y, &z);
+    uint32_t number = water_block_of(water, x, y, z);
+    if (water->slot[number] != 0) {
+        return after - before; /* Active: the flow tells the map. */
+    }
+    bool shallow = !tile_deep(map, index);
+    bool open_water = map_is_water_at(map, index);
+    if (shallow != was_shallow || open_water != was_water) {
+        uint32_t topology_before = map->topology_revision;
+        map_water_class_changed(map, x, y, z,
+                                shallow != was_shallow && tile_walkable_dry(map, index), shallow,
+                                open_water != was_water);
+        if (water->topology_seen == topology_before) {
+            water->topology_seen = map->topology_revision; /* Our own: wakes nothing. */
+        }
+    }
+    /* Only water the exchange sets moving wakes: water asleep beside lower
+     * ground (a lake on the level of its banks in a flat world) stays held
+     * as it was (docs/WATER.md §3.5). */
+    if (would_move(water, map, index, after, x, y, z) &&
+        !would_move(water, map, index, before, x, y, z)) {
+        (void)wake_number(water, map, number); /* Merged at the next step. */
+    }
+    return after - before;
 }
 
 void water_settle(Water *water, Map *map)

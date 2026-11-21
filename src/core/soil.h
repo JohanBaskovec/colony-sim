@@ -26,6 +26,7 @@
 
 #include "core/map.h"
 #include "core/tile_light.h"
+#include "core/water.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -73,6 +74,10 @@ float soil_water_for(const SoilDef *def, float moisture);
 #define SOIL_COVERED_EVAPORATION 0.05f
 /* Dew condensing on an open tile colder than the dew point, mm an hour. */
 #define SOIL_DEW_MM 0.02f
+/* Rough stone drinks the rain into its cracks, down to deep ground (not
+ * followed), up to this many mm an hour while not frozen: a storm soaks
+ * away, a downpour runs off (docs/WATER.md §3.5). */
+#define SOIL_CRACK_INTAKE 1.5f
 
 /* What the hour brings to the map (worked out once, soil_hour()). */
 typedef struct SoilHour {
@@ -139,8 +144,14 @@ void soil_look_up(Soil *soil, const Map *map, size_t first, size_t last);
 
 /* One hour of tiles first .. last - 1 (indices in the map), with
  * `temperature` the temperature of each tile (NULL: the dew point never
- * reached). */
-void soil_update(Soil *soil, const Map *map, size_t first, size_t last, const SoilHour *hour,
+ * reached, nor frost). With the flow of free water (`flow`, else NULL:
+ * docs/WATER.md §3.5): what the ground does not take of the rain and
+ * snowmelt lies on it as free water, frozen ground takes none; free water
+ * soaks into rooting ground (a pond's bed too, not a lake's bed of silt) and
+ * evaporates first (the ground under it does not); rain on stone, roofs and
+ * open water adds to their free water. Changes the map's free water only
+ * (water_exchange()). */
+void soil_update(Soil *soil, Map *map, Water *flow, size_t first, size_t last, const SoilHour *hour,
                  const float *temperature);
 
 /* The moisture of a tile (soil_moisture_of()), PLANT_MOISTURE_STANDING on

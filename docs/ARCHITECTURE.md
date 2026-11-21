@@ -312,6 +312,19 @@ water is at rest. `bench_water` measures a dam opened, a pond spreading over
 a plain and a channel: about 4 µs a block a step, 1 ms a step for a whole
 256 × 256 level awake.
 
+**Rain and the flow** (docs/WATER.md §3.5, §4.3): the soil's hourly slices
+(`soil_update()`, given `Game.water`) give or take the free water of each
+tile with `water_exchange()`: what the ground does not take in (its intake,
+its room below saturation, nothing when frozen) lies on the tile, puddles
+evaporate before the ground under them, rough stone drinks a storm into its
+cracks, roofs shed their rain, foliage lets it through, open water takes it
+on its surface tile. Outside an active block the exchange tells the map of
+class changes itself, and wakes the block only when it sets the water moving
+(it would fall, or spill to or from a neighbour by a film, after and not
+before): water asleep beside lower ground stays held. The weather draws each
+storm's rain and now and then a downpour (`weather_storm_rain()`,
+`weather_downpour()`).
+
 **Relief** (`core/worldgen.h`): the elevation noise decides each column's
 ground level. The plains lie on `Map.surface_level` (`underground_levels`,
 4 by default; the player sees it as level 0, the levels below as negative);

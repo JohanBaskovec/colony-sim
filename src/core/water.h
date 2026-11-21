@@ -134,6 +134,24 @@ bool water_wake_all(Water *water, const Map *map);
  * water by hand (a pond on a plain without banks would spread otherwise). */
 void water_settle(Water *water, Map *map);
 
+/* The tile holding the surface of the water standing on a floor (an index
+ * in bounds): the floor's tile, or the open tile above a full one, up the
+ * column. Rain falls there, and water evaporates from there. */
+size_t water_surface_index(const Map *map, size_t index);
+
+/* Adds water to a tile (an index in bounds; takes it when `fine` is
+ * negative, never more than there is) from outside the flow: rain, soaking
+ * into the ground, evaporation (docs/WATER.md §3.5), in 1/WATER_FINE mm.
+ * Nothing on rock. A sleeping block wakes only when the tile's water would
+ * then move (flow to or from a neighbour, or fall): rain falling alike on a
+ * lake at rest or on flat ground, or a puddle drying, moves nothing. The map is told at once of a
+ * change of class in a sleeping block (an active one tells it as the flow does). Returns the change
+ * made. False never: a block that cannot wake (out of memory) wakes at the next change. */
+int32_t water_exchange(Water *water, Map *map, size_t index, int32_t fine);
+
+/* The water of a tile in mm, with its fraction. */
+float water_mm_at(const Water *water, const Map *map, size_t index);
+
 /* One step of the flow (a tick). False when out of memory (the step is then
  * not taken whole). */
 bool water_step(Water *water, Map *map);

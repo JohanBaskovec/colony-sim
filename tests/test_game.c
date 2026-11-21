@@ -806,6 +806,13 @@ static void test_grass_does_not_dry_in_a_storm(void)
     CHECK(soaked > item_fresh_moisture(ITEM_GRASS)); /* Wetter than cut. */
     CHECK(weather_wetting(&game.weather, game.clock.tick) > 0.0f);
     CHECK(game_item_conditions(&game, x, y, 0).wetting > 0.0f);
+    /* A downpour may have left puddles, where the grass would stay soaked:
+     * the sun dries what lies on dry ground. */
+    for (int ty = 0; ty < game.map.height; ty++) {
+        for (int tx = 0; tx < game.map.width; tx++) {
+            map_set_water(&game.map, tx, ty, 0, 0);
+        }
+    }
     game.weather.type = WEATHER_CLEAR;
     for (int i = 0; i < 3 * TICKS_PER_HOUR; i++) {
         game.weather.type = WEATHER_CLEAR;

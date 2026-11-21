@@ -372,6 +372,7 @@ weather.cloudy = Cloudy
 weather.fog = Fog
 weather.rain = Rain
 weather.storm = Storm
+weather.downpour = Downpour
 weather.snow = Snow
 weather.snowstorm = Snowstorm
 

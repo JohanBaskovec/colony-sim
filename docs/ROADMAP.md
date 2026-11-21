@@ -324,7 +324,11 @@ See `docs/GAME_DESIGN.md`, *Living world*. Target map: 256 × 256 tiles.
   - [ ] Moisture follow-ups (docs/WATER.md §7.7): carried items taking their holder's air, skipping items settled at their target, lighting harder with damp kindling, sorting by moisture, "dry only" for bills and stockpiles, hauling things out to dry
   - [x] W2: surface flow (`core/water.h`): falling between levels, virtual pipes worked out in 1/256 mm, films that do not flow, active blocks of 16 × 16 tiles woken by the map's logs and asleep at rest (lakes as laid cost nothing, the state hash unchanged), a tile past full passing the rest up, the class changes told to the map at most once a second; `bench_water` (a dam opened, a pond spreading over a plain, a channel); `bench_simulation` shows the water awake
   - [ ] Flow follow-ups (docs/WATER.md §3.7): slopes carrying water between levels; beings caught by deep water walking out further than a step (animals not at all yet); waking only around an overflowed log instead of every lake; batching far blocks if floods cost too much
-  - [ ] W3: where water comes from: the map's edges, rain beyond the soil's intake as free water, evaporation and soaking in, storms of various intensity and downpours, snowmelt running off, a river laid by world generation (New game option) with its discharge and floods
+  - [ ] W3: where water comes from
+    - [x] W3a: rain and snowmelt beyond the soil's intake lie as free water, puddles evaporate and soak in, frozen ground takes nothing, rough stone drinks a storm into its cracks, roofs shed their rain; storms of various intensity and downpours (*Downpour* in the weather shown); an exchange wakes the flow only where it sets water moving (`bench_simulation 12 4 1`: 27 → 30 µs a tick)
+    - [ ] W3b: the map's edges
+    - [ ] W3c: a river laid by world generation (New game option) with its discharge and floods
+    - [ ] Lakes of a flat world: nothing holds them once woken (a tree growing on the shore), they spread over the plain and soak in within days; a hollow for them (docs/WATER.md §9)
   - [ ] W4: water in the ground: pore water in every block, layers of sand, gravel and clay, the water table, drainage and Darcy flow, seepage and springs, the soil's root zone draining into the ground (its banks go), damp walls, wells, mud
   - [ ] W5: water in play: floodgates, dams of earth, cisterns, irrigation ditches, floating items carried away, alerts for a rising river and a flooding gallery
   - [ ] W6, later: pressure (U-bends, artesian wells), swimming and drowning, ice
