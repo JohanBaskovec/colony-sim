@@ -324,9 +324,10 @@ bool water_init(Water *water, const Map *map)
     size_t edges = 2 * (size_t)map->width + 2 * (size_t)map->height;
     water->edge_ground = calloc(edges > 0 ? edges : 1, sizeof(*water->edge_ground));
     water->edge_surface = calloc(edges > 0 ? edges : 1, sizeof(*water->edge_surface));
+    water->edge_kind = calloc(edges > 0 ? edges : 1, sizeof(*water->edge_kind));
     if (water->slot == NULL || water->free_entries == NULL || water->active == NULL ||
         water->woken == NULL || water->fine == NULL || water->edge_ground == NULL ||
-        water->edge_surface == NULL) {
+        water->edge_surface == NULL || water->edge_kind == NULL) {
         water_free(water);
         return false;
     }
@@ -349,6 +350,7 @@ void water_free(Water *water)
     free(water->fine);
     free(water->edge_ground);
     free(water->edge_surface);
+    free(water->edge_kind);
     memset(water, 0, sizeof(*water));
 }
 
@@ -378,6 +380,10 @@ static void set_level(Water *water, Map *map, size_t index, int32_t level)
 
 #define FULL_FINE ((int32_t)WATER_CELL_FULL * WATER_FINE)
 #define FILM_FINE ((int32_t)WATER_FILM_MM * WATER_FINE)
+/* What a tile's water (or a block's) may change by over its quiet steps,
+ * flowing in and out, and still count as quiet: a ripple's flow over
+ * WATER_SLEEP_STEPS steps. */
+#define QUIET_NET ((int32_t)WATER_QUIET_FLOW * WATER_SLEEP_STEPS)
 /* A full tile in the units of Water.edge_surface. */
 #define FULL_BASIN ((int64_t)FULL_FINE * WATER_EDGE_BASIN)
 
@@ -418,6 +424,9 @@ static int32_t beyond(const Water *water, size_t slot, int z)
  * Water.edge_surface), never under its ground nor over the top. */
 static void move_edge_surface(Water *water, size_t slot, int64_t change)
 {
+    if (water->edge_kind[slot] != WATER_EDGE_LAND) {
+        return; /* A river's ends: their levels are set from outside. */
+    }
     int64_t surface = water->edge_surface[slot] + change;
     int64_t lowest = (int64_t)water->edge_ground[slot] * FULL_BASIN;
     int64_t highest = (int64_t)water->depth * FULL_BASIN;
@@ -431,6 +440,57 @@ void water_seal_edges(Water *water)
     for (size_t i = 0; i < edges; i++) {
         water->edge_ground[i] = (uint8_t)water->depth;
         water->edge_surface[i] = (int64_t)water->depth * FULL_BASIN;
+        water->edge_kind[i] = WATER_EDGE_LAND;
+    }
+}
+
+size_t water_edge_slot(const Water *water, int x, int y, int dx, int dy)
+{
+    if (x < 0 || y < 0 || x >= water->width || y >= water->height) {
+        return SIZE_MAX;
+    }
+    return edge_slot(water, x, y, dx, dy);
+}
+
+/* The edge tile next to a column of the edge. */
+static void edge_tile_of(const Water *water, size_t slot, int *x, int *y)
+{
+    size_t width = (size_t)water->width, height = (size_t)water->height;
+    if (slot < width) {
+        *x = (int)slot, *y = 0;
+    } else if (slot < 2 * width) {
+        *x = (int)(slot - width), *y = water->height - 1;
+    } else if (slot < 2 * width + height) {
+        *x = 0, *y = (int)(slot - 2 * width);
+    } else {
+        *x = water->width - 1, *y = (int)(slot - 2 * width - height);
+    }
+}
+
+void water_set_edge(Water *water, const Map *map, size_t slot, WaterEdgeKind kind, int64_t surface)
+{
+    size_t edges = 2 * (size_t)water->width + 2 * (size_t)water->height;
+    if (slot >= edges || (unsigned)kind >= WATER_EDGE_KIND_COUNT || water->sealed) {
+        return;
+    }
+    water->edge_kind[slot] = WATER_EDGE_LAND; /* So that the surface is held in range. */
+    water->edge_surface[slot] = (int64_t)water->edge_ground[slot] * FULL_BASIN;
+    move_edge_surface(water, slot, surface * WATER_EDGE_BASIN - water->edge_surface[slot]);
+    water->edge_kind[slot] = (uint8_t)kind;
+    water->fine_used = true; /* Hashed from now on, with the edges. */
+    /* Wake the edge tile where water would cross. */
+    int x, y;
+    edge_tile_of(water, slot, &x, &y);
+    for (int z = water->edge_ground[slot]; z < water->depth; z++) {
+        int32_t outside = beyond(water, slot, z);
+        size_t index = map_index(map, x, y, z);
+        int32_t held = level_at(water, map, index);
+        if (outside > 0 || held > 0) {
+            (void)wake_number(water, map, water_block_of(water, x, y, z));
+        }
+        if (outside < FULL_FINE && held < FULL_FINE) {
+            break;
+        }
     }
 }
 
@@ -451,6 +511,9 @@ static void edge_column(Water *water, const Map *map, size_t slot, int x, int y)
     size_t level = map_level_tile_count(map);
     size_t index = map_index(map, x, y, ground);
     uint8_t rock = map->rock[index];
+    if (water->edge_kind[slot] != WATER_EDGE_LAND) {
+        return; /* A river's end stays as set. */
+    }
     if (water->sealed || (rock != ROCK_NONE && rock != ROCK_WOOD)) {
         water->edge_ground[slot] = (uint8_t)map->depth;
         water->edge_surface[slot] = (int64_t)map->depth * FULL_BASIN;
@@ -482,24 +545,36 @@ static void edges_from_map(Water *water, const Map *map)
     }
 }
 
-/* The new flow of the pipe from tile a out to the tile beyond the edge
- * holding `outside` (-1: solid ground there, no pipe); positive out of a. The
- * land beyond keeps its level, and gives a step at most what it holds. It
- * answers only to a film's difference at least: the tenths of a millimetre
- * the sun takes more from one edge tile than from the next would otherwise
- * keep a current running along the edge, in by one tile and out by the
- * next, for ever. */
-static int32_t edge_pipe(const Water *water, const Map *map, int32_t flow, size_t a,
-                         int32_t outside)
+/*
+ * The new flow of the pipe from tile a out to the tile beyond the edge at the
+ * column `slot`, level z (none where the ground is solid there); positive
+ * out of a. What lies beyond gives a step at most what it holds.
+ *
+ * Land beyond (a basin) answers only to what goes past a film's difference:
+ * the tenths of a millimetre the sun takes more from one edge tile than from
+ * the next would otherwise keep a current running along the edge, in by one
+ * tile and out by the next, for ever. Past it the current grows from nothing
+ * (from a ripple), so that it eases off smoothly as the levels near each
+ * other: a current switched on and off at the film by a lake slowly rising
+ * would keep the water awake. A river's source and outlet carry its gentle
+ * slope whatever it is.
+ */
+static int32_t edge_pipe(const Water *water, const Map *map, int32_t flow, size_t a, size_t slot,
+                         int z)
 {
+    int32_t outside = beyond(water, slot, z);
     if (outside < 0) {
         return 0;
     }
     int32_t la = level_at(water, map, a);
-    if (la - outside < FILM_FINE && outside - la < FILM_FINE) {
-        return 0;
+    int32_t difference = la - outside;
+    if (water->edge_kind[slot] == WATER_EDGE_LAND) {
+        const int32_t still = FILM_FINE + WATER_QUIET_FLOW * WATER_FLOW_DIVISOR;
+        difference = difference > still    ? difference - FILM_FINE
+                     : difference < -still ? difference + FILM_FINE
+                                           : 0;
     }
-    flow = flow * WATER_FLOW_KEEP / 16 + (la - outside) / WATER_FLOW_DIVISOR;
+    flow = flow * WATER_FLOW_KEEP / 16 + difference / WATER_FLOW_DIVISOR;
     if ((flow > 0 && la < FILM_FINE) || (flow < 0 && outside < FILM_FINE)) {
         return 0;
     }
@@ -637,7 +712,15 @@ static int32_t pipe_flow(const Water *water, const Map *map, int32_t flow, size_
     return flow > FULL_FINE ? FULL_FINE : flow < -FULL_FINE ? -FULL_FINE : flow;
 }
 
-/* The pipes of a block's tiles, from the levels as they are. */
+/* Whether a pipe's flow changed by more than a ripple: a current that holds
+ * steady is water at rest as much as still water is. */
+static bool flow_changed(int32_t was, int32_t now)
+{
+    return now - was > WATER_QUIET_FLOW || was - now > WATER_QUIET_FLOW;
+}
+
+/* The pipes of a block's tiles, from the levels as they are; notes the
+ * block moved where a flow changed. */
 static void compute_flows(const Water *water, const Map *map, WaterBlock *block)
 {
     BlockPlace place = place_of(water, block->number);
@@ -664,33 +747,35 @@ static void compute_flows(const Water *water, const Map *map, WaterBlock *block)
             }
             bool east = x + 1 < x1 || east_active;
             bool south = y + 1 < y1 || south_active;
+            int32_t was_east = block->east[local], was_south = block->south[local];
             block->east[local] = east ? pipe_flow(water, map, block->east[local], a, a + 1) : 0;
             block->south[local] =
                 south ? pipe_flow(water, map, block->south[local], a, a + (size_t)map->width) : 0;
-            if (!on_edge) {
-                continue;
+            if (on_edge) {
+                /* The pipes out to the land beyond the edges. */
+                if (x + 1 == water->width) {
+                    block->east[local] = edge_pipe(water, map, block->east[local], a,
+                                                   edge_slot(water, x, y, 1, 0), place.z);
+                }
+                if (y + 1 == water->height) {
+                    block->south[local] = edge_pipe(water, map, block->south[local], a,
+                                                    edge_slot(water, x, y, 0, 1), place.z);
+                }
+                if (x == 0) {
+                    int32_t was = block->west_edge[ly];
+                    block->west_edge[ly] = -edge_pipe(water, map, -block->west_edge[ly], a,
+                                                      edge_slot(water, x, y, -1, 0), place.z);
+                    block->moved |= flow_changed(was, block->west_edge[ly]);
+                }
+                if (y == 0) {
+                    int32_t was = block->north_edge[lx];
+                    block->north_edge[lx] = -edge_pipe(water, map, -block->north_edge[lx], a,
+                                                       edge_slot(water, x, y, 0, -1), place.z);
+                    block->moved |= flow_changed(was, block->north_edge[lx]);
+                }
             }
-            /* The pipes out to the land beyond the edges. */
-            if (x + 1 == water->width) {
-                block->east[local] =
-                    edge_pipe(water, map, block->east[local], a,
-                              beyond(water, edge_slot(water, x, y, 1, 0), place.z));
-            }
-            if (y + 1 == water->height) {
-                block->south[local] =
-                    edge_pipe(water, map, block->south[local], a,
-                              beyond(water, edge_slot(water, x, y, 0, 1), place.z));
-            }
-            if (x == 0) {
-                block->west_edge[ly] =
-                    -edge_pipe(water, map, -block->west_edge[ly], a,
-                               beyond(water, edge_slot(water, x, y, -1, 0), place.z));
-            }
-            if (y == 0) {
-                block->north_edge[lx] =
-                    -edge_pipe(water, map, -block->north_edge[lx], a,
-                               beyond(water, edge_slot(water, x, y, 0, -1), place.z));
-            }
+            block->moved |= flow_changed(was_east, block->east[local]) ||
+                            flow_changed(was_south, block->south[local]);
         }
     }
 }
@@ -823,18 +908,19 @@ static bool apply_flows(Water *water, Map *map, WaterBlock *block, uint64_t *mov
             int32_t east = *pipes.east > 0 ? *pipes.east : -*pipes.east;
             int32_t south = *pipes.south > 0 ? *pipes.south : -*pipes.south;
             *moved += (uint64_t)east + (uint64_t)south;
-            if (east > WATER_QUIET_FLOW || south > WATER_QUIET_FLOW) {
-                block->moved = true;
-            }
             if (change == 0) {
                 continue;
             }
+            int local = (y - y0) * WATER_BLOCK_SIZE + (x - x0);
+            block->net[local] += change;
             size_t index = map_index(map, x, y, place.z);
             int32_t held = level_at(water, map, index) + change;
             const int32_t most = (int32_t)UINT16_MAX * WATER_FINE + WATER_FINE - 1;
             held = held < 0 ? 0 : held > most ? most : held; /* Never: the flows are scaled. */
             set_level(water, map, index, held);
-            if (change > WATER_QUIET_FLOW || change < -WATER_QUIET_FLOW) {
+            /* Ripples come and go (the sun or rain on a tile, the water
+             * around evening it out); what moves on adds up. */
+            if (block->net[local] > QUIET_NET || block->net[local] < -QUIET_NET) {
                 block->moved = true;
             }
             if (held > FULL_FINE) {
@@ -879,6 +965,9 @@ static bool pass_up(Water *water, Map *map, size_t index)
     water->pool[water->slot[water_block_of(water, x, y, z + 1)] - 1].moved = true;
     return true;
 }
+
+static bool block_ready(WaterBlock *block);
+static void hold_ready_blocks(Water *water);
 
 bool water_step(Water *water, Map *map)
 {
@@ -928,13 +1017,21 @@ bool water_step(Water *water, Map *map)
      * own changes, which need not wake anything. */
     uint32_t topology_before = map->topology_revision;
     bool report = water->steps % WATER_CLASS_MIN_TICKS == 0;
+    for (uint32_t i = 0; i < water->active_count; i++) {
+        WaterBlock *block = &water->pool[water->slot[water->active[i]] - 1];
+        block->quiet = block->moved ? 0 : (uint16_t)(block->quiet + 1);
+        if (block->moved) {
+            memset(block->net, 0, sizeof(block->net));
+        }
+        block->ready = block_ready(block);
+    }
+    hold_ready_blocks(water);
     uint32_t kept = 0;
     for (uint32_t i = 0; i < water->active_count; i++) {
         uint32_t number = water->active[i];
         uint32_t entry = water->slot[number] - 1;
         WaterBlock *block = &water->pool[entry];
-        block->quiet = block->moved ? 0 : (uint16_t)(block->quiet + 1);
-        if (block->quiet >= WATER_SLEEP_STEPS) {
+        if (block->ready) {
             block_report_classes(water, map, block);
             water->slot[number] = 0;
             water->free_entries[water->free_count++] = entry;
@@ -950,6 +1047,105 @@ bool water_step(Water *water, Map *map)
         water->topology_seen = map->topology_revision;
     }
     return ok;
+}
+
+/* Whether a pipe of `count` along a block's side, `stride` apart, carries
+ * more than a ripple. */
+static bool side_flows(const int32_t *pipe, int count, int stride)
+{
+    for (int i = 0; i < count; i++, pipe += stride) {
+        if (*pipe > WATER_QUIET_FLOW || *pipe < -WATER_QUIET_FLOW) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Whether a block is ready to sleep: quiet for WATER_SLEEP_STEPS (no flow
+ * changed and no tile's water changed by more than ripples), and having
+ * gained or lost no more than ripples over those steps (else a lake draining
+ * slowly through a channel would stop half drained). A block quiet long
+ * enough but not steady starts its quiet steps again. */
+static bool block_ready(WaterBlock *block)
+{
+    if (block->quiet < WATER_SLEEP_STEPS) {
+        return false;
+    }
+    int64_t gained = 0;
+    for (int i = 0; i < WATER_BLOCK_TILES; i++) {
+        gained += block->net[i];
+    }
+    if (gained > QUIET_NET || gained < -QUIET_NET) {
+        block->quiet = 0;
+        memset(block->net, 0, sizeof(block->net));
+        return false;
+    }
+    return true;
+}
+
+/* The active block next to a block on one side (0 east, 1 west, 2 south,
+ * 3 north) when the pipes between them carry more than a ripple: the two
+ * trade a current. NULL otherwise. */
+static WaterBlock *current_neighbour(const Water *water, const WaterBlock *block, int side)
+{
+    static const int SIDES[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    BlockPlace place = place_of(water, block->number);
+    WaterBlock *other =
+        block_get(water, place.bx + SIDES[side][0], place.by + SIDES[side][1], place.z);
+    if (other == NULL) {
+        return NULL;
+    }
+    int x0, y0, x1, y1;
+    block_bounds(water, place, &x0, &y0, &x1, &y1);
+    int columns = x1 - x0, rows = y1 - y0;
+    const int n = WATER_BLOCK_SIZE;
+    bool flows;
+    switch (side) {
+    case 0: flows = side_flows(&block->east[columns - 1], rows, n); break;
+    case 1: flows = side_flows(&other->east[n - 1], rows, n); break;
+    case 2: flows = side_flows(&block->south[(rows - 1) * n], columns, 1); break;
+    default: flows = side_flows(&other->south[(n - 1) * n], columns, 1); break;
+    }
+    return flows ? other : NULL;
+}
+
+/*
+ * Keeps awake the blocks ready to sleep that trade a current, directly or
+ * through other ready blocks, with a block that is not ready: the current
+ * would stop at the edge of the sleeping ones, the jolt waking them again and
+ * sending a wave down the water that keeps it all awake. A steady river falls
+ * asleep all along at once, its levels and its slope kept as they are, and
+ * costs nothing until something changes. Uses Water.woken as its stack (empty
+ * once the woken blocks are merged).
+ */
+static void hold_ready_blocks(Water *water)
+{
+    uint32_t *stack = water->woken;
+    uint32_t top = 0;
+    for (uint32_t i = 0; i < water->active_count; i++) {
+        WaterBlock *block = &water->pool[water->slot[water->active[i]] - 1];
+        if (!block->ready) {
+            continue;
+        }
+        for (int side = 0; side < 4; side++) {
+            const WaterBlock *other = current_neighbour(water, block, side);
+            if (other != NULL && !other->ready) {
+                block->ready = false;
+                stack[top++] = block->number;
+                break;
+            }
+        }
+    }
+    while (top > 0) {
+        const WaterBlock *block = &water->pool[water->slot[stack[--top]] - 1];
+        for (int side = 0; side < 4; side++) {
+            WaterBlock *other = current_neighbour(water, block, side);
+            if (other != NULL && other->ready) {
+                other->ready = false;
+                stack[top++] = other->number;
+            }
+        }
+    }
 }
 
 /* Whether a tile holding `held` would send a neighbour holding `other` at
@@ -1108,6 +1304,7 @@ uint64_t water_hash(const Water *water, uint64_t hash)
         size_t edges = 2 * (size_t)water->width + 2 * (size_t)water->height;
         hash = hash_fnv1a64(hash, water->edge_ground, edges * sizeof(*water->edge_ground));
         hash = hash_fnv1a64(hash, water->edge_surface, edges * sizeof(*water->edge_surface));
+        hash = hash_fnv1a64(hash, water->edge_kind, edges * sizeof(*water->edge_kind));
     }
     if (water->active_count == 0) {
         return hash;
@@ -1117,6 +1314,7 @@ uint64_t water_hash(const Water *water, uint64_t hash)
         const WaterBlock *block = &water->pool[water->slot[water->active[i]] - 1];
         hash = hash_fnv1a64(hash, &block->number, sizeof(block->number));
         hash = hash_fnv1a64(hash, &block->quiet, sizeof(block->quiet));
+        hash = hash_fnv1a64(hash, block->net, sizeof(block->net));
         hash = hash_fnv1a64(hash, block->east, sizeof(block->east));
         hash = hash_fnv1a64(hash, block->south, sizeof(block->south));
         hash = hash_fnv1a64(hash, block->west_edge, sizeof(block->west_edge));
@@ -1141,6 +1339,9 @@ static void water_block_serialize(Serializer *s, WaterBlock *block)
     for (int i = 0; i < WATER_BLOCK_SIZE; i++) {
         ser_i32(s, &block->west_edge[i]);
         ser_i32(s, &block->north_edge[i]);
+    }
+    for (int i = 0; i < WATER_BLOCK_TILES; i++) {
+        ser_i32(s, &block->net[i]);
     }
     ser_u16(s, &block->quiet);
     ser_bool(s, &block->moved);
@@ -1207,6 +1408,7 @@ void water_serialize(Serializer *s, Water *water)
     for (size_t i = 0; i < edges && ser_ok(s); i++) {
         ser_u8_below(s, &water->edge_ground[i], (unsigned)water->depth + 1);
         ser_i64(s, &water->edge_surface[i]);
+        ser_u8_below(s, &water->edge_kind[i], WATER_EDGE_KIND_COUNT);
         ser_check(s, water->edge_surface[i] >= (int64_t)water->edge_ground[i] * FULL_BASIN &&
                          water->edge_surface[i] <= (int64_t)water->depth * FULL_BASIN);
     }

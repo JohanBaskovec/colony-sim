@@ -192,9 +192,10 @@ blocks are worked out:
 - A block wakes when water is added to it (rain beyond the soil's intake,
   a spring, a river edge), when a neighbouring active block sends it water,
   or when the map changes in it (dug, built, a door opened or shut).
-- A block falls asleep after `WATER_SLEEP_STEPS` (60) steps in which no flow
-  exceeded 1 mm and no two neighbouring surfaces differed by more than 2
-  mm. A lake is then a set of sleeping blocks.
+- A block falls asleep after `WATER_SLEEP_STEPS` (60) steps in which
+  nothing changed in it (its water and its flows) by more than ripples, a
+  current holding steady included (as built: §3.7). A lake is then a set
+  of sleeping blocks, and so is a river flowing steadily.
 - Sleeping blocks keep their water and nothing else. Their flows are freed.
 
 A lake at rest costs nothing. A channel dug from it wakes the block it
@@ -273,10 +274,24 @@ from the design above:
   flow (`Water.fine`). In whole millimetres the gain of a pipe is 0 below a
   difference of 4 mm, so water stopped on slopes of 3 mm a tile: a channel
   of 40 tiles ended 12 cm below its lake. The pipes are `int32_t`.
-- **Rest.** A block falls asleep after 60 steps in which no pipe carried
-  and no tile changed by more than `WATER_QUIET_FLOW` (1/16 mm); a sleeping
-  neighbour is woken only for a flow larger than that (else two blocks at
-  rest would wake each other in turn).
+- **Rest.** A block falls asleep after 60 steps in which nothing changed in
+  it by more than ripples: no pipe's flow changed by more than
+  `WATER_QUIET_FLOW` (1/16 mm a step), and no tile's water by more than 60
+  such ripples since those steps began (the sun or rain on a tile, and the
+  water around evening it out, come and go). A steady current is at rest as
+  much as still water (W3c-2, a river: until then a block slept only when
+  nothing flowed). Two more conditions: the block as a whole gained or lost
+  no more than those ripples (a lake drained slowly through a long channel
+  changes by little at each tile and its current hardly changes, but it
+  loses water: it starts its quiet steps again), and the blocks it trades a
+  current with (more than a ripple across their side) are ready to sleep
+  too, directly or through other ready blocks: a current stopped at the
+  edge of a sleeping block would jolt the water and send a wave down a
+  river that keeps it all awake. A steady river so falls asleep along its
+  whole length at once, its levels and slope kept, and costs nothing until
+  something changes (the weather, a settler); woken, its flows start again
+  from nothing. A sleeping neighbour is woken only for a flow larger than a
+  ripple (else two blocks at rest would wake each other in turn).
 - **Waking.** From the map's logs: a new `Map.water_log` (water set from
   outside the flow), the topology log and the build log, each change waking
   the blocks around it when water lies within a tile. A log overflowed in a
@@ -345,7 +360,10 @@ As built (W3b, `core/water.h`):
 - The virtual neighbour at level z holds the surface's water at that level.
   The edge tile and it share a pipe (`WaterBlock.west_edge`, `north_edge`,
   and the east and south pipes of the last column and row), which answers
-  only to a **film's difference** at least.
+  only to what goes past a **film's difference**: past it the current grows
+  from nothing (from a ripple, `WATER_QUIET_FLOW`), so that it eases off
+  smoothly as the levels near each other (W3c-2: switched on and off at the
+  film, a lake slowly rising as a river fills it kept the water awake).
 - The land beyond is a **basin** of `WATER_EDGE_BASIN` (256) tiles behind
   each edge tile *(tuning)*: what crosses moves its level by 1/256 of what
   it moves on the edge tile (its surface is kept in 1/256 of the fine unit,
@@ -397,8 +415,22 @@ level every `RIVER_VALLEY_TILES` (3) tiles from the banks, cut through the
 hills (outcrops on the valley's floor become gravel). The New game window's
 *River* is the channel's width (0 none, 3 to 12, 6 by default; `--river` on
 the command line, none by default, so that tests and benchmarks are
-unchanged). The flat world of the tests has none. At rest, the river is a
-long lake cut by the edges at both ends: it does not flow yet (W3c-2).
+unchanged). The flat world of the tests has none.
+
+*As built (W3c-2, the current):* the columns of the edge across the channel
+are a river's ends (`WaterEdgeKind`, `water_set_edge()`, set by
+`game_init()`): beyond the edge it comes in by, the **source**, its level
+held `RIVER_HEAD_MM` (100 mm) above the lakes'; beyond the edge it leaves
+by, the **outlet**, held at the lakes' level. Neither moves with what
+crosses, and neither has the film's dead band, so the river takes a gentle
+slope from one to the other and flows on steadily (in a channel of 120
+tiles, 500 mm at the source, 450 in the middle, 400 at the outlet). Water
+comes in until the slope and the lakes it reaches are full, then the river
+falls asleep along its whole length (§3.7, *Rest*): on a map of 200 tiles,
+a day or two of the game with its lakes to fill, a few hours without; the
+weather wakes it now and then, and it falls asleep again. Awake, a river
+keeps 20 to 60 blocks working (about 5 µs each a step). The kinds of the
+edge are saved.
 
 The level upstream follows the river's discharge, which comes from the
 weather over its catchment, outside the map:
@@ -859,11 +891,13 @@ Each step is tested, measured against the baseline (`bench_simulation`,
        the channel, banks and valley, the New game option. Tests: the edges
        from the seed, the course joining its edges, the channel at the
        lakes' level, the valley's floor, the river lying at rest in a game.
-     - **W3c-2, the current**: the level held higher beyond the upstream
-       end, the downstream end an outlet, and blocks that fall asleep when
-       nothing changes any more in them, not only when nothing flows (a
-       steady river would keep its blocks awake for ever). Tests: the
-       river's steady flow, its cost.
+     - **W3c-2, the current (done)**: the level held higher beyond the
+       upstream end, the downstream end an outlet, and blocks that fall
+       asleep when nothing changes any more in them, not only when nothing
+       flows (a steady river would keep its blocks awake for ever). Tests:
+       a steady current taking its slope and falling asleep, a lake still
+       draining through a slow current, a river in a game flowing then
+       falling asleep, a save made while it flows playing on alike.
      - **W3c-3, the discharge over time**: the seasons, the rain of the last
        days, floods spilling over the banks.
 5. **W4, water in the ground.** §5: the pore water of every block, the

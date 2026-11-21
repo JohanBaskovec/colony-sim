@@ -66,6 +66,8 @@ Not saved, rebuilt on load:
 - scratch memory (the pathfinder's nodes and heap, the temperature
   buffers), pointers between modules (`Map.crowns`, `Items.mirror`, the
   drop filter, the temperature surface);
+- what a step works out afresh before reading it: whether each active water
+  block is ready to sleep (`WaterBlock.ready`);
 - what the frontend only shows: the last blows to play (`CombatLog`), the
   conversation counts for the curious, the clock's speed (a loaded game
   starts paused) and its pending fraction of a tick.
@@ -140,7 +142,7 @@ round-trip test (§5) shows they come back the same; otherwise they are saved.
 - **Tests** (`tests/test_save.c`, `tests/test_serialize.c`): the round trip
   and the future unchanged on a new game, gathering, building, feuds and
   brawls, cooking, wild animals, the fog of war, water flowing and water
-  flowing out over the map's edge when saved; saves cut short, changed, of another version, and 300 edited ones
+  flowing out over the map's edge, a river flowing when saved; saves cut short, changed, of another version, and 300 edited ones
   with their hash made right; the size of 79 structs. Leaving a field out of
   a settler's save fails them (checked by hand).
 

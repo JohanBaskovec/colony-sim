@@ -95,6 +95,7 @@ set(COLONY_SPLIT_TESTS
     test_save
     test_tree
     test_vision
+    test_water
     test_worldgen)
 
 foreach(test_name IN LISTS COLONY_UNIT_TESTS)

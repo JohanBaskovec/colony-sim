@@ -8,7 +8,10 @@
  * outside the flow (Map.water_log), when the map changes around water
  * (Map.topology_log, Map.build_log: dug, built, a door opened or shut), or
  * when an active neighbour sends it water, and falls asleep once nothing has
- * moved in it (more than ripples) for WATER_SLEEP_STEPS steps. A lake at rest costs nothing.
+ * changed in it (more than ripples) for WATER_SLEEP_STEPS steps: neither its
+ * water nor its flows. A lake at rest costs nothing, and so does a river
+ * flowing steadily (asleep along its whole length at once, the blocks it
+ * trades a current with waiting for each other).
  *
  * A step:
  * - Falling: the water of an open tile without a floor goes into the tile
@@ -82,6 +85,14 @@
 #define WATER_EDGE_BASIN 256
 
 /* The state of an active block. */
+/* What lies beyond a column of the edge. */
+typedef enum WaterEdgeKind {
+    WATER_EDGE_LAND,   /* The land beyond: a basin living the edge's weather. */
+    WATER_EDGE_SOURCE, /* A river coming in: its level set from outside (water_set_edge()). */
+    WATER_EDGE_OUTLET, /* A river going out: its level held, whatever flows out. */
+    WATER_EDGE_KIND_COUNT
+} WaterEdgeKind;
+
 typedef struct WaterBlock {
     /* 1/WATER_FINE mm a step from each tile to the one east of it, and to the
      * one south of it. */
@@ -95,9 +106,16 @@ typedef struct WaterBlock {
      * its north row (the east and south edges use `east` and `south`). */
     int32_t west_edge[WATER_BLOCK_SIZE];
     int32_t north_edge[WATER_BLOCK_SIZE];
+    /* What each tile gained (lost: negative) by the flow over its quiet
+     * steps, 1/WATER_FINE mm: ripples come and go, a slow flood adds up. A
+     * steady current through the block gains it nothing in all, a lake
+     * draining slowly loses. */
+    int32_t net[WATER_BLOCK_TILES];
     uint32_t number; /* The block's number (water_block_of()). */
     uint16_t quiet;  /* Steps in a row without anything moving. */
-    bool moved;      /* Something moved in it this step. */
+    bool moved;      /* A flow changed, or a tile's water since its quiet steps began, by more than
+                        ripples. */
+    bool ready;      /* Quiet and steady: may sleep with its neighbours (worked out each step). */
 } WaterBlock;
 
 typedef struct Water {
@@ -132,6 +150,7 @@ typedef struct Water {
      * of what it moves on the edge tile, and nothing is lost to rounding. */
     uint8_t *edge_ground;
     int64_t *edge_surface;
+    uint8_t *edge_kind; /* WaterEdgeKind: a source's and an outlet's level do not move. */
     /* Water that came in through the edges so far, less what went out, in
      * 1/WATER_FINE mm. */
     int64_t edge_in;
@@ -171,6 +190,16 @@ bool water_wake_all(Water *water, const Map *map);
  * again from the map as it is. For tests and scenarios that lay water by hand
  * (a pond on a plain without banks would spread otherwise). */
 void water_settle(Water *water, Map *map);
+
+/* The column of the edge next to the edge tile (x, y) on the side (dx, dy)
+ * (an index in Water.edge_ground...), SIZE_MAX when the tile is not on that
+ * edge. */
+size_t water_edge_slot(const Water *water, int x, int y, int dx, int dy);
+
+/* Sets what lies beyond a column of the edge: its kind, and the surface of
+ * its water, z × WATER_CELL_FULL + water, in 1/WATER_FINE mm (held within its
+ * ground and the top). The flow at that edge wakes where it would start. */
+void water_set_edge(Water *water, const Map *map, size_t slot, WaterEdgeKind kind, int64_t surface);
 
 /* Seals the map's edges: the land beyond is solid all the way up, now and
  * after water_settle(). For the tests' flat world (game_init()), whose lakes

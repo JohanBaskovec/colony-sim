@@ -652,6 +652,50 @@ bool game_prepare_load(Game *game)
     return true;
 }
 
+/* The river's ends (docs/WATER.md §4.2): beyond the edge it comes in by,
+ * its level held RIVER_HEAD_MM over the lakes'; beyond the one it leaves by,
+ * an outlet at the lakes' level: it flows down its slope between them. */
+static bool start_river(Game *game, const WorldGenParams *world)
+{
+    RiverParams course;
+    river_resolve(&world->river, world->seed, &course);
+    if (world->flat || course.width <= 0) {
+        return true;
+    }
+    Map *map = &game->map;
+    float *distance = malloc((size_t)map->width * (size_t)map->height * sizeof(*distance));
+    if (distance == NULL) {
+        return false;
+    }
+    if (!river_distances(&course, world->seed, map->width, map->height, distance)) {
+        free(distance);
+        return true;
+    }
+    const int64_t rest =
+        ((int64_t)(map->surface_level - 1) * WATER_CELL_FULL + WORLDGEN_LAKE_MM) * WATER_FINE;
+    const float half = (float)course.width * 0.5f;
+    for (int end = 0; end < 2; end++) {
+        MapSide side = end == 0 ? course.from : course.to;
+        bool across_x = side == MAP_SIDE_NORTH || side == MAP_SIDE_SOUTH;
+        int count = across_x ? map->width : map->height;
+        int dx = side == MAP_SIDE_EAST ? 1 : side == MAP_SIDE_WEST ? -1 : 0;
+        int dy = side == MAP_SIDE_SOUTH ? 1 : side == MAP_SIDE_NORTH ? -1 : 0;
+        for (int i = 0; i < count; i++) {
+            int x = across_x ? i : dx > 0 ? map->width - 1 : 0;
+            int y = across_x ? (dy > 0 ? map->height - 1 : 0) : i;
+            if (distance[(size_t)y * (size_t)map->width + (size_t)x] >= half) {
+                continue;
+            }
+            size_t slot = water_edge_slot(&game->water, x, y, dx, dy);
+            water_set_edge(&game->water, map, slot,
+                           end == 0 ? WATER_EDGE_SOURCE : WATER_EDGE_OUTLET,
+                           end == 0 ? rest + (int64_t)RIVER_HEAD_MM * WATER_FINE : rest);
+        }
+    }
+    free(distance);
+    return true;
+}
+
 bool game_init(Game *game, const NewGameParams *params)
 {
     memset(game, 0, sizeof(*game));
@@ -702,6 +746,10 @@ bool game_init(Game *game, const NewGameParams *params)
     }
     if (params->world.flat) {
         water_seal_edges(&game->water); /* Its lakes are not at rest. */
+    }
+    if (!start_river(game, &params->world)) {
+        game_shutdown(game);
+        return false;
     }
     return true;
 }

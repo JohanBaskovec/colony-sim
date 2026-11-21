@@ -28,6 +28,10 @@ typedef enum MapSide {
 #define RIVER_MAX_WIDTH 12
 /* Tiles across each level that the walls of its valley rise. */
 #define RIVER_VALLEY_TILES 3
+/* How much higher than the lakes the river stands beyond the edge it comes
+ * in by (mm): its slope down to the outlet, held at the lakes' level beyond
+ * the edge it leaves by, makes it flow (docs/WATER.md §4.2). */
+#define RIVER_HEAD_MM 100
 
 typedef struct RiverParams {
     int width;            /* Tiles across its channel; 0: no river. */

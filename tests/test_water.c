@@ -1,8 +1,11 @@
 #include "core/game.h"
 #include "core/map.h"
 #include "core/region.h"
+#include "core/river.h"
 #include "core/water.h"
 #include "test_framework.h"
+
+#include <stdint.h>
 
 /* Steps until every block sleeps (false when still awake after `limit`),
  * checking that the water is kept at each step. */
@@ -602,25 +605,147 @@ static void test_water_flows_in_a_game(void)
     game_shutdown(&game);
 }
 
-/* A river as world generation lays it lies at rest, cut by the map's edges
- * at both ends: nothing flows, nothing crosses. */
-static void test_a_river_lies_at_rest(void)
+/* The surface of the water at (x, y), in mm above the bottom of the map
+ * (the highest tile holding water); -1 when dry. */
+static int surface_mm(const Map *map, int x, int y)
+{
+    for (int z = map->depth - 1; z >= 0; z--) {
+        int water = map_water(map, x, y, z);
+        if (water > 0) {
+            return z * WATER_CELL_FULL + water;
+        }
+    }
+    return -1;
+}
+
+/* A channel of `rows` rows across a map of `width` × 16 (rows from y = 5)
+ * holding 400 mm, its west end fed by a river's source `head` mm higher,
+ * its east end an outlet held at 400 mm. */
+static void make_channel(Map *map, Water *water, int width, int rows, int head)
+{
+    REQUIRE(map_init(map, width, 16, 1));
+    rock_but(map, 0, 0, 5, width - 1, 5 + rows - 1);
+    for (int y = 5; y < 5 + rows; y++) {
+        for (int x = 0; x < width; x++) {
+            map->water[map_index(map, x, y, 0)] = 400;
+        }
+    }
+    map_topology_changed(map);
+    REQUIRE(water_init(water, map));
+    for (int y = 5; y < 5 + rows; y++) {
+        water_set_edge(water, map, water_edge_slot(water, 0, y, -1, 0), WATER_EDGE_SOURCE,
+                       (int64_t)(400 + head) * WATER_FINE);
+        water_set_edge(water, map, water_edge_slot(water, width - 1, y, 1, 0), WATER_EDGE_OUTLET,
+                       (int64_t)400 * WATER_FINE);
+    }
+}
+
+/* A current fed at one end and let out at the other: it takes its slope,
+ * then flows on steadily, and a steady current falls asleep all along. */
+static void test_a_steady_current_falls_asleep(void)
+{
+    Map map;
+    Water water;
+    make_channel(&map, &water, 120, 6, 100);
+    CHECK(water_edge_slot(&water, 5, 7, -1, 0) == SIZE_MAX); /* Not on that edge. */
+    CHECK(run_with_edges(&water, &map, 20000));
+    CHECK(water.edge_in > 0); /* What its slope holds. */
+    int source = map_water(&map, 0, 7, 0), middle = map_water(&map, 60, 7, 0);
+    int outlet = map_water(&map, 119, 7, 0);
+    CHECK(source > 490 && source <= 500);
+    CHECK(middle > 440 && middle < 460);
+    CHECK(outlet >= 400 && outlet < 415);
+    for (int step = 0; step < 300; step++) {
+        REQUIRE(water_step(&water, &map));
+    }
+    CHECK_EQ_UINT(water.active_count, 0);
+    water_free(&water);
+    map_free(&map);
+}
+
+/* A lake let out through a long, narrow channel drains slowly: each of its
+ * tiles changes by little and its current hardly changes, but it loses
+ * water, and it stays awake until it is down to the outlet's level. */
+static void test_a_lake_drains_through_a_slow_current(void)
+{
+    Map map;
+    REQUIRE(map_init(&map, 64, 16, 1));
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 64; x++) {
+            bool lake = x >= 2 && x <= 25 && y >= 2 && y <= 13;
+            bool channel = x > 25 && y == 7;
+            map.rock[map_index(&map, x, y, 0)] = lake || channel ? ROCK_NONE : ROCK_GRANITE;
+            map.water[map_index(&map, x, y, 0)] = lake || channel ? 600 : 0;
+        }
+    }
+    map_topology_changed(&map);
+    Water water;
+    REQUIRE(water_init(&water, &map));
+    water_set_edge(&water, &map, water_edge_slot(&water, 63, 7, 1, 0), WATER_EDGE_OUTLET,
+                   (int64_t)400 * WATER_FINE);
+    CHECK(run_with_edges(&water, &map, 60000));
+    CHECK(water.edge_in < -150 * 288 * WATER_FINE);
+    CHECK(map_water(&map, 10, 7, 0) < 410);
+    CHECK(map_water(&map, 10, 7, 0) >= 400);
+    water_free(&water);
+    map_free(&map);
+}
+
+/* A river as world generation lays it flows from the edge it comes in by,
+ * where its level is held higher, to its outlet, then falls asleep once
+ * steady. */
+static void test_a_river_flows_then_sleeps(void)
 {
     NewGameParams params;
     game_default_params(&params);
     params.world.seed = 11;
     params.world.width = 96;
     params.world.height = 96;
+    params.world.water_level = 0; /* No lakes to fill: steady sooner. */
     params.world.river.width = RIVER_MAX_WIDTH;
     params.colonist_count = 0;
     Game game;
     REQUIRE(game_init(&game, &params));
-    for (int tick = 0; tick < 300; tick++) {
+    int tick = 0;
+    for (; tick < TICKS_PER_DAY && (tick < 60 || game.water.active_count > 0); tick++) {
         game.weather.type = WEATHER_CLEAR;
         game_tick(&game);
     }
     CHECK_EQ_UINT(game.water.active_count, 0);
-    CHECK_EQ_INT(game.water.edge_in, 0);
+    CHECK(game.water.edge_in > 0); /* Its slope. */
+    /* Higher where it comes in than where it goes out. */
+    const Map *map = &game.map;
+    int high = -1, low = INT32_MAX;
+    for (size_t slot = 0; slot < 2 * (size_t)map->width + 2 * (size_t)map->height; slot++) {
+        if (game.water.edge_kind[slot] == WATER_EDGE_LAND) {
+            continue;
+        }
+        int x, y;
+        size_t w = (size_t)map->width, h = (size_t)map->height;
+        if (slot < w) {
+            x = (int)slot, y = 0;
+        } else if (slot < 2 * w) {
+            x = (int)(slot - w), y = map->height - 1;
+        } else if (slot < 2 * w + h) {
+            x = 0, y = (int)(slot - 2 * w);
+        } else {
+            x = map->width - 1, y = (int)(slot - 2 * w - h);
+        }
+        int surface = surface_mm(map, x, y);
+        if (game.water.edge_kind[slot] == WATER_EDGE_SOURCE) {
+            high = surface > high ? surface : high;
+        } else {
+            low = surface < low ? surface : low;
+        }
+    }
+    CHECK(high - low > RIVER_HEAD_MM / 3);
+    CHECK(high - low <= RIVER_HEAD_MM);
+    /* It stays asleep. */
+    for (int i = 0; i < 300; i++) {
+        game.weather.type = WEATHER_CLEAR;
+        game_tick(&game);
+    }
+    CHECK_EQ_UINT(game.water.active_count, 0);
     game_shutdown(&game);
 }
 
@@ -644,6 +769,8 @@ int main(void)
     RUN_TEST(test_the_map_learns_where_open_water_spread);
     RUN_TEST(test_water_is_deterministic);
     RUN_TEST(test_water_flows_in_a_game);
-    RUN_TEST(test_a_river_lies_at_rest);
+    RUN_TEST(test_a_steady_current_falls_asleep);
+    RUN_TEST(test_a_lake_drains_through_a_slow_current);
+    RUN_TEST(test_a_river_flows_then_sleeps);
     return test_summary();
 }

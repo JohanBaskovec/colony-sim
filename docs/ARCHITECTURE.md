@@ -89,7 +89,7 @@ simulation:
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths, the microclimate under the sky (sun, shade, evaporation, heat stored in the ground) |
 | `soil`       | The water in the ground of each tile (a bucket by terrain: rain and snowmelt, interception by crowns, drainage, evaporation and transpiration, banks near water), and what the microclimate needs from it (see `docs/CLIMATE.md`) |
-| `water`      | The flow of the free water (`Game.water`, docs/WATER.md §3): falling between levels and virtual pipes between tiles in 1/256 mm, only in active blocks of 16 × 16 tiles woken by the map's logs and asleep at rest; the class changes told to the map at most once a second |
+| `water`      | The flow of the free water (`Game.water`, docs/WATER.md §3): falling between levels and virtual pipes between tiles in 1/256 mm, only in active blocks of 16 × 16 tiles woken by the map's logs and asleep at rest (a steady current included); the land beyond the edges, and a river's source and outlet there (`water_set_edge()`); the class changes told to the map at most once a second |
 | `vision`     | Who sees what: sight in 3D through the map's volume (rock, walls and floors block it, no range limit), fields of view per settler, how many see each tile (see *Vision*) |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain, rainfall in mm, the air's dew point and relative humidity |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
@@ -290,8 +290,11 @@ every tick, first thing (so that the regions see the classes it changed in
 the same tick). Only **active blocks** of 16 × 16 tiles of a level are
 worked out, in the order of their numbers; a block holds the flows of the
 pipes east and south of its tiles and what the map was last told of their
-classes, and is freed when it falls asleep (nothing larger than a ripple
-moving for 60 steps). Blocks wake from the map's logs: `water_log` (new:
+classes, and is freed when it falls asleep (nothing changing in it by more
+than a ripple for 60 steps, neither a tile's water nor a pipe's flow: a
+steady current sleeps; the block having lost or gained no more than ripples
+in all; and the blocks it trades a current with ready too, so that a river
+falls asleep along its whole length at once). Blocks wake from the map's logs: `water_log` (new:
 water set from outside the flow, `map_set_water()` and rock), the topology
 and build logs (dug, built, a door kept open or shut), each waking the blocks
 around the change when water lies within a tile of it; a log overflowed or a

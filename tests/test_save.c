@@ -187,6 +187,25 @@ static void test_water_at_the_edge_plays_on_alike(void)
     game_shutdown(&game);
 }
 
+/* Saved while a river flows: its source and outlet beyond the edges. */
+static void test_a_river_plays_on_alike(void)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 42;
+    params.world.width = 48;
+    params.world.height = 48;
+    params.world.river.width = 6;
+    params.colonist_count = 1;
+    Game game;
+    REQUIRE(game_init(&game, &params));
+    run_ticks(&game, 200);
+    REQUIRE(game.water.active_count > 0);
+    REQUIRE(game.water.edge_in > 0);
+    check_future_unchanged(&game, 0, 400);
+    game_shutdown(&game);
+}
+
 /* A save tells when it was made, of how many settlers, from its first bytes. */
 static void test_a_save_tells_of_itself(void)
 {
@@ -299,7 +318,7 @@ static void test_serialized_structs_keep_their_size(void)
         size_t size;
         size_t expected;
     } SIZES[] = {
-        {"Game", sizeof(Game), 2716912},
+        {"Game", sizeof(Game), 2716920},
         {"Map", sizeof(Map), 1080},
         {"Plant", sizeof(Plant), 20},
         {"MapTopologyChange", sizeof(MapTopologyChange), 8},
@@ -339,8 +358,8 @@ static void test_serialized_structs_keep_their_size(void)
         {"Temperatures", sizeof(Temperatures), 672},
         {"TemperatureSource", sizeof(TemperatureSource), 8},
         {"Soil", sizeof(Soil), 72},
-        {"Water", sizeof(Water), 200},
-        {"WaterBlock", sizeof(WaterBlock), 2248},
+        {"Water", sizeof(Water), 208},
+        {"WaterBlock", sizeof(WaterBlock), 3272},
         {"TileLight", sizeof(TileLight), 3376},
         {"TileLightSweep", sizeof(TileLightSweep), 40},
         {"Vision", sizeof(Vision), 2696},
@@ -400,6 +419,7 @@ int main(void)
     RUN_TEST(test_the_fog_of_war_plays_on_alike);
     RUN_TEST(test_flowing_water_plays_on_alike);
     RUN_TEST(test_water_at_the_edge_plays_on_alike);
+    RUN_TEST(test_a_river_plays_on_alike);
     RUN_TEST(test_a_save_tells_of_itself);
     RUN_TEST(test_damaged_saves_are_refused);
     RUN_TEST(test_edited_saves_never_break_loading);
