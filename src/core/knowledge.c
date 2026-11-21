@@ -133,5 +133,8 @@ ItemStack knowledge_product(ItemType type, int count, double level, Rng *rng)
     }
     int quality = def->has_quality ? knowledge_product_score(level, rng) : ITEM_QUALITY_BEST;
     int condition = def->damageable ? knowledge_product_condition(level, rng) : 100;
-    return item_stack_make(type, count, quality, item_hit_points_at_percent(type, condition));
+    ItemStack stack =
+        item_stack_make(type, count, quality, item_hit_points_at_percent(type, condition));
+    item_stack_set_fresh(&stack); /* Cut, picked, dug up: fresh (docs/WATER.md §7). */
+    return stack;
 }

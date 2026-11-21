@@ -251,8 +251,10 @@ static void test_builder_brings_materials_and_builds_a_wall(void)
     Colonist *colonist = spawn_rested(&game, 10, 10);
     REQUIRE(colonist != NULL);
     items_add(&game.items, 12, 10, 0, item_stack_pristine(ITEM_BRANCHES, 6));
+    ItemStack fresh = item_stack_pristine(ITEM_GRASS, 30);
+    item_stack_set_fresh(&fresh);
+    items_add(&game.items, 16, 10, 0, fresh); /* Not used: wet. */
     items_add(&game.items, 14, 10, 0, item_stack_pristine(ITEM_GRASS, 30));
-    items_add(&game.items, 16, 10, 0, item_stack_pristine(ITEM_FRESH_GRASS, 30)); /* Not used. */
     REQUIRE(game_place_structure(&game, STRUCTURE_WALL, 10, 14, 0, DIRECTION_SOUTH) !=
             CONSTRUCTION_NONE);
     /* The wall tile is in a gathering zone and a stockpile: built, it leaves them. */
@@ -267,8 +269,8 @@ static void test_builder_brings_materials_and_builds_a_wall(void)
     CHECK_EQ_INT(game.constructions.used_count, 0);
     /* Exactly what a wall needs was used: 5 branches, 24 dry grass. */
     CHECK_EQ_INT(game.items.totals[ITEM_BRANCHES], 1);
-    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 6);
-    CHECK_EQ_INT(game.items.totals[ITEM_FRESH_GRASS], 30);
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 36);
+    CHECK_EQ_INT(items_count_at(&game.items, 16, 10, 0, ITEM_GRASS), 30);
     CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 10, 14, 0), GATHER_ZONE_NONE);
     CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 11, 14, 0), zone);
     CHECK(map_is_passable(&game.map, colonist->x, colonist->y, colonist->z));
@@ -481,7 +483,9 @@ static void test_no_building_without_materials_or_knowledge(void)
     REQUIRE(game_place_structure(&game, STRUCTURE_GRASS_BED, 12, 12, 0, DIRECTION_SOUTH) !=
             CONSTRUCTION_NONE);
     /* Fresh grass would mould: only dry grass makes a bed. */
-    items_add(&game.items, 14, 10, 0, item_stack_pristine(ITEM_FRESH_GRASS, 20));
+    ItemStack fresh = item_stack_pristine(ITEM_GRASS, 20);
+    item_stack_set_fresh(&fresh);
+    items_add(&game.items, 14, 10, 0, fresh);
     run_ticks(&game, 10);
     CHECK(colonist->task != TASK_CONSTRUCT);
 
@@ -497,7 +501,8 @@ static void test_no_building_without_materials_or_knowledge(void)
     CHECK(game_structure_buildable(&game, STRUCTURE_GRASS_BED));
     colonist->search_cooldown[SEARCH_CONSTRUCTION] = 0;
     CHECK(run_until_built(&game, 12, 12, 4 * TICKS_PER_HOUR));
-    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 8); /* 12 armfuls of dry grass. */
+    CHECK_EQ_INT(game.items.totals[ITEM_GRASS], 28); /* 12 armfuls of dry grass. */
+    CHECK_EQ_INT(items_count_at(&game.items, 14, 10, 0, ITEM_GRASS), 20);
     CHECK(map_is_passable(&game.map, 12, 12, 0));
     game_shutdown(&game);
 }

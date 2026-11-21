@@ -317,6 +317,11 @@ ItemTypeMask structure_material_types(StructureType type, ItemType material)
     return types;
 }
 
+bool structure_material_dry(ItemType material)
+{
+    return material == ITEM_GRASS;
+}
+
 int structure_salvage_count(StructureType type, int slot)
 {
     const StructureDef *def = structure_def(type);

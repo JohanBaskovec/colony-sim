@@ -636,15 +636,16 @@ static void build_tile_panel(App *app, Panel *panel)
         if (items_forbidden(game_view_items(&app->game), x, y, z)) {
             panel_add_text(panel, tr("tile_panel.left_alone"));
         }
-        const ItemDef *def = item_def((ItemType)stack.type);
-        if (def->transforms_into != ITEM_NONE && def->transform_hours > stack.progress) {
-            tr_integer(a, sizeof(a), def->transform_hours - stack.progress);
-            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_transform"),
-                      tr(item_def(def->transforms_into)->name_key), a);
+        if (item_takes_water((ItemType)stack.type)) {
+            char moisture[64];
+            item_info_moisture_text(moisture, sizeof(moisture), (ItemType)stack.type,
+                                    item_stack_moisture(stack));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_moisture"), moisture);
         }
         if (item_rots((ItemType)stack.type)) {
             /* At the tile's temperature now: an estimate. */
-            float hours = item_stack_rot_hours(stack, game_item_rot_rate(&app->game, x, y, z));
+            float hours = item_stack_rot_hours(
+                stack, game_item_rot_rate(&app->game, (ItemType)stack.type, x, y, z));
             hud_rot_text(panel_add(panel), HUD_LINE_SIZE, hours);
         }
     }

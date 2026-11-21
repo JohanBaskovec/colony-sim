@@ -264,8 +264,7 @@ SpriteId sprite_item(ItemType type, unsigned variant)
 {
     switch (type) {
     case ITEM_BRANCHES: return ITEM_FIRST + (int)(variant % BRANCH_VARIANTS);
-    case ITEM_TWIGS:
-    case ITEM_WET_TWIGS: return ITEM_FIRST + ITEM_SPRITE_TWIG;
+    case ITEM_TWIGS: return ITEM_FIRST + ITEM_SPRITE_TWIG;
     case ITEM_COBBLE: return ITEM_FIRST + ITEM_SPRITE_PEBBLE;
     case ITEM_FLINT: return ITEM_FIRST + ITEM_SPRITE_FLINT;
     default: return -1;

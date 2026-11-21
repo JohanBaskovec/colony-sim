@@ -49,7 +49,7 @@ simulation:
 | `designation`| Player work orders per tile (mine, which digs earth or rock, cut a ramp, dig down, take a structure apart), the knowledge, level and tool each needs, work progress |
 | `dirt`       | How dirty each tile is (0-100 %): adding, spreading around a tile, cleaning; only on open ground |
 | `reservation`| Who is busy with which tile (job, food): one claimant per tile and kind     |
-| `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points; every item a record of its own (a pool with generational slots, a list per tile, its spot and angle in the tile), a stack summary per tile for callers that count, dropping, transformations (drying) and rot item by item, change stamps per tile so that the known world copies only what changed, loads in hand that are the very items picked up, natural items (stones, branches and twigs laid by world generation and the trees: ordinary items) (docs/ITEMS.md) |
+| `item`       | Items on the ground: definitions, categories, quality (0 to 100) and hit points; every item a record of its own (a pool with generational slots, a list per tile, its spot and angle in the tile), a stack summary per tile for callers that count, dropping, moisture (drying and wetting) and rot item by item, change stamps per tile so that the known world copies only what changed, loads in hand that are the very items picked up, natural items (stones, branches and twigs laid by world generation and the trees: ordinary items) (docs/ITEMS.md) |
 | `stockpile`  | Storage zones drawn by the player: tiles, priority (1-10), allowed item types, quality and hit point ranges, radius |
 | `tool`       | Tool speed factors by kind of work (bare hands included) and quality, best carried tool, wear and breaking |
 | `weapon`     | Weapons: which items strike (stones, blades, sticks, spears; not plants, food nor what is too heavy), the attack each makes and the hands it takes, a weapon's worth to pick the best (see `docs/COMBAT.md` §7) |
@@ -659,11 +659,30 @@ wall), on the tiles the drop filter accepts first. Products are data: `PlantDef.
 `RockDef.mined_item/mined_yield`, `PlantProduct.item` (the plant's stocks);
 gathering takes items from the plant's stocks (`plant_take_stock()`).
 
-Some items change while they lie on the ground: `ItemDef.transforms_into`
-after `transform_hours` (fresh grass dries into dry grass in 72 hours).
-`ItemStack.progress` counts the hours spent so far; merging stacks averages
-it by count, like hit points. A stack that transforms keeps its hit points
-percentage, and its quality when the new type has one.
+Items of materials that take water have a **moisture** (docs/WATER.md §7):
+`Item.moisture`, the share of the item's mass that is water in
+1/`ITEM_MOISTURE_UNITS` (10 000, fine enough for a log to dry an hour at a
+time), stored + 1 (0 in an `ItemStack`: unknown, `items_add()` gives the
+type's reference moisture: fresh for food, else the equilibrium at 65 % of
+relative humidity, what `ItemDef.weight` is weighed at). Each such type has
+an `ItemWater` (fresh, room, equilibrium factor on a sorption curve shared by
+every material, hours to dry, dry below). What is cut, picked, dug up or
+felled comes fresh (`item_stack_set_fresh()`: `knowledge_product()`, a felled
+tree's logs, branches and twigs); what nature lays and what is made by hand
+comes at its reference. Every hour `items_advance()` moves it towards
+`item_moisture_target()`: the equilibrium of the humidity the tile gives
+(the air's dew point at the tile's temperature, raised by soaked ground), or
+the room in the rain and in water, at a speed by the material's hours, the
+sun and the heat (`item_drying_speed()`). Moisture is not part of what makes
+stacks match; summaries, loads and merges average it. A change of moisture
+alone refreshes the tile's summary without a new stamp: the pictures of the
+known world keep what they saw until the tile changes otherwise. It weighs
+(`item_stack_mass()`: dry matter plus water; carrying plans stay at
+`ItemDef.weight`), makes fuel burn worse (`hearth_moisture_factor()`), tinder,
+kindling and grass for building must be dry (`ItemChoice.dry`,
+`items_chosen_type()`, `items_any_chosen()`, `hearth_ingredient_dry()`,
+`structure_material_dry()`), and it sets the speed of rot
+(`item_rot_moisture_factor()`: ×1 fresh, ×0.1 dried, ×1.5 soaked).
 
 `ItemStack.eaten` (bodies only, 0 when whole; averaged on merges, hashed only
 when not 0) is the share of a body's weight eaten away: `item_stack_mass()`
@@ -676,19 +695,20 @@ id of the record of the settler or animal whose body it is (`core/corpse.h`,
 id travels with the stack when it is carried, put down or bitten into.
 
 Food **rots** while it lies on a tile (`ItemDef.rot_days`: how long a
-pristine item lasts in the open at 15 °C; a type never both rots and
-transforms). For those types `ItemStack.progress` holds the rot toward the
-next hit point lost, in 1/`ITEM_ROT_STEP` of one (averaged on merges like
-the drying hours); the stack is gone when its hit points run out, so a
+pristine item lasts in the open at 15 °C). For those types
+`ItemStack.progress` holds the rot toward the next hit point lost, in
+1/`ITEM_ROT_STEP` of one (averaged on merges like hit points); the stack is gone when its hit points run out, so a
 poorly gathered (damaged) stack spoils sooner. The speed comes from the
 tile: `item_rot_rate()` doubles every 10 °C above 15 °C (at most ×4),
 halves every 10 °C below, stops at or below 0 °C (frozen), ×0.75 under a
-built or natural roof, ×1.5 under the open sky while rain or snow falls.
+built or natural roof, times the factor of its moisture (what takes no
+water, bodies, ×1.5 under the open sky while rain or snow falls).
 `items_advance()` asks for the conditions of each tile through a callback
-(`ItemConditionsFn`: the rot rate, and whether what dries can dry: not out
-in the rain), so that `item` depends neither on the temperature layer nor
-on the weather; the game passes `tile_conditions()`, and the tile
-inspector uses `game_item_rot_rate()` for its estimate. Items in hands or
+(`ItemConditionsFn`, `ItemConditions`: the rot rate, rain, the humidity felt,
+water on the tile, the speed of drying), so that `item` depends neither on
+the temperature layer nor on the weather; the game passes
+`game_item_conditions()`, and the tile inspector uses `game_item_rot_rate()`
+for its estimate. Items in hands or
 in a workstation's input do not rot.
 
 Every item has a **quality**, a value from 0 to 100 (`ItemQuality` is an
@@ -1801,8 +1821,8 @@ where it feels 20 °C or more), and a wet settler feels up to
 run for shelter (that comes with hypothermia). A burning hearth under the
 open sky soaks up the same rate (`Workstation.soaked`) and goes out at
 `HEARTH_SOAKED_OUT` (2: two hours of rain), its fuel kept; nobody lights a
-hearth rain or snow falls on (`hearth_rained_on()`). Food out in the rain
-rots ×1.5 and fresh grass does not dry (`ItemConditions`). Mushrooms come
+hearth rain or snow falls on (`hearth_rained_on()`). What lies out in the
+rain gets wet, food rotting faster for it (`ItemConditions`). Mushrooms come
 ×(1 + recent rain / 4), at most ×4. The frontend shows the sky and snow
 cover in the HUD, how wet a settler is, a hearth soaking, the snow cover on
 open ground (`render_snow_cover()`), falling rain and snow, fog and
@@ -1989,10 +2009,10 @@ searches backed off on that revision look again.
   fire is laid (`HearthIngredient`, `Workstation.laid` bits): a handful of
   dry twigs as kindling, then a branch, each fetched and laid on its own
   (`LIGHT_FETCH_LAY`, `LIGHT_BRING_LAY`, `hearth_lay()`: its weight goes to
-  the fuel). Wet twigs (`ITEM_WET_TWIGS`) do not count as kindling: a
-  felled tree's are green, dry twigs lying in the rain get wet
-  (`ItemDef.wets_into`, the twigs the trees shed too), and wet ones dry in
-  a day like fresh grass. `hearth_light()` clears `laid`:
+  the fuel). Wet twigs do not count as kindling (`hearth_ingredient_dry()`,
+  fetched with `ItemChoice.dry`): a felled tree's are green, twigs lying in
+  the rain get wet, and they dry within a day or two out of it.
+  `hearth_light()` clears `laid`:
   every lighting lays the fire again. Then, below `HEARTH_LIGHT_FUEL_MIN`
   in it and on its way (`hearth_wants_fuel_to_light()`) with some fuel the
   hearth takes lying somewhere, fuel fetched and put in
@@ -2143,7 +2163,7 @@ items (twigs counting wet ones), so trees shed items. They are items like
 any other: in the stacks and `Items.totals`, hauled, forbidden, moved by
 hand, used by bills and builders where they lie; nothing is gathered from
 the ground, and nothing crumbles away (the trees' shedding stops at
-`MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX` a tile, wet twigs counted). At most
+`MAP_BRANCHES_MAX` and `MAP_TWIGS_MAX` a tile, wet or dry). At most
 `MAP_STONES_MAX` (20) stones lie on a tile, never growing back. World
 generation draws 0 to 20 stones for
 every stony tile (`TerrainDef.stony`: soil, rich soil, gravel, rough stone; not

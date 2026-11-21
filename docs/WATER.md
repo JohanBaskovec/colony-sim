@@ -14,8 +14,9 @@ coming out again (a water table, springs, wells, damp galleries); and a
 moisture of their own for items (grass that dries into hay, wood that
 seasons, a bundle of twigs that gets soaked in the rain).
 
-Status: step W1 is built (the water layer at rest, §10); the rest is
-design. Values marked *(tuning)* are first guesses.
+Status: steps W1 (the water layer at rest) and W1b (the moisture of
+items, §7) are built (§10); the rest is design. Values marked *(tuning)*
+are first guesses.
 
 ## 1. Principles
 
@@ -497,9 +498,13 @@ does not change the air over it. Freezing is W6.
 
 ### 7.2 What is stored
 
-`Item.moisture`: a `uint8_t`, the share of the item's mass that is water,
-in steps of 0.5 % (0 to 200). Only items of materials that take water have
-one. Stones, flint and bone have none (always 0, never updated).
+`Item.moisture`: a `uint16_t`, the share of the item's mass that is water,
+in steps of 1/10 000 (`ITEM_MOISTURE_UNITS`; coarser steps would round a
+log's hourly drying to nothing), stored + 1. Only items of materials that
+take water have one. Stones, flint and bodies have none (always 0, never
+updated). A stack built by hand with 0 gets the type's reference moisture:
+fresh for food, else the equilibrium at 65 % of relative humidity, what the
+type's weight is given at.
 
 Each item type that takes water gets an `ItemWater` in its `ItemDef`
 *(tuning)*:
@@ -606,13 +611,25 @@ in a wood do not cost every hour.
   (the sprite tinted by its moisture, `render.c`).
 - The item list of a tile and the bills' ingredients can sort by moisture.
 
-### 7.6 Types that go away
+### 7.6 Types that went away
 
 `ITEM_FRESH_GRASS` and `ITEM_WET_TWIGS` (and `ItemDef.transforms_into` and
-`wets_into`, which only they use) go. Their uses (`gather_zone.c`,
+`wets_into`, which only they used) are gone. Their uses (`gather_zone.c`,
 `tree.c`, `map.c`'s twig counts, `render.c`, `sprites.c`) read grass and
 twigs with their moisture. The stable ids `fresh_grass` and `wet_twigs`
-disappear (no saves yet).
+disappeared (no saves yet).
+
+### 7.7 As built, and what is left
+
+- A change of moisture alone is no change of the tile (no new stamp): the
+  picture of the known world keeps the moisture it saw until the tile
+  changes otherwise. Carried and held items keep theirs (they do not take
+  the air of their holder's tile yet).
+- Not yet: the skip of items settled at their target (every item that takes
+  water is visited each hour, as rotting food was), a lighting chance that
+  falls with the kindling's moisture, sorting by moisture, a "dry only"
+  choice for bills and stockpiles (no recipe takes grass yet), hauling
+  things out to dry.
 
 ## 8. Later (not in these steps)
 
@@ -661,7 +678,7 @@ Each step is tested, measured against the baseline (`bench_simulation`,
    flows yet: the water stays as laid. The state hash changes; tests: lakes
    at rest, the classes, paths through shallows and not deep water, animals
    and settlers drinking.
-2. **W1b, moisture of items.** §7: `Item.moisture`, `ItemWater`, the
+2. **W1b, moisture of items** (built). §7: `Item.moisture`, `ItemWater`, the
    hourly drying and wetting, fire, building, rot, weight, the item window,
    the tinted sprites. `ITEM_FRESH_GRASS` and `ITEM_WET_TWIGS` go. Tests:
    grass drying into hay in the sun and not on wet ground, twigs soaked in

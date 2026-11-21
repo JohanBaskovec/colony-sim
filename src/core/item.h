@@ -27,10 +27,15 @@
  * best quality and cannot be damaged.
  *
  * Food rots while it lies on a tile: it loses hit points, faster when warm,
- * not at all when frozen, a little slower under a roof, faster in the rain,
- * and is gone when they run out (see item_rot_rate()). Bodies rot the same
- * way; they are not food. Fresh grass does not dry in the rain. Items in
- * hands do not rot.
+ * not at all when frozen, a little slower under a roof, faster the wetter it
+ * is, and is gone when they run out (see item_rot_rate()). Bodies rot the
+ * same way; they are not food. Items in hands do not rot.
+ *
+ * Items of materials that take water (grass, wood, food...) have a moisture
+ * (docs/WATER.md §7): the share of their mass that is water. It moves every
+ * hour towards what the air, the ground and the rain of their tile give
+ * (items_advance()), weighs (item_stack_mass()), makes fuel burn worse and
+ * tinder refuse a spark (item_moisture_dry()) and speeds rot up.
  */
 #ifndef COLONY_CORE_ITEM_H
 #define COLONY_CORE_ITEM_H
@@ -51,8 +56,6 @@ typedef enum ItemType {
     ITEM_COBBLE,
     ITEM_BRANCHES,
     ITEM_TWIGS,
-    ITEM_WET_TWIGS, /* Picked up from wet ground, or rained on: they dry into twigs. */
-    ITEM_FRESH_GRASS,
     ITEM_GRASS,
     ITEM_FLINT,
     ITEM_CHOPPER,
@@ -116,7 +119,7 @@ _Static_assert(ITEM_TYPE_COUNT <= 64, "item types must fit in an ItemTypeMask");
 
 #define ITEM_TYPE_BIT(type) ((ItemTypeMask)1u << (unsigned)(type))
 
-/* What takes a spark: dry grass, bracken and moss. */
+/* What takes a spark when dry (item_moisture_dry()): grass, bracken and moss. */
 #define ITEM_TINDER_TYPES                                                                          \
     (ITEM_TYPE_BIT(ITEM_GRASS) | ITEM_TYPE_BIT(ITEM_BRACKEN) | ITEM_TYPE_BIT(ITEM_MOSS))
 
@@ -153,6 +156,26 @@ typedef enum ItemForm {
  * shoulders rather than in a fist (docs/CARRYING.md §2). */
 #define ITEM_LONG_CM 60
 
+/* Moisture: the share of an item's mass that is water, 0 .. 1, stored in
+ * steps of 1 / ITEM_MOISTURE_UNITS (fine enough for a log to dry an hour at a
+ * time). */
+#define ITEM_MOISTURE_UNITS 10000
+
+/* How a material takes water (docs/WATER.md §7.2); `room` 0: it takes none
+ * (stone, flint, bodies). Shares of the item's mass (tuning). */
+typedef struct ItemWater {
+    float fresh;       /* As it comes into the world: cut, felled, picked. */
+    float room;        /* The most it holds, soaked. */
+    float equilibrium; /* Factor on the sorption curve every material shares. */
+    /* Hours to go two thirds of the way from fresh to its equilibrium at
+     * ITEM_DRYING_REFERENCE_CELSIUS, out of the sun and the rain. */
+    float dry_hours;
+    float dry_below; /* Dry under this: tinder, thatch (item_moisture_dry()). */
+    /* ItemDef.weight is its weight fresh (food), else at the reference air
+     * (item_reference_moisture()). */
+    bool weighed_fresh;
+} ItemWater;
+
 typedef struct ItemDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
@@ -166,18 +189,10 @@ typedef struct ItemDef {
     int max_hit_points; /* Hit points of one item in perfect condition. */
     bool has_quality;   /* false: always ITEM_QUALITY_BEST. */
     bool damageable;    /* false: always at max_hit_points. */
-    /* Items lying on a tile turn into `transforms_into` after
-     * `transform_hours` out of the rain (fresh grass and wet twigs dry);
-     * ITEM_NONE: never. */
-    ItemType transforms_into;
-    int transform_hours;
-    /* Items lying out in the rain turn into `wets_into` (dry twigs get wet);
-     * ITEM_NONE: never. */
-    ItemType wets_into;
     /* Days a pristine item lasts lying in the open at
-     * ITEM_ROT_REFERENCE_CELSIUS before it has rotted away; 0: never rots.
-     * A type never both rots and transforms. */
+     * ITEM_ROT_REFERENCE_CELSIUS before it has rotted away; 0: never rots. */
     float rot_days;
+    ItemWater water;
     /* Made of wood: carries the species of its trees (ItemStack.woods,
      * docs/TREES.md §6), named by them with `wood_name_key` ("{0} branches",
      * "Branches de {0}": wood_item_name()). */
@@ -195,8 +210,25 @@ typedef struct ItemDef {
 #define ITEM_ROT_FROZEN_CELSIUS 0.0f
 #define ITEM_ROT_RATE_MAX 4.0f
 #define ITEM_ROT_SHELTERED 0.75f
-/* Rot of food out in the rain (×), wet through. */
+/* Rot (×) of what takes no water out in the rain (bodies), and of what does
+ * once soaked (its room); what has dried below its `dry_below` rots at
+ * ×ITEM_ROT_DRY (item_rot_moisture_factor()). */
 #define ITEM_ROT_RAINED_ON 1.5f
+#define ITEM_ROT_DRY 0.1f
+
+/* Drying (docs/WATER.md §7.3, tuning): the relative humidity of the air items
+ * are weighed in (item_reference_moisture()); drying runs at ×1 at
+ * ITEM_DRYING_REFERENCE_CELSIUS out of the sun, twice as fast every
+ * ITEM_DRYING_DOUBLING_CELSIUS warmer, up to 1 + ITEM_DRYING_SUN times as fast
+ * in full sun, at ×ITEM_DRYING_FROZEN at most when it freezes; rain wets an
+ * item ITEM_WETTING_SPEED times as fast as it dries (times the weather's
+ * wetting), water soaks it within the hour. */
+#define ITEM_MOISTURE_REFERENCE_HUMIDITY 0.65f
+#define ITEM_DRYING_REFERENCE_CELSIUS 20.0f
+#define ITEM_DRYING_DOUBLING_CELSIUS 15.0f
+#define ITEM_DRYING_SUN 2.0f
+#define ITEM_DRYING_FROZEN 0.2f
+#define ITEM_WETTING_SPEED 8.0f
 /* Rot units per hit point (see ItemStack.progress). */
 #define ITEM_ROT_STEP 1000
 
@@ -206,9 +238,8 @@ typedef struct ItemStack {
     uint8_t quality; /* ItemQuality, average of the items. */
     uint16_t count;
     uint16_t hit_points; /* Per item, 1..max_hit_points, average of the items. */
-    /* Types that transform: hours spent lying on a tile toward the
-     * transformation. Types that rot: rot toward the next hit point lost, in
-     * 1/ITEM_ROT_STEP of one. Average of the items; 0 for other types. */
+    /* Types that rot: rot toward the next hit point lost, in 1/ITEM_ROT_STEP
+     * of one. Average of the items; 0 for other types. */
     uint16_t progress;
     /* Bodies: the share of its weight eaten, in 1/ITEM_EATEN_FULL, average
      * of the items; 0 for a whole one and for other types. Eating takes
@@ -230,6 +261,11 @@ typedef struct ItemStack {
      * stacks match. */
     uint32_t made;
     uint16_t maker;
+    /* Types that take water: 1 + the moisture in 1/ITEM_MOISTURE_UNITS (the
+     * average of the items), 0: unknown (items_add() gives the type's
+     * reference moisture, item_reference_moisture()). 0 for other types.
+     * Never part of what makes stacks match. */
+    uint16_t moisture;
     /* A load in hand (see items_pick_up()): the very items, a list in the
      * item pool (slot + 1 of the first), the fields above their summary. 0
      * for a stack that is only numbers (what to add, what a tile holds):
@@ -254,6 +290,7 @@ typedef struct Item {
     uint8_t angle;       /* How it is turned, in 1/256 of a turn. */
     uint8_t forbidden;   /* Non-zero: the player forbade it (see items_forbidden()). */
     WoodMask woods;      /* As ItemStack.woods. */
+    uint16_t moisture;   /* As ItemStack.moisture, never 0 for a type that takes water. */
     uint32_t made;       /* As ItemStack.made. */
     uint16_t maker;      /* As ItemStack.maker. */
     uint32_t next;       /* Next item of the same tile: slot + 1, 0 for none. */
@@ -376,9 +413,63 @@ bool item_rots(ItemType type);
  * temperature, under a roof or not; 0 when frozen. */
 float item_rot_rate(float celsius, bool sheltered);
 
-/* Hours until a stack rots away at `rate` (item_rot_rate()); a negative
- * value when it never does (a type that does not rot, a rate of 0). */
+/* Hours until a stack rots away at `rate` (item_rot_rate()) times the
+ * factor of its moisture (item_rot_moisture_factor()); a negative value when
+ * it never does (a type that does not rot, a rate of 0). */
 float item_stack_rot_hours(ItemStack stack, float rate);
+
+/* Moisture (docs/WATER.md §7) */
+
+/* Whether items of a type take water (ItemDef.water.room > 0). */
+bool item_takes_water(ItemType type);
+
+/* The moisture a type tends to in still air of a relative humidity (0 .. 1):
+ * a sorption curve every material shares (that of wood: 6 % at 30 %, 12 % at
+ * 65 %, 28 % saturated) times the material's factor, at most its room. 0 for
+ * a type that takes no water. */
+float item_equilibrium_moisture(ItemType type, float humidity);
+
+/* Its moisture fresh (ItemWater.fresh), and the one it is weighed at (fresh
+ * for food, else the equilibrium at ITEM_MOISTURE_REFERENCE_HUMIDITY): what
+ * an item added with an unknown moisture gets. 0 for types without water. */
+float item_fresh_moisture(ItemType type);
+float item_reference_moisture(ItemType type);
+
+/* The moisture of an item, of a stack (ItemStack.moisture: 0 is the
+ * reference moisture), 0 .. 1; 0 for types that take no water. */
+float item_moisture(const Item *item);
+float item_stack_moisture(ItemStack stack);
+
+/* Sets the moisture of a stack (clamped to 0 .. the type's room); nothing
+ * for a type that takes no water. And a stack fresh: cut, felled, picked. */
+void item_stack_set_moisture(ItemStack *stack, float moisture);
+void item_stack_set_fresh(ItemStack *stack);
+
+/* Whether an item of a type at this moisture is dry (below its
+ * ItemWater.dry_below; always for a type that takes no water). */
+bool item_moisture_dry(ItemType type, float moisture);
+
+/* How wet an item is, in words (docs/WATER.md §7.5). */
+typedef enum ItemMoistureState {
+    ITEM_MOISTURE_NONE, /* Takes no water. */
+    ITEM_MOISTURE_DRY,
+    ITEM_MOISTURE_WET,
+    ITEM_MOISTURE_SOAKED, /* At its room, or nearly. */
+    ITEM_MOISTURE_STATE_COUNT
+} ItemMoistureState;
+ItemMoistureState item_moisture_state(ItemType type, float moisture);
+/* A phrase that fits any item (never an adjective that would have to agree
+ * with it), NULL for ITEM_MOISTURE_NONE. */
+const char *item_moisture_state_key(ItemMoistureState state);
+
+/* Its weight at this moisture over its weight in ItemDef (1 for types that
+ * take no water): the dry matter is the same, the water comes on top. */
+float item_moisture_weight_factor(ItemType type, float moisture);
+
+/* Speed of its rot at this moisture (×): ×1 from halfway between dry and
+ * fresh up to fresh, down to ×ITEM_ROT_DRY at dry, up to ×ITEM_ROT_RAINED_ON
+ * soaked; 1 for types that take no water. */
+float item_rot_moisture_factor(ItemType type, float moisture);
 
 /* Maximum number of items of a type in one stack (one tile); 0 for ITEM_NONE. */
 int item_stack_limit(ItemType type);
@@ -409,7 +500,7 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
 bool item_stacks_match(ItemStack a, ItemStack b);
 
 /* Adds `from` to `into` (empty, or matching): counts add up (capped at
- * UINT16_MAX), quality, hit points and transformation progress are averaged by
+ * UINT16_MAX), quality, hit points, rot progress and moisture are averaged by
  * count.
  * Fails, changing nothing, when the stacks do not match. */
 bool item_stack_merge(ItemStack *into, ItemStack from);
@@ -666,17 +757,21 @@ long item_rot_left(const Item *item);
 int items_list(const Items *items, size_t index, ItemOrder order, const Item **out, int capacity);
 
 /* What of a tile's group of a type is wanted (a bill's ingredients): a
- * quality range, the items that rot away soonest first, and for wooden
- * items the species allowed (item_woods_allowed()). */
+ * quality range, the items that rot away soonest first, for wooden
+ * items the species allowed (item_woods_allowed()), and only dry ones
+ * (item_moisture_dry(): tinder, kindling, thatch). */
 typedef struct ItemChoice {
     int min_quality;
     int max_quality;
     bool soonest_rot;
     WoodMask woods; /* 0: any. */
+    bool dry;
 } ItemChoice;
 
 /* Any item of the stack, the newest first. */
-#define ITEM_CHOICE_ANY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0})
+#define ITEM_CHOICE_ANY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0, false})
+/* Any dry item. */
+#define ITEM_CHOICE_DRY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0, true})
 
 /* Whether items of a stack are of the species `allowed` (0: any): always for
  * types not of wood; wooden ones of known species, all among them. */
@@ -708,6 +803,16 @@ float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType 
 ItemType items_soonest_rotting(const Items *items, int x, int y, int z, ItemTypeMask types,
                                float *hours);
 
+/* The first of `types` (lowest first) of which a tile has at least
+ * `min_count` allowed items of the choice (items_count_chosen()), ITEM_NONE
+ * for none. */
+ItemType items_chosen_type(const Items *items, int x, int y, int z, ItemTypeMask types,
+                           ItemChoice choice, int min_count);
+
+/* Whether some allowed item of `types` of the choice (quality, species,
+ * dry) lies on the map: looks through the items (stops at the first). */
+bool items_any_chosen(const Items *items, ItemTypeMask types, ItemChoice choice);
+
 /* items_pick_up_of() for one type, only items in the choice's range, those
  * that rot away soonest first when it says so. */
 int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int count,
@@ -718,7 +823,8 @@ int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int c
 /* Lays up to `count` items of a type on a tile as nature puts them there (a
  * twig shed by a tree, a stone in the grass), as much as the tile has room
  * for: ordinary items, each of its own quality and condition (60 to 100 %,
- * from a hash of the tile, not a random stream). Returns how many. */
+ * from a hash of the tile, not a random stream), at their reference
+ * moisture. Returns how many. */
 int items_add_natural(Items *items, int x, int y, int z, ItemType type, int count);
 
 /* The same, of wood of the species `woods` (wooden types only: ignored for
@@ -737,26 +843,45 @@ int items_count_type(const Items *items, int x, int y, int z, ItemType type);
  */
 int items_drop(Items *items, const struct Map *map, int x, int y, int z, ItemStack batch);
 
-/* What items lying on a tile go through: the speed of rot (item_rot_rate()),
- * and whether what dries can dry (not out in the rain). */
+/* What items lying on a tile go through (docs/WATER.md §7.3). */
 typedef struct ItemConditions {
-    float rot_rate;
-    bool dries;
+    float rot_rate; /* Speed of rot out of the rain (item_rot_rate()). */
+    bool rained_on; /* Rain falls on them: what takes no water rots ×ITEM_ROT_RAINED_ON. */
+    float humidity; /* Relative humidity they feel (the air's, raised by wet ground), 0 .. 1. */
+    float wetting;  /* Rain or snow falling on them (weather_wetting()), 0 under cover. */
+    bool in_water;  /* They lie in water: soaked within the hour. */
+    float drying;   /* Speed of drying, ×1 at ITEM_DRYING_REFERENCE_CELSIUS in the shade. */
 } ItemConditions;
+
+/* Rot ×1, out of the rain, in still air of the reference humidity. */
+#define ITEM_CONDITIONS_STILL                                                                      \
+    ((ItemConditions){1.0f, false, ITEM_MOISTURE_REFERENCE_HUMIDITY, 0.0f, false, 1.0f})
+
+/* The speed of drying (ItemConditions.drying) at a temperature with a share
+ * of full sun (0 .. 1). */
+float item_drying_speed(float celsius, float sun);
+
+/* The moisture an item of a type goes towards in these conditions (its room
+ * in the rain or in water), and the hours it takes to go two thirds of the
+ * way from `moisture` (negative for a type that takes no water). */
+float item_moisture_target(ItemType type, ItemConditions here);
+float item_moisture_hours(ItemType type, float moisture, ItemConditions here);
+
+/* Hours until an item at `moisture` is dry in these conditions: 0 when it is
+ * already, negative when it never gets there (rain, damp air). */
+float item_hours_to_dry(ItemType type, float moisture, ItemConditions here);
 
 /* Conditions on a tile, asked of the caller of items_advance(). */
 typedef ItemConditions (*ItemConditionsFn)(const void *context, size_t tile);
 
 /*
- * Lets `hours` pass for the stacks of tiles begin..end-1 (tile indices), in
- * the conditions `conditions` gives for each tile (NULL: rot at ×1, drying):
- * stacks of types that transform progress where they dry, and those that
- * reach their type's transform_hours turn into the new type (same count,
- * same hit points in percent, quality kept when both types have one); where
- * nothing dries (out in the rain), types that get wet turn into their
- * `wets_into` type at once (dry twigs into wet ones); stacks
- * of types that rot lose hit points and are gone when none are left. Returns
- * the number of stacks that transformed or rotted away.
+ * Lets `hours` pass for the items of tiles begin..end-1 (tile indices), in
+ * the conditions `conditions` gives for each tile (NULL:
+ * ITEM_CONDITIONS_STILL): items that take water go towards
+ * item_moisture_target() (a moisture change alone is not a change of the
+ * tile: no new stamp, the pictures keep what they saw); items that rot lose
+ * hit points and are gone when none are left. Returns the number of tiles
+ * where something rotted away.
  */
 int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditionsFn conditions,
                   const void *context);

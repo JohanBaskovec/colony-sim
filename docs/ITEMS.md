@@ -75,8 +75,8 @@ lets items overlap (a heap).
   there, and counts. Searches for the nearest item of a type skip the regions
   without it, as searches skip empty levels today.
 - **Totals per type**, as today (`Items.totals`).
-- **The items that change** (food that rots, fresh grass and wet twigs that
-  dry, dry twigs out in the rain) are kept in a list of their own: only they
+- **The items that change** (food that rots, whatever takes water drying or
+  getting wet: docs/WATER.md §7) are kept in a list of their own: only they
   are brought up to date each hour, never the stones.
 - **Holders keep item lists**, not stacks: a settler's load, its tools, a
   site's delivered materials, a workstation's input, a hearth's fuel. Moving
@@ -117,8 +117,8 @@ playable.
    item's type, the count and average condition of its type), so the callers
    are unchanged. A stack added becomes that many items of its condition;
    items are taken newest first (`items_take()` says what was taken); each
-   item rots, dries and gets wet on its own, so a tile may hold dry and wet
-   twigs for a while; dropped items get a spot and an angle. A stamp per tile
+   item rots, dries and gets wet on its own (its own moisture), so a tile
+   may hold dry and wet twigs for a while; dropped items get a spot and an angle. A stamp per tile
    tells the known world which tiles changed (it used to copy every tile in
    view). The state hash covers every item. Not yet: the region masks and
    the list of changing items (wanted once litter is made of items, step 3).
@@ -245,8 +245,8 @@ playable.
    cobbles and the stones group: what lies on the ground is hauled like
    anything else (stockpile filters decide) and bills and builders take it
    where it lies. Nothing crumbles away any more; the trees' shedding stops
-   at the ceiling of a tile (`MAP_BRANCHES_MAX`, `MAP_TWIGS_MAX`, wet twigs
-   counted, since twigs left in the rain now get wet like any). A growing
+   at the ceiling of a tile (`MAP_BRANCHES_MAX`, `MAP_TWIGS_MAX`, wet or
+   dry). A growing
    trunk pushes what lies in its way onto the tile beside it, and plants
    spread under loose items: litter stopped neither before. Each item of a heap can also be clicked and selected on its
    own (`game_items_under_point()`, `game_pick_item()`: the topmost first,

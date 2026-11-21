@@ -576,10 +576,16 @@ bool game_animal_seen(const Game *game, EntityId id);
  * game_colonist_at(), or ENTITY_NONE. */
 EntityId game_animal_at(const Game *game, float world_x, float world_y, int z);
 
-/* Speed of rot of food lying on a tile (item_rot_rate() at the tile's
- * temperature, under its roof if any, faster out in the rain); 0 out of
- * bounds. */
-float game_item_rot_rate(const Game *game, int x, int y, int z);
+/* Speed of rot of an item of a type lying on a tile (item_rot_rate() at the
+ * tile's temperature, under its roof if any; out in the rain faster for what
+ * takes no water: the rain soaks the others, item_stack_rot_hours()); 0 out
+ * of bounds. */
+float game_item_rot_rate(const Game *game, ItemType type, int x, int y, int z);
+
+/* What items lying on a tile go through now (docs/WATER.md §7.3): the air's
+ * humidity at the tile's temperature, raised by soaked ground, the rain under
+ * the open sky, water on the tile, the sun and the heat that dry them. */
+ItemConditions game_item_conditions(const Game *game, int x, int y, int z);
 
 /* Food need all the colonists lose in a day (gather_daily_food()). */
 float game_daily_food(const Game *game);

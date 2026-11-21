@@ -358,10 +358,10 @@ static void test_wanted_resources(void)
     REQUIRE(init_world(&map, &zones, &items));
     int index = gather_zone_create(&zones, &map, 0, 0, 2, 2, 0);
     const GatherZone *zone = gather_zone_get(&zones, index);
-    /* Until the colony has 10 armfuls of grass: fresh and dry both count. */
+    /* Until the colony has 10 armfuls of grass, fresh or dry. */
     order(&zones, &items, index, GATHER_GRASS, GATHER_UNTIL);
     gather_zone_set_target(&zones, index, GATHER_GRASS, 10);
-    items_add(&items, 12, 12, 0, item_stack_pristine(ITEM_FRESH_GRASS, 6));
+    items_add(&items, 12, 12, 0, item_stack_pristine(ITEM_GRASS, 6));
     gather_zones_update(&zones, items.totals, 0.0f);
     CHECK_EQ_INT(zone->wanted, GATHER_RESOURCE_BIT(GATHER_GRASS));
     CHECK_EQ_INT(zones.wanting_cells, 9);
@@ -787,7 +787,7 @@ static void test_grass(void)
     CHECK(!gather_job_available(&zones, &map, 3, 3, 0, GATHER_JOB_CUT_GRASS));
     CHECK(gather_zone_add_work(&zones, &map, &items, 1, 3, 0, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
                                NULL));
-    CHECK_EQ_INT((int)items.totals[ITEM_FRESH_GRASS], 3);
+    CHECK_EQ_INT((int)items.totals[ITEM_GRASS], 3);
     CHECK_EQ_INT(grass->type, PLANT_GRASS);
     CHECK_NEAR(grass->growth, 0.0, 1e-6);
     CHECK(!gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
@@ -1062,7 +1062,7 @@ static void test_clearing_plants(void)
     CHECK(gather_clear_work(&map, 3, 3, 0) > 0.0f);
     gather_clear_plant(&map, &items, 3, 3, 0, 60.0, NULL);
     CHECK_EQ_INT(map.plants[map_index(&map, 3, 3, 0)].type, PLANT_NONE);
-    CHECK_EQ_INT((int)items.totals[ITEM_FRESH_GRASS], 3);
+    CHECK_EQ_INT((int)items.totals[ITEM_GRASS], 3);
     CHECK_NEAR(gather_clear_work(&map, 3, 3, 0), 0.0, 1e-6);
 
     /* A bramble is pulled up: its berries. */
@@ -1099,7 +1099,7 @@ static void test_grass_is_a_plant_with_a_stock(void)
     REQUIRE(init_world(&map, &zones, &items));
     const PlantProduct *armfuls = plant_product(PLANT_GRASS, 0);
     REQUIRE(armfuls != NULL);
-    CHECK_EQ_INT(armfuls->item, ITEM_FRESH_GRASS);
+    CHECK_EQ_INT(armfuls->item, ITEM_GRASS);
     CHECK_EQ_INT(plant_food_slot(PLANT_GRASS), -1); /* Nobody eats it in place. */
     Plant *tall = put_plant(&map, 1, 1, PLANT_GRASS, 1.0f);
     Plant *short_grass = put_plant(&map, 3, 1, PLANT_GRASS, 0.4f);
@@ -1118,7 +1118,9 @@ static void test_grass_is_a_plant_with_a_stock(void)
     CHECK(gather_job_available(&zones, &map, 1, 1, 0, GATHER_JOB_CUT_GRASS));
     CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
                                NULL));
-    CHECK_EQ_INT((int)items.totals[ITEM_FRESH_GRASS], armfuls->capacity);
+    CHECK_EQ_INT((int)items.totals[ITEM_GRASS], armfuls->capacity);
+    ItemStack cut = items_get_of(&items, 1, 1, 0, ITEM_TYPE_BIT(ITEM_GRASS));
+    CHECK_NEAR(item_stack_moisture(cut), item_fresh_moisture(ITEM_GRASS), 1e-3); /* Fresh. */
     CHECK_EQ_INT(tall->type, PLANT_GRASS);
     CHECK_NEAR(tall->growth, 0.0f, 1e-6);
     CHECK_EQ_INT(plant_stock_available(tall, 0), 0);
@@ -1231,7 +1233,7 @@ static void test_single_plant_harvest_and_uproot(void)
     CHECK(!gather_harvest_plant(&map, &items, 1, 1, 0, 60.0, NULL));
     /* Grass cut grows again. */
     CHECK(gather_harvest_plant(&map, &items, 4, 1, 0, 60.0, NULL));
-    CHECK(items.totals[ITEM_FRESH_GRASS] > 0);
+    CHECK(items.totals[ITEM_GRASS] > 0);
     CHECK_EQ_INT(grass->type, PLANT_GRASS);
     CHECK(!gather_plant_harvestable(&map, 4, 1, 0));
     /* Uprooting the cattail: its rhizomes first, then it is gone. */

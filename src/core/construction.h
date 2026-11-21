@@ -217,6 +217,9 @@ int construction_material_count(const ConstructionSite *site, int slot);
  * is in. 0 for an unused slot. */
 ItemTypeMask construction_material_types(const ConstructionSite *site, int slot);
 
+/* Whether a slot's material must be brought dry (structure_material_dry()). */
+bool construction_material_dry(const ConstructionSite *site, int slot);
+
 /* Work the site needs in all (building or refreshing). */
 float construction_work_needed(const ConstructionSite *site);
 

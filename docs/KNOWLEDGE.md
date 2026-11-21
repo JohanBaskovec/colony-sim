@@ -425,10 +425,8 @@ near the hearth; go hunting.
 | `cobble`      | Cobble        | Resources | 1.0  | 1.5  | 666   | 200 | yes     | no         | Lies about stony ground (§4.2). Today's `stone` item, renamed. |
 | `flint`       | Flint nodule  | Resources | 1.0  | 1.5  | 666   | 150 | yes     | no         | Lies about a flint patch (§4.2). |
 | `branches`    | Branches      | Resources | 1.5  | 10   | 100   | 20  | yes     | yes        | Shed by the trees, from a felled crown. |
-| `twigs`       | Dry twigs (handful) | Resources | 0.2 | 2   | 500   | 10  | no      | yes        | Shed by the trees, from a felled crown. Kindling: a fire is laid with a handful before it is lit. In the rain, they get wet. |
-| `wet_twigs`   | Wet twigs (handful) | Resources | 0.3 | 2   | 500   | 10  | no      | yes        | Twigs picked up from wet ground or in the rain, green from a felled tree: dry into twigs in 24 hours; burn, but catch no flame (no kindling). |
-| `fresh_grass` | Fresh grass (armful) | Resources | 2.5 | 25 | 40  | 10  | no      | yes        | Cut grass. Dries into dry grass. |
-| `grass`       | Dry grass (armful) | Resources | 1.0 | 25 | 40   | 15  | no      | yes        | Fresh grass left to dry. |
+| `twigs`       | Twigs (handful) | Resources | 0.2 | 2   | 500   | 10  | no      | yes        | Shed by the trees, green from a felled crown. Kindling when dry: a fire is laid with a handful before it is lit. In the rain, they get wet (their moisture, docs/WATER.md §7). |
+| `grass`       | Grass (armful) | Resources | 1.0 | 25 | 40   | 15  | no      | yes        | Cut fresh, it dries into hay out of the rain (its moisture); dry, it is tinder and thatch. |
 | `wood`        | Wood (log)    | Resources | 7.0  | 20   | 50    | 60  | yes     | yes        | Felling trees (needs an axe: not at the start). |
 | `stone_block` | Stone block   | Resources | 20.0 | 20   | 50    | 150 | no      | no         | Mining (needs a pick: not at the start). Was `stone` before step 2. |
 

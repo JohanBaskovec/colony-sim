@@ -885,9 +885,12 @@ TreeFall tree_fell(Map *map, Items *items, int x, int y, int z, ItemStack wood)
     }
     ItemStack branches = item_stack_pristine(ITEM_BRANCHES, tree_crown_yield(plant, ITEM_BRANCHES));
     branches.woods = woods;
-    /* Green twigs, wet with sap: they dry like those picked from wet ground. */
-    ItemStack twigs = item_stack_pristine(ITEM_WET_TWIGS, tree_crown_yield(plant, ITEM_TWIGS));
+    /* Green wood, wet with sap: it seasons as it lies (docs/WATER.md §7). */
+    ItemStack twigs = item_stack_pristine(ITEM_TWIGS, tree_crown_yield(plant, ITEM_TWIGS));
     branches.quality = twigs.quality = ITEM_QUALITY_STANDARD;
+    item_stack_set_fresh(&wood);
+    item_stack_set_fresh(&branches);
+    item_stack_set_fresh(&twigs);
     tree_clear(map, items, x, y, z);
     map_remove_plant(map, x, y, z);
     /* The trunk: its foot's tile and the first two thirds of the line; the

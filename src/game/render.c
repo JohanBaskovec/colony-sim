@@ -109,8 +109,10 @@ static float below_saved_scale_x = 1.0f, below_saved_scale_y = 1.0f;
 
 static const SDL_Color TREE_COLOR = {34, 88, 40, 255};
 static const SDL_FColor WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
-/* What wet twigs are drawn with: the dry twig's sprite, darker. */
-static const SDL_FColor WET_TWIG_TINT = {0.68f, 0.68f, 0.7f, 1.0f};
+/* Items tinted by their moisture (docs/WATER.md §7.5): soaked wood darker,
+ * grass fresh green rather than straw (the dry grass icon times this). */
+static const SDL_FColor WET_TINT = {0.68f, 0.68f, 0.7f, 1.0f};
+static const SDL_FColor FRESH_GRASS_TINT = {0.45f, 0.91f, 0.62f, 1.0f};
 
 /* Tints of the (light gray) hair and beard sprites. */
 static const SDL_Color HAIR_COLORS[HAIR_COLOR_COUNT] = {
@@ -155,7 +157,7 @@ static const SDL_Color WILD_CARROT_COLOR = {222, 206, 168, 255};
 static const SDL_Color RHIZOME_COLOR = {176, 140, 100, 255};
 static const SDL_Color BRANCH_COLOR = {122, 86, 50, 255};
 static const SDL_Color TWIG_COLOR = {168, 128, 82, 255};
-static const SDL_Color FRESH_GRASS_COLOR = {92, 168, 64, 255};
+static const SDL_Color FRESH_GRASS_COLOR = {92, 168, 64, 255}; /* Leaves on the icons. */
 static const SDL_Color DRY_GRASS_COLOR = {206, 184, 104, 255};
 static const SDL_Color FLINT_COLOR = {72, 78, 96, 255};
 static const SDL_Color FLAKE_COLOR = {128, 136, 156, 255};
@@ -1461,13 +1463,10 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         break;
     }
     case ITEM_BRANCHES:
-    case ITEM_TWIGS:
-    case ITEM_WET_TWIGS: {
-        /* Long thin branches, or a pile of short twigs (darker when wet). */
+    case ITEM_TWIGS: {
+        /* Long thin branches, or a pile of short twigs. */
         bool twigs = type != ITEM_BRANCHES;
-        SDL_Color color = type == ITEM_WET_TWIGS ? shade(TWIG_COLOR, -45)
-                          : twigs                ? TWIG_COLOR
-                                                 : BRANCH_COLOR;
+        SDL_Color color = twigs ? TWIG_COLOR : BRANCH_COLOR;
         int count = twigs ? 4 : 3;
         float length = twigs ? 0.36f : 0.68f;
         float thickness = SDL_max(1.0f, floorf(h * (twigs ? 0.08f : 0.11f)));
@@ -1480,19 +1479,17 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
-    case ITEM_FRESH_GRASS:
     case ITEM_GRASS:
     case ITEM_MOSS:
     case ITEM_BRACKEN:
     case ITEM_HEATHER:
     case ITEM_REEDS: {
         /* A sheaf of upright blades (stems, sprigs). */
-        SDL_Color color = type == ITEM_GRASS     ? DRY_GRASS_COLOR
-                          : type == ITEM_MOSS    ? MOSS_COLOR
+        SDL_Color color = type == ITEM_MOSS      ? MOSS_COLOR
                           : type == ITEM_BRACKEN ? BRACKEN_COLOR
                           : type == ITEM_HEATHER ? HEATHER_COLOR
                           : type == ITEM_REEDS   ? REED_COLOR
-                                                 : FRESH_GRASS_COLOR;
+                                                 : DRY_GRASS_COLOR;
         float blade_w = SDL_max(1.0f, floorf(w * 0.1f));
         for (int i = 0; i < 5; i++) {
             float top = (i % 2 == 0) ? 0.26f : 0.34f;
@@ -1688,7 +1685,7 @@ static void icon_flush(SDL_Renderer *renderer)
 /* An item's icon centered on (cx, cy), `size` pixels wide, turned by `turns`
  * of a full turn (clockwise). */
 static void icon_quad(SDL_Renderer *renderer, ItemType type, float cx, float cy, float size,
-                      float turns)
+                      float turns, SDL_FColor tint)
 {
     if (icon_count == BATCH_MAX_QUADS) {
         icon_flush(renderer);
@@ -1708,9 +1705,8 @@ static void icon_quad(SDL_Renderer *renderer, ItemType type, float cx, float cy,
     const float V[4] = {v0, v0, v1, v1};
     SDL_Vertex *vertex = &icon_vertices[icon_count * 4];
     for (int i = 0; i < 4; i++) {
-        vertex[i] = (SDL_Vertex){{cx + DX[i] * c - DY[i] * s, cy + DX[i] * s + DY[i] * c},
-                                 {1.0f, 1.0f, 1.0f, 1.0f},
-                                 {U[i], V[i]}};
+        vertex[i] = (SDL_Vertex){
+            {cx + DX[i] * c - DY[i] * s, cy + DX[i] * s + DY[i] * c}, tint, {U[i], V[i]}};
     }
     icon_count++;
 }
@@ -1720,11 +1716,35 @@ static void icon_quad(SDL_Renderer *renderer, ItemType type, float cx, float cy,
 #define ITEMS_DRAWN_PER_TILE 10
 #define ITEMS_FAR_TILE_PIXELS 10.0f
 
+static SDL_FColor mix_tint(SDL_FColor tint, float t)
+{
+    return (SDL_FColor){1.0f + (tint.r - 1.0f) * t, 1.0f + (tint.g - 1.0f) * t,
+                        1.0f + (tint.b - 1.0f) * t, 1.0f};
+}
+
+/* How an item is tinted by its moisture: grass green from dry to fresh, wood
+ * darker from dry to soaked; food and stones as they are. */
+static SDL_FColor moisture_tint(const Item *item)
+{
+    ItemType type = (ItemType)item->type;
+    if (!item_takes_water(type) || item_is_food(type)) {
+        return WHITE;
+    }
+    const ItemWater *water = &item_def(type)->water;
+    float moisture = item_moisture(item);
+    if (type == ITEM_GRASS) {
+        float t = (moisture - water->dry_below) / (water->fresh - water->dry_below);
+        return mix_tint(FRESH_GRASS_TINT, SDL_clamp(t, 0.0f, 1.0f));
+    }
+    float t = (moisture - water->dry_below) / (water->room - water->dry_below);
+    return mix_tint(WET_TINT, SDL_clamp(t, 0.0f, 1.0f));
+}
+
 /* Queues the sprite of an item lying at (cx, cy), turned its way. */
 static void draw_item_sprite(Sprites *sprites, SpriteId sprite, const Item *item, float cx,
                              float cy)
 {
-    SDL_FColor tint = item->type == ITEM_WET_TWIGS ? WET_TWIG_TINT : WHITE;
+    SDL_FColor tint = moisture_tint(item);
     sprites_draw_rotated_scaled(sprites, sprite, cx, cy, (float)item->angle * 360.0f / 256.0f,
                                 sprite_item_scale((ItemType)item->type), tint, false);
 }
@@ -1839,7 +1859,7 @@ void render_items(SDL_Renderer *renderer, Sprites *sprites, const Game *game, co
                 }
                 icon_quad(renderer, (ItemType)item->type, cx, cy,
                           tile.w * item_drawn_size((ItemType)item->type),
-                          (float)item->angle / 256.0f);
+                          (float)item->angle / 256.0f, moisture_tint(item));
             }
             if (tile.w >= ITEMS_FAR_TILE_PIXELS) { /* On the foliage, over what lies there. */
                 if (in_sprites) {
@@ -2573,7 +2593,7 @@ void render_item_icon(SDL_Renderer *renderer, Sprites *sprites, SDL_FRect rect, 
         sprites_draw_fitted(sprites, sprite,
                             (SDL_FRect){rect.x + margin, rect.y + margin, rect.w - 2.0f * margin,
                                         rect.h - 2.0f * margin},
-                            type == ITEM_WET_TWIGS ? WET_TWIG_TINT : WHITE);
+                            WHITE);
         return;
     }
     render_item_stack(renderer, &rect, type);
@@ -3509,7 +3529,8 @@ void render_item_selection(SDL_Renderer *renderer, Sprites *sprites, const Camer
         draw_item_sprite(sprites, sprite, item, cx, cy);
         sprites_flush(sprites);
     } else if (item_icons_ready(renderer)) {
-        icon_quad(renderer, (ItemType)item->type, cx, cy, size, (float)item->angle / 256.0f);
+        icon_quad(renderer, (ItemType)item->type, cx, cy, size, (float)item->angle / 256.0f,
+                  moisture_tint(item));
         icon_flush(renderer);
     }
     float radius = SDL_max(size * 0.5f + 2.0f, 4.0f);

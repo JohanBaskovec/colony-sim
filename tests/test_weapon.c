@@ -21,10 +21,10 @@ static void test_what_is_a_weapon(void)
         CHECK(attack_worth((AttackType)def->attack) > attack_worth(ATTACK_FISTS));
     }
     /* Soft, light, growing or too heavy: no weapon. */
-    const ItemType others[] = {ITEM_NONE,         ITEM_TWIGS,        ITEM_WET_TWIGS,
-                               ITEM_GRASS,        ITEM_NETTLES,      ITEM_HAZELNUTS,
-                               ITEM_BLACKBERRIES, ITEM_REEDS,        ITEM_MOSS,
-                               ITEM_STONE_BLOCK,  ITEM_SETTLER_BODY, ITEM_ROE_DEER_CARCASS};
+    const ItemType others[] = {
+        ITEM_NONE,        ITEM_TWIGS,        ITEM_GRASS,           ITEM_NETTLES,
+        ITEM_HAZELNUTS,   ITEM_BLACKBERRIES, ITEM_REEDS,           ITEM_MOSS,
+        ITEM_STONE_BLOCK, ITEM_SETTLER_BODY, ITEM_ROE_DEER_CARCASS};
     for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); i++) {
         CHECK(!item_is_weapon(others[i]));
     }

@@ -680,7 +680,7 @@ static void test_hash_covers_knowledge_and_carried_condition(void)
     colonist->carried.quality = TEST_QUALITY_FINE;
     colonist->carried.hit_points = 30;
     CHECK(game_hash(&game) != carrying);
-    colonist->carried = item_stack_make(ITEM_FRESH_GRASS, 2, 0, 10);
+    colonist->carried = item_stack_make(ITEM_BLACKBERRIES, 2, 0, 10);
     carrying = game_hash(&game);
     colonist->carried.progress = 5;
     CHECK(game_hash(&game) != carrying);
@@ -692,11 +692,12 @@ static void test_fresh_grass_dries_on_the_ground(void)
 {
     Game game;
     REQUIRE(init_flat_game(&game, 8));
-    /* Somewhere passable, away from anyone's hands. */
+    /* Somewhere passable under the open sky, away from anyone's hands. */
     int x = -1, y = -1;
     for (int ty = 0; ty < game.map.height && x < 0; ty++) {
         for (int tx = 0; tx < game.map.width && x < 0; tx++) {
-            if (map_is_passable(&game.map, tx, ty, 0)) {
+            if (map_is_passable(&game.map, tx, ty, 0) && map_water(&game.map, tx, ty, 0) == 0 &&
+                temperature_cover(&game.map, tx, ty, 0) == TEMPERATURE_COVER_OPEN) {
                 x = tx;
                 y = ty;
             }
@@ -706,26 +707,24 @@ static void test_fresh_grass_dries_on_the_ground(void)
     for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
         game_remove_colonist(&game, game_colonist_id_at(&game, slot));
     }
-    int hours = item_def(ITEM_FRESH_GRASS)->transform_hours;
-    REQUIRE(items_add(&game.items, x, y, 0, item_stack_make(ITEM_FRESH_GRASS, 3, 0, 5)) == 3);
-
-    for (int i = 0; i < (hours - 1) * TICKS_PER_HOUR; i++) {
+    ItemStack cut = item_stack_make(ITEM_GRASS, 3, 0, 5);
+    item_stack_set_fresh(&cut);
+    REQUIRE(items_add(&game.items, x, y, 0, cut) == 3);
+    float fresh = item_fresh_moisture(ITEM_GRASS);
+    for (int i = 0; i < 24 * TICKS_PER_HOUR; i++) {
+        game.weather.type = WEATHER_CLEAR;
         game_tick(&game);
     }
     ItemStack stack = items_get(&game.items, x, y, 0);
-    CHECK_EQ_INT(stack.type, ITEM_FRESH_GRASS);
-    CHECK(stack.progress >= hours - 2);
-
-    for (int i = 0; i < 2 * TICKS_PER_HOUR; i++) {
-        game_tick(&game);
-    }
-    stack = items_get(&game.items, x, y, 0);
     CHECK_EQ_INT(stack.type, ITEM_GRASS);
     CHECK_EQ_INT(stack.count, 3);
-    /* The condition carries over (in percent, rounded to whole hit points). */
-    CHECK_EQ_INT(stack.hit_points, item_hit_points_at_percent(ITEM_GRASS, 50));
-    CHECK_EQ_INT((int)game.items.totals[ITEM_FRESH_GRASS], 0);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], 3);
+    CHECK_EQ_INT(stack.hit_points, cut.hit_points); /* Only its water changes. */
+    CHECK(item_stack_moisture(stack) < fresh - 0.1f);
+    /* What the tile does to it, as the item window tells. */
+    ItemConditions here = game_item_conditions(&game, x, y, 0);
+    CHECK(!here.in_water && here.wetting == 0.0f);
+    CHECK(here.humidity > 0.0f && here.humidity <= 1.0f);
+    CHECK(item_moisture_target(ITEM_GRASS, here) < item_stack_moisture(stack));
     game_shutdown(&game);
 }
 
@@ -741,7 +740,8 @@ static void test_food_rots_on_the_ground(void)
     for (int ty = 1; ty < game.map.height && x < 0; ty++) {
         for (int tx = 0; tx + 1 < game.map.width && x < 0; tx++) {
             if (map_is_passable(&game.map, tx, ty, 0) &&
-                map_is_passable(&game.map, tx + 1, ty, 0) &&
+                map_is_passable(&game.map, tx + 1, ty, 0) && map_water(&game.map, tx, ty, 0) == 0 &&
+                map_water(&game.map, tx + 1, ty, 0) == 0 &&
                 !map_natural_roof(&game.map, tx, ty, 0) &&
                 !map_natural_roof(&game.map, tx + 1, ty, 0)) {
                 x = tx;
@@ -750,8 +750,8 @@ static void test_food_rots_on_the_ground(void)
         }
     }
     REQUIRE(x >= 0);
-    CHECK_NEAR(game_item_rot_rate(&game, -1, y, 0), 0.0f, 1e-6f);
-    float rate = game_item_rot_rate(&game, x, y, 0);
+    CHECK_NEAR(game_item_rot_rate(&game, ITEM_MUSHROOMS, -1, y, 0), 0.0f, 1e-6f);
+    float rate = game_item_rot_rate(&game, ITEM_MUSHROOMS, x, y, 0);
     CHECK_NEAR(rate, item_rot_rate(temperature_at(&game.temperatures, x, y, 0), false), 1e-6f);
     CHECK(rate > 0.0f); /* The end of summer. */
 
@@ -785,7 +785,7 @@ static void test_grass_does_not_dry_in_a_storm(void)
     int x = -1, y = -1;
     for (int ty = 1; ty < game.map.height && x < 0; ty++) {
         for (int tx = 0; tx < game.map.width && x < 0; tx++) {
-            if (map_is_passable(&game.map, tx, ty, 0) &&
+            if (map_is_passable(&game.map, tx, ty, 0) && map_water(&game.map, tx, ty, 0) == 0 &&
                 temperature_cover(&game.map, tx, ty, 0) == TEMPERATURE_COVER_OPEN) {
                 x = tx;
                 y = ty;
@@ -793,19 +793,24 @@ static void test_grass_does_not_dry_in_a_storm(void)
         }
     }
     REQUIRE(x >= 0);
-    REQUIRE(items_add(&game.items, x, y, 0, item_stack_pristine(ITEM_FRESH_GRASS, 2)) == 2);
+    ItemStack cut = item_stack_pristine(ITEM_GRASS, 2);
+    item_stack_set_fresh(&cut);
+    REQUIRE(items_add(&game.items, x, y, 0, cut) == 2);
     for (int i = 0; i < 6 * TICKS_PER_HOUR; i++) {
         game.weather.type = WEATHER_STORM;
         game.weather.spell = 5.0f; /* Rain, not snow. */
         game_tick(&game);
     }
-    CHECK_EQ_INT(items_get(&game.items, x, y, 0).progress, 0);
+    float soaked = item_stack_moisture(items_get(&game.items, x, y, 0));
+    CHECK(soaked > item_fresh_moisture(ITEM_GRASS)); /* Wetter than cut. */
     CHECK(weather_wetting(&game.weather, game.clock.tick) > 0.0f);
+    CHECK(game_item_conditions(&game, x, y, 0).wetting > 0.0f);
     game.weather.type = WEATHER_CLEAR;
     for (int i = 0; i < 3 * TICKS_PER_HOUR; i++) {
+        game.weather.type = WEATHER_CLEAR;
         game_tick(&game);
     }
-    CHECK(items_get(&game.items, x, y, 0).progress >= 2);
+    CHECK(item_stack_moisture(items_get(&game.items, x, y, 0)) < soaked);
     game_shutdown(&game);
 }
 

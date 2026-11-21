@@ -6,6 +6,7 @@
 #include "core/tree.h"
 #include "game/hud.h"
 #include "game/inspector.h"
+#include "game/item_info.h"
 
 #define TEXT_SIZE 256
 #define TILE_PANEL_GROUPS 8 /* Kinds of items listed on a heap's tile. */
@@ -295,9 +296,16 @@ static void single_item_rows(UiLayout *layout, const ThingRows *rows)
         ui_layout_label(layout, text, 0.0f, false);
     }
     if (item_rots((ItemType)one.type)) {
-        hud_rot_text(
-            text, sizeof(text),
-            item_stack_rot_hours(one, game_item_rot_rate(game, rows->x, rows->y, rows->z)));
+        hud_rot_text(text, sizeof(text),
+                     item_stack_rot_hours(one, game_item_rot_rate(game, (ItemType)one.type, rows->x,
+                                                                  rows->y, rows->z)));
+        ui_layout_label(layout, text, 0.0f, false);
+    }
+    if (item_takes_water((ItemType)one.type)) {
+        char moisture[TEXT_SIZE];
+        item_info_moisture_text(moisture, sizeof(moisture), (ItemType)one.type,
+                                item_stack_moisture(one));
+        TR_FORMAT(text, sizeof(text), tr("hud.tile.item_moisture"), moisture);
         ui_layout_label(layout, text, 0.0f, false);
     }
     const Items *items = game_items_at(game, rows->x, rows->y, rows->z);
@@ -365,7 +373,6 @@ static void item_list_rows(UiLayout *layout, const ThingRows *rows, bool alone)
     if (count > 1) {
         list_order_buttons(layout, app);
     }
-    float rate = game_item_rot_rate(game, rows->x, rows->y, rows->z);
     int shown = count < ITEM_LIST_LINES ? count : ITEM_LIST_LINES;
     for (int i = 0; i < shown; i++) {
         ItemStack one = item_as_stack(list[i]);
@@ -374,10 +381,18 @@ static void item_list_rows(UiLayout *layout, const ThingRows *rows, bool alone)
         if (!hud_item_condition_text(condition, sizeof(condition), one)) {
             SDL_strlcpy(condition, "", sizeof(condition));
         }
+        char after[TEXT_SIZE] = ""; /* How long it keeps, or how wet it is. */
         if (item_rots((ItemType)one.type)) {
-            char rot[TEXT_SIZE];
-            hud_rot_text(rot, sizeof(rot), item_stack_rot_hours(one, rate));
-            TR_FORMAT(line, sizeof(line), tr("tile_panel.item_line_rot"), name, condition, rot);
+            float rate = game_item_rot_rate(game, (ItemType)one.type, rows->x, rows->y, rows->z);
+            hud_rot_text(after, sizeof(after), item_stack_rot_hours(one, rate));
+        } else if (item_takes_water((ItemType)one.type)) {
+            item_info_moisture_text(after, sizeof(after), (ItemType)one.type,
+                                    item_stack_moisture(one));
+        }
+        if (after[0] != '\0' && condition[0] != '\0') {
+            TR_FORMAT(line, sizeof(line), tr("tile_panel.item_line_rot"), name, condition, after);
+        } else if (after[0] != '\0') {
+            TR_FORMAT(line, sizeof(line), tr("tile_panel.item_line"), name, after);
         } else if (condition[0] != '\0') {
             TR_FORMAT(line, sizeof(line), tr("tile_panel.item_line"), name, condition);
         } else {

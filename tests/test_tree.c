@@ -845,7 +845,7 @@ static void test_nuts_rot_one_by_one(void)
         hit_points[count++] = item->hit_points;
     }
     REQUIRE(count == MAP_NUTS_MAX);
-    CHECK(game_item_rot_rate(&game, 5, 5, 0) > 0.0f);
+    CHECK(game_item_rot_rate(&game, ITEM_HAZELNUTS, 5, 5, 0) > 0.0f);
     game_debug_skip(&game, 3 * 24 * TICKS_PER_HOUR); /* Three days. */
     int rotting = 0, kept = 0;
     for (const Item *item = items_first(&game.items, tile); item != NULL;
@@ -1184,7 +1184,7 @@ static void test_fell(void)
     int near_crown = 0;
     for (int y = 8; y <= 12; y++) {
         for (int x = 9; x <= 11; x++) {
-            near_crown += items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_WET_TWIGS)).count;
+            near_crown += items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_TWIGS)).count;
         }
     }
     CHECK_EQ_INT(near_crown, twigs);
@@ -1668,7 +1668,20 @@ static void test_gathering_on_trees(void)
     CHECK_EQ_INT(items_get(&items, 10, 12, 0).type, ITEM_WOOD); /* Along the trunk. */
     /* The crown came down with its twigs, green and so wet, and what lay on it. */
     CHECK_EQ_INT(map_litter(&map, 11, 10, 0, ITEM_HAZELNUTS), 1);
-    CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], OAK->crown_twigs);
+    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], OAK->crown_twigs);
+    int green = 0; /* Green wood: fresh, not seasoned. */
+    for (int y = 0; y < SIZE; y++) {
+        for (int x = 0; x < SIZE; x++) {
+            ItemStack twigs = items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_TWIGS));
+            if (twigs.type == ITEM_TWIGS) {
+                CHECK_NEAR(item_stack_moisture(twigs), item_fresh_moisture(ITEM_TWIGS), 1e-3);
+                green += twigs.count;
+            }
+        }
+    }
+    CHECK_EQ_INT(green, OAK->crown_twigs);
+    CHECK_NEAR(item_stack_moisture(items_get(&items, 10, 12, 0)), item_fresh_moisture(ITEM_WOOD),
+               1e-3);
     CHECK_EQ_UINT(zones.harmful_tree_falls, 0);
     CHECK(gather_zone_add_work(&zones, &map, &items, 3, 3, 0, GATHER_JOB_CHOP, 1e6f, 60.0, NULL));
     CHECK_EQ_UINT(zones.harmful_tree_falls, 1);

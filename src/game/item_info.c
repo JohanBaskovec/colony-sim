@@ -51,6 +51,14 @@ void item_info_percent_text(char *out, size_t size, float fraction)
     TR_FORMAT(out, size, tr("unit.percent"), number);
 }
 
+void item_info_moisture_text(char *out, size_t size, ItemType type, float moisture)
+{
+    char percent[32];
+    item_info_percent_text(percent, sizeof(percent), moisture);
+    const char *state = item_moisture_state_key(item_moisture_state(type, moisture));
+    TR_FORMAT(out, size, tr("item.info.moisture.value"), percent, state != NULL ? tr(state) : "");
+}
+
 void item_info_picture(App *app, SDL_FRect rect, ItemType type)
 {
     ui_fill(&app->ui, rect, app->ui.theme.colors[THEME_ICON_WELL]);
@@ -212,32 +220,37 @@ static void header_rows(UiLayout *layout, const InfoRows *rows)
     layout->y += size + GAP;
 }
 
-/* The ground the item was told to be dry or wet by: "Dry", "Wet, dries in 5 h". */
-static bool humidity_text(char *out, size_t size, const Item *item)
+/* Where the item's moisture is going where it lies now: dry already, dry in
+ * so long, never dry here, or getting wetter. */
+static void drying_text(char *out, size_t size, const Game *game, const InfoRows *rows)
 {
-    const ItemDef *def = item_def((ItemType)item->type);
-    if (def->transforms_into != ITEM_NONE) { /* Fresh grass, wet twigs: they dry. */
-        int left = SDL_max(1, def->transform_hours - (int)item->progress);
-        char hours[16], time[32];
-        tr_integer(hours, sizeof(hours), left);
-        TR_FORMAT(time, sizeof(time), tr("unit.hours"), hours);
-        TR_FORMAT(out, size,
-                  tr(item->type == ITEM_WET_TWIGS ? "item.info.humidity.wet"
-                                                  : "item.info.humidity.fresh"),
-                  time);
-        return true;
+    ItemType type = (ItemType)rows->item->type;
+    float moisture = item_moisture(rows->item);
+    ItemConditions here = game_item_conditions(game, rows->x, rows->y, rows->z);
+    float target = item_moisture_target(type, here);
+    if (target > moisture + 0.005f) {
+        SDL_strlcpy(out, tr("item.info.moisture.wetting"), size);
+        return;
     }
-    bool dried = def->wets_into != ITEM_NONE;
-    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && !dried; type++) {
-        dried = item_def((ItemType)type)->transforms_into == (ItemType)item->type;
+    if (item_moisture_dry(type, moisture)) {
+        SDL_strlcpy(out, tr("item.info.moisture.dry"), size);
+        return;
     }
-    if (dried) {
-        SDL_strlcpy(out, tr("item.info.humidity.dry"), size);
+    float hours = item_hours_to_dry(type, moisture, here);
+    char a[32];
+    if (hours < 0.0f) {
+        SDL_strlcpy(out, tr("item.info.moisture.never"), size);
+    } else if (hours < 48.0f) {
+        tr_integer(a, sizeof(a), (long long)hours + 1);
+        TR_FORMAT(out, size, tr("item.info.moisture.dry_in_hours"), a);
+    } else {
+        long long days = (long long)(hours / 24.0f + 0.5f);
+        tr_integer(a, sizeof(a), days);
+        TR_FORMAT(out, size, tr_plural("item.info.moisture.dry_in_days", days), a);
     }
-    return dried;
 }
 
-/* How it is: quality, hit points, rot, humidity, what is eaten of it. */
+/* How it is: quality, hit points, rot, moisture, what is eaten of it. */
 static void state_rows(UiLayout *layout, const InfoRows *rows)
 {
     const Game *game = &rows->app->game;
@@ -260,11 +273,16 @@ static void state_rows(UiLayout *layout, const InfoRows *rows)
     if (item_rots((ItemType)item->type)) {
         hud_rot_text(
             text, sizeof(text),
-            item_stack_rot_hours(rows->one, game_item_rot_rate(game, rows->x, rows->y, rows->z)));
+            item_stack_rot_hours(rows->one, game_item_rot_rate(game, (ItemType)item->type, rows->x,
+                                                               rows->y, rows->z)));
         item_info_row(layout, "item.info.rotting", text, false);
     }
-    if (humidity_text(text, sizeof(text), item)) {
-        item_info_row(layout, "item.info.humidity", text, false);
+    if (item_takes_water((ItemType)item->type)) {
+        char drying[TEXT_SIZE];
+        item_info_moisture_text(text, sizeof(text), (ItemType)item->type, item_moisture(item));
+        drying_text(drying, sizeof(drying), game, rows);
+        const char *tips[2] = {drying, tr("item.info.moisture.description")};
+        item_info_row_tip(layout, "item.info.moisture", text, tips, 2);
     }
     if (item->eaten > 0) {
         item_info_percent_text(text, sizeof(text), (float)item->eaten / (float)ITEM_EATEN_FULL);

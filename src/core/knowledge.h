@@ -174,7 +174,8 @@ int knowledge_product_condition(double level, Rng *rng);
 /*
  * `count` items of `type` produced by a worker at this level: quality and
  * condition are rolled for the item types that have them (randomness is only
- * drawn for those), others come out perfect.
+ * drawn for those), others come out perfect. Fresh (item_stack_set_fresh()):
+ * cut, picked or dug up from what grows.
  */
 ItemStack knowledge_product(ItemType type, int count, double level, Rng *rng);
 

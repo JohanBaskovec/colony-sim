@@ -57,36 +57,34 @@ static const RockDef ROCK_DEFS[ROCK_COUNT] = {
  */
 static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
     [PLANT_NONE] = {.id = "none", .move_cost = 1.0f},
-    [PLANT_GRASS] = {.id = "grass",
-                     .name_key = N_("plant.grass"),
-                     .transpiration = 1.0f,
-                     .water = {0.05f, 0.5f, 1.4f, 2.2f, 20.0f, 10.0f},
-                     .spread_chance = 0.15f,
-                     .spread_growth = 0.5f,
-                     .spread_range = 1,
-                     .growth_per_day = 0.35f,
-                     .min_fertility = 0.3f,
-                     .move_cost = 1.0f,
-                     .t_min = 5.0f,
-                     .t_opt_low = 15.0f,
-                     .t_opt_high = 25.0f,
-                     .t_max = 35.0f,
-                     .t_frost_active = -5.0f,
-                     .t_frost_hardened = -25.0f,
-                     .t_lethal_heat = 45.0f,
-                     .rest = PLANT_REST_SLEEPS,
-                     .light_min = 0.2f,
-                     .light_full = 0.8f,
-                     .dark_days = 10.0f,
-                     /* Armfuls cut at the ground, which grows from nothing again: the
-                      * stock follows the growth (an armful is there within the hour
-                      * once the grass is tall enough). */
-                     .products = {{.item = ITEM_FRESH_GRASS,
-                                   .capacity = 3,
-                                   .regrow_hours = 1,
-                                   .min_growth = 0.5f}},
-                     .harvest = PLANT_HARVEST_RESETS,
-                     .grazed = true},
+    [PLANT_GRASS] =
+        {.id = "grass",
+         .name_key = N_("plant.grass"),
+         .transpiration = 1.0f,
+         .water = {0.05f, 0.5f, 1.4f, 2.2f, 20.0f, 10.0f},
+         .spread_chance = 0.15f,
+         .spread_growth = 0.5f,
+         .spread_range = 1,
+         .growth_per_day = 0.35f,
+         .min_fertility = 0.3f,
+         .move_cost = 1.0f,
+         .t_min = 5.0f,
+         .t_opt_low = 15.0f,
+         .t_opt_high = 25.0f,
+         .t_max = 35.0f,
+         .t_frost_active = -5.0f,
+         .t_frost_hardened = -25.0f,
+         .t_lethal_heat = 45.0f,
+         .rest = PLANT_REST_SLEEPS,
+         .light_min = 0.2f,
+         .light_full = 0.8f,
+         .dark_days = 10.0f,
+         /* Armfuls cut at the ground, which grows from nothing again: the
+          * stock follows the growth (an armful is there within the hour
+          * once the grass is tall enough). */
+         .products = {{.item = ITEM_GRASS, .capacity = 3, .regrow_hours = 1, .min_growth = 0.5f}},
+         .harvest = PLANT_HARVEST_RESETS,
+         .grazed = true},
     /* The trees (docs/TREES.md §2). cut_yield: logs of 7 kg, the usable wood of a
      * mature tree (see item.c). Their dead branches and twigs fall to the ground and
      * lie on their foliage (core/tree.h): no stock on the plant. The oak: slow,
@@ -2460,20 +2458,10 @@ uint64_t map_hash(const Map *map)
     return hash;
 }
 
-/* The items a type of litter lying on the ground counts (twigs, dry or wet:
- * twigs left in the rain get wet like any). */
-static ItemTypeMask litter_mask(ItemType type)
-{
-    return type == ITEM_TWIGS ? ITEM_TYPE_BIT(ITEM_TWIGS) | ITEM_TYPE_BIT(ITEM_WET_TWIGS)
-                              : ITEM_TYPE_BIT(type);
-}
-
 /* Items of a type of litter on a tile of Map.litter. */
 static int litter_items(const Map *map, int x, int y, int z, ItemType type)
 {
-    int count = items_count_type(map->litter, x, y, z, type);
-    return type == ITEM_TWIGS ? count + items_count_type(map->litter, x, y, z, ITEM_WET_TWIGS)
-                              : count;
+    return items_count_type(map->litter, x, y, z, type);
 }
 
 /* Takes up to `count` items of a type of litter off a tile of Map.litter:
@@ -2482,7 +2470,7 @@ static int remove_litter_items(Map *map, int x, int y, int z, ItemType type, int
 {
     int removed = 0;
     while (removed < count) {
-        int now = items_remove_of(map->litter, x, y, z, litter_mask(type), count - removed);
+        int now = items_remove_of(map->litter, x, y, z, ITEM_TYPE_BIT(type), count - removed);
         if (now <= 0) {
             break;
         }

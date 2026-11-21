@@ -1105,9 +1105,10 @@ PlantConditions game_plant_conditions(const Game *game, int x, int y, int z)
     };
 }
 
-float game_item_rot_rate(const Game *game, int x, int y, int z)
+float game_item_rot_rate(const Game *game, ItemType type, int x, int y, int z)
 {
-    bool rains = weather_wetting(&game->weather, game->clock.tick) > 0.0f;
+    bool rains =
+        !item_takes_water(type) && weather_wetting(&game->weather, game->clock.tick) > 0.0f;
     return temperature_rot_rate(&game->temperatures, &game->map, x, y, z, rains);
 }
 
@@ -1121,20 +1122,45 @@ float game_outdoor_temperature(const Game *game)
     return weather_outdoor(&game->weather, game->clock.tick);
 }
 
-/* ItemConditionsFn for items_advance(): out in the rain, food rots faster
- * and nothing dries. */
+ItemConditions game_item_conditions(const Game *game, int x, int y, int z)
+{
+    const Map *map = &game->map;
+    if (!map_in_bounds(map, x, y, z)) {
+        return ITEM_CONDITIONS_STILL;
+    }
+    uint64_t tick = game->clock.tick;
+    bool open = temperature_cover(map, x, y, z) == TEMPERATURE_COVER_OPEN;
+    float wetting = open ? weather_wetting(&game->weather, tick) : 0.0f;
+    float celsius = temperature_at(&game->temperatures, x, y, z);
+    /* The outdoor air's vapour at the tile's own temperature: drier by a
+     * fire, saturated in a cold cave. */
+    float humidity = air_relative_humidity(weather_dew_point(&game->weather, tick), celsius);
+    /* Soaked ground: the items on it feel its dampness. */
+    float ground = soil_moisture(&game->soil, map, x, y, z);
+    if (ground > 1.0f) {
+        float damp = clampf((ground - 1.0f) / (SOIL_MOISTURE_SATURATED - 1.0f), 0.0f, 1.0f);
+        humidity += (1.0f - humidity) * damp;
+    }
+    return (ItemConditions){
+        .rot_rate = temperature_rot_rate(&game->temperatures, map, x, y, z, false),
+        .rained_on = wetting > 0.0f,
+        .humidity = humidity,
+        .wetting = wetting,
+        .in_water = map_water_class(map, x, y, z) >= WATER_WET,
+        .drying = item_drying_speed(celsius, game_light_at(game, x, y, z)),
+    };
+}
+
+/* ItemConditionsFn for items_advance(). */
 static ItemConditions tile_conditions(const void *context, size_t tile)
 {
     const Game *game = context;
     int x, y, z;
     map_tile_of(&game->map, tile, &x, &y, &z);
-    bool rains = weather_wetting(&game->weather, game->clock.tick) > 0.0f;
-    bool open = temperature_cover(&game->map, x, y, z) == TEMPERATURE_COVER_OPEN;
-    return (ItemConditions){temperature_rot_rate(&game->temperatures, &game->map, x, y, z, rains),
-                            !(rains && open)};
+    return game_item_conditions(game, x, y, z);
 }
 
-/* Items lying on the ground change over time (fresh grass dries, food
+/* Items lying on the ground change over time (they dry or get wet, food
  * rots), slice by slice like plants, over every level (foliage holds items
  * too; levels without any are skipped). */
 static void update_items(Game *game)
@@ -2391,32 +2417,6 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z)
     return true;
 }
 
-bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully)
-{
-    Map *map = &game->map;
-    TreeRef tree;
-    if (!map_in_bounds(map, x, y, z)) {
-        return false;
-    }
-    if (plant_is_tree(map->plants[map_index(map, x, y, z)].type)) {
-        tree = (TreeRef){.x = x, .y = y, .z = z}; /* A seedling or the foot. */
-    } else if (!tree_at(map, x, y, z, &tree)) {
-        return false;
-    }
-    size_t index = map_index(map, tree.x, tree.y, tree.z);
-    Plant *plant = &map->plants[index];
-    float old_growth = plant->growth;
-    if (old_growth >= 1.0f) {
-        return false;
-    }
-    /* To the next multiple of the step (no drift from adding 0.1 again and again). */
-    float steps = floorf(old_growth / GAME_DEBUG_TREE_GROWTH_STEP + 0.01f) + 1.0f;
-    float growth = fully ? 1.0f : steps * GAME_DEBUG_TREE_GROWTH_STEP;
-    plant->growth = growth < 1.0f ? growth : 1.0f;
-    grow_tree(game, index, old_growth); /* Back to `old_growth` if it has no room. */
-    return plant->growth > old_growth;
-}
-
 bool game_debug_remove_block(Game *game, int x, int y, int z)
 {
     Map *map = &game->map;
@@ -2486,6 +2486,32 @@ int game_debug_pour_water(Game *game, int x, int y, int z, int mm)
         done += taken;
     }
     return -done;
+}
+
+bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully)
+{
+    Map *map = &game->map;
+    TreeRef tree;
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    if (plant_is_tree(map->plants[map_index(map, x, y, z)].type)) {
+        tree = (TreeRef){.x = x, .y = y, .z = z}; /* A seedling or the foot. */
+    } else if (!tree_at(map, x, y, z, &tree)) {
+        return false;
+    }
+    size_t index = map_index(map, tree.x, tree.y, tree.z);
+    Plant *plant = &map->plants[index];
+    float old_growth = plant->growth;
+    if (old_growth >= 1.0f) {
+        return false;
+    }
+    /* To the next multiple of the step (no drift from adding 0.1 again and again). */
+    float steps = floorf(old_growth / GAME_DEBUG_TREE_GROWTH_STEP + 0.01f) + 1.0f;
+    float growth = fully ? 1.0f : steps * GAME_DEBUG_TREE_GROWTH_STEP;
+    plant->growth = growth < 1.0f ? growth : 1.0f;
+    grow_tree(game, index, old_growth); /* Back to `old_growth` if it has no room. */
+    return plant->growth > old_growth;
 }
 
 /* A number between `min` and `max` from the game's draws. */
@@ -4067,14 +4093,9 @@ bool game_hearth_lacks(const Game *game, const Workstation *station, HearthIngre
             }
         }
     }
-    const long *totals = game_view_items(game)->totals;
-    ItemTypeMask types = hearth_ingredient_types(ingredient);
-    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        if ((types & ITEM_TYPE_BIT(type)) && totals[type] > 0) {
-            return false;
-        }
-    }
-    return true;
+    ItemChoice choice = ITEM_CHOICE_ANY;
+    choice.dry = hearth_ingredient_dry(ingredient); /* Wet twigs are no kindling. */
+    return !items_any_chosen(game_view_items(game), hearth_ingredient_types(ingredient), choice);
 }
 
 /* What is built at once leaves the plants under it alone: they are ordered

@@ -58,13 +58,9 @@ static void test_definitions(void)
     CHECK(structure_is_bed(STRUCTURE_GRASS_BED));
     CHECK(!structure_is_bed(STRUCTURE_WALL));
     CHECK(!structure_is_bed(STRUCTURE_NONE));
-    /* Dry grass only (fresh grass would mould). */
-    for (int type = 1; type < STRUCTURE_TYPE_COUNT; type++) {
-        const StructureDef *def = structure_def((StructureType)type);
-        for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
-            CHECK(def->materials[slot].type != ITEM_FRESH_GRASS);
-        }
-    }
+    /* Dry grass only (fresh grass would mould), green wood is fine. */
+    CHECK(structure_material_dry(ITEM_GRASS));
+    CHECK(!structure_material_dry(ITEM_BRANCHES));
     /* A wall segment of 1 m × 2 m: about 7.5 kg of wood and 24 kg of thatch. */
     const StructureDef *wall = structure_def(STRUCTURE_WALL);
     CHECK_EQ_INT(wall->materials[0].type, ITEM_BRANCHES);
@@ -230,8 +226,8 @@ static void test_delivering_loads(void)
     ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
     REQUIRE(constructions_remove(&constructions, index, returned) == 1);
     items_drop_load(&items, &map, 3, 3, 0, &returned[0]);
-    ItemChoice fine_only = {TEST_QUALITY_FINE, TEST_QUALITY_FINE, false, 0};
-    ItemChoice crude_only = {TEST_QUALITY_CRUDE, TEST_QUALITY_CRUDE, false, 0};
+    ItemChoice fine_only = {TEST_QUALITY_FINE, TEST_QUALITY_FINE, false, 0, false};
+    ItemChoice crude_only = {TEST_QUALITY_CRUDE, TEST_QUALITY_CRUDE, false, 0, false};
     CHECK_EQ_INT(items_count_chosen(&items, 3, 3, 0, ITEM_BRANCHES, fine_only), 3);
     CHECK_EQ_INT(items_count_chosen(&items, 3, 3, 0, ITEM_BRANCHES, crude_only), 2);
     CHECK_EQ_INT(items.held_count, 2);

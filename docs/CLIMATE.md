@@ -181,7 +181,7 @@ tile's temperature (the Magnus formula):
   with the same vapour, as in a real wood.
 - **Dew.** When an open tile's temperature falls below `Td` at night, 0.02 mm
   an hour condense on it (into its water).
-- Used for: the dry-air term of `PET`, the drying of fresh grass (later),
+- Used for: the dry-air term of `PET`, the drying of items (docs/WATER.md §7),
   comfort (later), fog (later: forms when RH reaches 1 at dawn).
 
 ## 5. Temperature near the ground (C2)

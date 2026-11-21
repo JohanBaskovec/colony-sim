@@ -3,7 +3,7 @@
  * form, wood, food, tool and weapon figures), shared by the recipe details of a
  * workstation (game/station_panel.h) and by the information window of the item
  * selected (a button of its inspector), which adds its own condition (quality,
- * hit points, rot, humidity), where it lies and where it comes from.
+ * hit points, rot, moisture), where it lies and where it comes from.
  */
 #ifndef COLONY_GAME_ITEM_INFO_H
 #define COLONY_GAME_ITEM_INFO_H
@@ -27,6 +27,10 @@ void item_info_quantity_text(char *out, size_t size, float value, const char *un
 
 /* "75%" for a fraction (0..1). */
 void item_info_percent_text(char *out, size_t size, float fraction);
+
+/* "62% (wet)": a moisture and how wet that is for the type (docs/WATER.md
+ * §7.5). */
+void item_info_moisture_text(char *out, size_t size, ItemType type, float moisture);
 
 /* An item picture on its well. */
 void item_info_picture(App *app, SDL_FRect rect, ItemType type);

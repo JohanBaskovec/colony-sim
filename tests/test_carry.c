@@ -49,8 +49,6 @@ static void test_the_table_of_capacities(void)
     CHECK_EQ_INT(capacity(ITEM_FLINT), 8);
     CHECK_EQ_INT(capacity(ITEM_BRANCHES), 9);
     CHECK_EQ_INT(capacity(ITEM_TWIGS), 30);
-    CHECK_EQ_INT(capacity(ITEM_WET_TWIGS), 30);
-    CHECK_EQ_INT(capacity(ITEM_FRESH_GRASS), 6);
     CHECK_EQ_INT(capacity(ITEM_GRASS), 6);
     CHECK_EQ_INT(capacity(ITEM_BRACKEN), 6);
     CHECK_EQ_INT(capacity(ITEM_REEDS), 7);

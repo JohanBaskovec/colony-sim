@@ -63,19 +63,43 @@
     .nutrition = (nutrition_), .max_hit_points = (hp), .has_quality = (quality),                   \
     .damageable = (damage)
 
+/* How a material takes water (ItemWater): fresh, room, equilibrium factor,
+ * hours to dry, dry below; weighed fresh (food) or at the reference air. */
+#define WATER(fresh_, room_, factor, hours, dry)                                                   \
+    .water = {.fresh = (fresh_),                                                                   \
+              .room = (room_),                                                                     \
+              .equilibrium = (factor),                                                             \
+              .dry_hours = (hours),                                                                \
+              .dry_below = (dry)}
+#define FOOD_WATER(fresh_, room_, factor, hours, dry)                                              \
+    .water = {.fresh = (fresh_),                                                                   \
+              .room = (room_),                                                                     \
+              .equilibrium = (factor),                                                             \
+              .dry_hours = (hours),                                                                \
+              .dry_below = (dry),                                                                  \
+              .weighed_fresh = true}
+/* Wooden tools and spears: seasoned wood. */
+#define TOOL_WATER WATER(0.15f, 0.5f, 1.0f, 120.0f, 0.25f)
+/* Berries and fruit, greens, roots, what was roasted. */
+#define FRUIT_WATER FOOD_WATER(0.85f, 0.88f, 1.2f, 1500.0f, 0.2f)
+#define GREENS_WATER FOOD_WATER(0.85f, 0.9f, 1.2f, 300.0f, 0.15f)
+#define ROOT_WATER FOOD_WATER(0.75f, 0.8f, 1.2f, 1500.0f, 0.15f)
+#define ROASTED_WATER FOOD_WATER(0.6f, 0.75f, 1.2f, 1000.0f, 0.15f)
+
 static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     /* id, name, category, weight (kg), bulk, nutrition, hit points, quality?, damageable? */
     [ITEM_NONE] = {DEF("none", NULL, ITEM_CATEGORY_COUNT, 0.0f, 0.0f, 0.0f, 0, false, false)},
     [ITEM_WOOD] = {DEF("wood", N_("item.wood"), ITEM_CATEGORY_RESOURCES, 7.0f, 20.0f, 0.0f, 60,
                        true, true),
                    .length_cm = 70, .form = ITEM_FORM_RIGID, .wooden = true,
-                   .wood_name_key = N_("item.wood.of_wood")},
+                   .wood_name_key = N_("item.wood.of_wood"),
+                   WATER(0.45f, 0.6f, 1.0f, 1000.0f, 0.22f)},
     [ITEM_STONE_BLOCK] = {DEF("stone_block", N_("item.stone_block"), ITEM_CATEGORY_RESOURCES, 20.0f,
                               20.0f, 0.0f, 150, false, false),
                           .length_cm = 40, .form = ITEM_FORM_RIGID},
     [ITEM_BLACKBERRIES] = {DEF("blackberries", N_("item.blackberries"), ITEM_CATEGORY_FOOD, 0.3f,
                                1.0f, 0.05f, 10, true, true),
-                           .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 3.0f},
+                           .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 3.0f, FRUIT_WATER},
     /* Damageable: a cobble used as a hammer wears out. */
     [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
                          200, true, true),
@@ -83,24 +107,18 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_BRANCHES] = {DEF("branches", N_("item.branches"), ITEM_CATEGORY_RESOURCES, 1.5f, 10.0f,
                            0.0f, 20, true, true),
                        .length_cm = 150, .form = ITEM_FORM_RIGID, .wooden = true,
-                       .wood_name_key = N_("item.branches.of_wood")},
+                       .wood_name_key = N_("item.branches.of_wood"),
+                       WATER(0.45f, 0.6f, 1.0f, 240.0f, 0.22f)},
     [ITEM_TWIGS] = {DEF("twigs", N_("item.twigs"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f, 0.0f, 10,
                         false, true),
-                    .length_cm = 40, .form = ITEM_FORM_BUNDLE, .wets_into = ITEM_WET_TWIGS},
-    /* Twigs from wet ground, out in the rain or green from a felled crown:
-     * heavier with their water, they burn on a fire but do not catch a
-     * flame (core/hearth.h), and dry in a day out of the rain. */
-    [ITEM_WET_TWIGS] = {DEF("wet_twigs", N_("item.wet_twigs"), ITEM_CATEGORY_RESOURCES, 0.3f, 2.0f,
-                            0.0f, 10, false, true),
-                        .length_cm = 40, .form = ITEM_FORM_BUNDLE, .transforms_into = ITEM_TWIGS,
-                        .transform_hours = 24},
-    [ITEM_FRESH_GRASS] = {DEF("fresh_grass", N_("item.fresh_grass"), ITEM_CATEGORY_RESOURCES, 2.5f,
-                              25.0f, 0.0f, 10, false, true),
-                          .length_cm = 60, .form = ITEM_FORM_BUNDLE, .transforms_into = ITEM_GRASS,
-                          .transform_hours = 72},
+                    .length_cm = 40, .form = ITEM_FORM_BUNDLE,
+                    WATER(0.3f, 0.6f, 1.0f, 24.0f, 0.2f)},
+    /* Cut fresh it weighs about four times its dry weight, and dries into
+     * hay in a few days out of the rain. */
     [ITEM_GRASS] = {DEF("grass", N_("item.grass"), ITEM_CATEGORY_RESOURCES, 1.0f, 25.0f, 0.0f, 15,
                         false, true),
-                    .length_cm = 60, .form = ITEM_FORM_BUNDLE},
+                    .length_cm = 60, .form = ITEM_FORM_BUNDLE,
+                    WATER(0.75f, 0.8f, 1.0f, 60.0f, 0.2f)},
     [ITEM_FLINT] = {DEF("flint", N_("item.flint"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f, 150,
                         true, false),
                     .length_cm = 12, .form = ITEM_FORM_RIGID},
@@ -116,92 +134,108 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_THROWING_SPEAR] = {DEF("throwing_spear", N_("item.throwing_spear"), ITEM_CATEGORY_WEAPONS,
                                  0.8f, 10.0f, 0.0f, 50, true, true),
                              .length_cm = 180, .form = ITEM_FORM_RIGID, .wooden = true,
-                             .wood_name_key = N_("item.throwing_spear.of_wood")},
+                             .wood_name_key = N_("item.throwing_spear.of_wood"), TOOL_WATER},
     [ITEM_THRUSTING_SPEAR] = {DEF("thrusting_spear", N_("item.thrusting_spear"),
                                   ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 70, true, true),
                               .length_cm = 220, .form = ITEM_FORM_RIGID, .wooden = true,
-                              .wood_name_key = N_("item.thrusting_spear.of_wood")},
+                              .wood_name_key = N_("item.thrusting_spear.of_wood"), TOOL_WATER},
     [ITEM_THROWING_SPEAR_HARDENED] = {DEF("throwing_spear_hardened",
                                           N_("item.throwing_spear_hardened"), ITEM_CATEGORY_WEAPONS,
                                           0.8f, 10.0f, 0.0f, 75, true, true),
                                       .length_cm = 180, .form = ITEM_FORM_RIGID, .wooden = true,
-                                      .wood_name_key = N_("item.throwing_spear_hardened.of_wood")},
+                                      .wood_name_key = N_("item.throwing_spear_hardened.of_wood"),
+                                      TOOL_WATER},
     [ITEM_THRUSTING_SPEAR_HARDENED] =
         {DEF("thrusting_spear_hardened", N_("item.thrusting_spear_hardened"),
              ITEM_CATEGORY_WEAPONS, 1.5f, 12.0f, 0.0f, 105, true, true),
          .length_cm = 220, .form = ITEM_FORM_RIGID, .wooden = true,
-         .wood_name_key = N_("item.thrusting_spear_hardened.of_wood")},
+         .wood_name_key = N_("item.thrusting_spear_hardened.of_wood"), TOOL_WATER},
     [ITEM_HAZELNUTS] = {DEF("hazelnuts", N_("item.hazelnuts"), ITEM_CATEGORY_FOOD, 0.1f, 0.4f,
                             0.075f, 100, true, true),
-                        .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 90.0f},
+                        .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 90.0f,
+                        FOOD_WATER(0.2f, 0.3f, 1.0f, 300.0f, 0.12f)},
     [ITEM_MUSHROOMS] = {DEF("mushrooms", N_("item.mushrooms"), ITEM_CATEGORY_FOOD, 0.1f, 0.5f,
                             0.01f, 5, true, true),
-                        .length_cm = 8, .form = ITEM_FORM_RIGID, .rot_days = 2.0f},
+                        .length_cm = 8, .form = ITEM_FORM_RIGID, .rot_days = 2.0f,
+                        FOOD_WATER(0.9f, 0.92f, 1.2f, 400.0f, 0.15f)},
     [ITEM_WILD_GARLIC] = {DEF("wild_garlic", N_("item.wild_garlic"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f,
                               0.016f, 5, true, true),
-                          .length_cm = 25, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f},
+                          .length_cm = 25, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f,
+                          GREENS_WATER},
     [ITEM_NETTLES] = {DEF("nettles", N_("item.nettles"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f, 0.016f, 5,
                           true, true),
-                      .length_cm = 40, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f},
+                      .length_cm = 40, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f, GREENS_WATER},
     [ITEM_PLANTAIN] = {DEF("plantain", N_("item.plantain"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f, 0.013f,
                            5, true, true),
-                       .length_cm = 25, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f},
+                       .length_cm = 25, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f, GREENS_WATER},
     [ITEM_WILD_CARROTS] = {DEF("wild_carrots", N_("item.wild_carrots"), ITEM_CATEGORY_FOOD, 0.25f,
                                1.0f, 0.027f, 30, true, true),
-                           .length_cm = 20, .form = ITEM_FORM_RIGID, .rot_days = 20.0f},
+                           .length_cm = 20, .form = ITEM_FORM_RIGID, .rot_days = 20.0f, ROOT_WATER},
     [ITEM_CATTAIL_RHIZOMES] = {DEF("cattail_rhizomes", N_("item.cattail_rhizomes"),
                                    ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.05f, 30, true, true),
-                               .length_cm = 30, .form = ITEM_FORM_RIGID, .rot_days = 15.0f},
+                               .length_cm = 30, .form = ITEM_FORM_RIGID, .rot_days = 15.0f,
+                               ROOT_WATER},
     [ITEM_DIGGING_STICK] = {DEF("digging_stick", N_("item.digging_stick"), ITEM_CATEGORY_TOOLS,
                                 1.0f, 6.0f, 0.0f, 40, true, true),
                             .length_cm = 100, .form = ITEM_FORM_RIGID, .wooden = true,
-                            .wood_name_key = N_("item.digging_stick.of_wood")},
+                            .wood_name_key = N_("item.digging_stick.of_wood"), TOOL_WATER},
     [ITEM_DIGGING_STICK_HARDENED] = {DEF("digging_stick_hardened",
                                          N_("item.digging_stick_hardened"), ITEM_CATEGORY_TOOLS,
                                          1.0f, 6.0f, 0.0f, 60, true, true),
                                      .length_cm = 100, .form = ITEM_FORM_RIGID, .wooden = true,
-                                     .wood_name_key = N_("item.digging_stick_hardened.of_wood")},
+                                     .wood_name_key = N_("item.digging_stick_hardened.of_wood"),
+                                     TOOL_WATER},
     [ITEM_ROASTED_RHIZOMES] = {DEF("roasted_rhizomes", N_("item.roasted_rhizomes"),
                                    ITEM_CATEGORY_FOOD, 0.25f, 1.0f, 0.07f, 15, true, true),
-                               .length_cm = 30, .form = ITEM_FORM_RIGID, .rot_days = 4.0f},
+                               .length_cm = 30, .form = ITEM_FORM_RIGID, .rot_days = 4.0f,
+                               ROASTED_WATER},
     [ITEM_ROASTED_CARROTS] = {DEF("roasted_carrots", N_("item.roasted_carrots"), ITEM_CATEGORY_FOOD,
                                   0.25f, 1.0f, 0.035f, 15, true, true),
-                              .length_cm = 20, .form = ITEM_FORM_RIGID, .rot_days = 4.0f},
+                              .length_cm = 20, .form = ITEM_FORM_RIGID, .rot_days = 4.0f,
+                              ROASTED_WATER},
     [ITEM_WOOD_SORREL] = {DEF("wood_sorrel", N_("item.wood_sorrel"), ITEM_CATEGORY_FOOD, 0.2f, 1.5f,
                               0.01f, 5, true, true),
-                          .length_cm = 15, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f},
+                          .length_cm = 15, .form = ITEM_FORM_BUNDLE, .rot_days = 2.0f,
+                          GREENS_WATER},
     [ITEM_WILD_STRAWBERRIES] = {DEF("wild_strawberries", N_("item.wild_strawberries"),
                                     ITEM_CATEGORY_FOOD, 0.2f, 0.4f, 0.017f, 5, true, true),
-                                .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 2.0f},
+                                .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 2.0f,
+                                FRUIT_WATER},
     [ITEM_BILBERRIES] = {DEF("bilberries", N_("item.bilberries"), ITEM_CATEGORY_FOOD, 0.3f, 0.5f,
                              0.045f, 10, true, true),
-                         .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 4.0f},
+                         .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 4.0f, FRUIT_WATER},
     /* Dry, with seeds in them: they keep for months. */
     [ITEM_ROSE_HIPS] = {DEF("rose_hips", N_("item.rose_hips"), ITEM_CATEGORY_FOOD, 0.15f, 0.4f,
                             0.06f, 50, true, true),
-                        .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 60.0f},
+                        .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 60.0f,
+                        FOOD_WATER(0.4f, 0.6f, 1.0f, 300.0f, 0.15f)},
     [ITEM_CHESTNUTS] = {DEF("chestnuts", N_("item.chestnuts"), ITEM_CATEGORY_FOOD, 0.15f, 0.5f,
                             0.065f, 60, true, true),
-                        .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 30.0f},
+                        .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 30.0f,
+                        FOOD_WATER(0.5f, 0.6f, 1.0f, 300.0f, 0.12f)},
     /* A few small fruit, firm enough to carry in the arms as mushrooms are. */
     [ITEM_APPLES] = {DEF("apples", N_("item.apples"), ITEM_CATEGORY_FOOD, 0.2f, 0.7f, 0.025f, 40,
                          true, true),
-                     .length_cm = 6, .form = ITEM_FORM_RIGID, .rot_days = 30.0f},
+                     .length_cm = 6, .form = ITEM_FORM_RIGID, .rot_days = 30.0f, FRUIT_WATER},
     [ITEM_PEARS] = {DEF("pears", N_("item.pears"), ITEM_CATEGORY_FOOD, 0.2f, 0.7f, 0.028f, 30, true,
                         true),
-                    .length_cm = 8, .form = ITEM_FORM_RIGID, .rot_days = 14.0f},
+                    .length_cm = 8, .form = ITEM_FORM_RIGID, .rot_days = 14.0f, FRUIT_WATER},
     [ITEM_MOSS] = {DEF("moss", N_("item.moss"), ITEM_CATEGORY_RESOURCES, 0.4f, 20.0f, 0.0f, 10,
                        false, true),
-                   .length_cm = 20, .form = ITEM_FORM_BUNDLE},
+                   .length_cm = 20, .form = ITEM_FORM_BUNDLE,
+                   WATER(0.85f, 0.95f, 1.4f, 120.0f, 0.25f)},
     [ITEM_BRACKEN] = {DEF("bracken", N_("item.bracken"), ITEM_CATEGORY_RESOURCES, 1.0f, 25.0f, 0.0f,
                           15, false, true),
-                      .length_cm = 100, .form = ITEM_FORM_BUNDLE},
+                      .length_cm = 100, .form = ITEM_FORM_BUNDLE,
+                      WATER(0.8f, 0.85f, 1.0f, 70.0f, 0.2f)},
     [ITEM_HEATHER] = {DEF("heather", N_("item.heather"), ITEM_CATEGORY_RESOURCES, 1.5f, 15.0f, 0.0f,
                           20, false, true),
-                      .length_cm = 50, .form = ITEM_FORM_BUNDLE},
+                      .length_cm = 50, .form = ITEM_FORM_BUNDLE,
+                      WATER(0.5f, 0.7f, 1.0f, 80.0f, 0.2f)},
     [ITEM_REEDS] = {DEF("reeds", N_("item.reeds"), ITEM_CATEGORY_RESOURCES, 1.2f, 20.0f, 0.0f, 20,
                         false, true),
-                    .length_cm = 200, .form = ITEM_FORM_BUNDLE},
+                    .length_cm = 200, .form = ITEM_FORM_BUNDLE,
+                    WATER(0.6f, 0.75f, 1.0f, 80.0f, 0.2f)},
     [ITEM_SETTLER_BODY] = {DEF("settler_body", N_("item.settler_body"), ITEM_CATEGORY_BODIES, 65.0f,
                                1000.0f, 0.0f, 100, false, true),
                            .length_cm = 170, .form = ITEM_FORM_LIMP, .rot_days = 10.0f},
@@ -226,6 +260,13 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
 };
 
 #undef DEF
+#undef WATER
+#undef FOOD_WATER
+#undef TOOL_WATER
+#undef FRUIT_WATER
+#undef GREENS_WATER
+#undef ROOT_WATER
+#undef ROASTED_WATER
 
 static const char *const CATEGORY_KEYS[ITEM_CATEGORY_COUNT] = {
     [ITEM_CATEGORY_FOOD] = N_("item.category.food"),
@@ -321,8 +362,233 @@ static float rot_units_per_hour(const ItemDef *def, float rate)
     return rate * (float)ITEM_ROT_STEP * (float)def->max_hit_points / (def->rot_days * 24.0f);
 }
 
+/* ---- Moisture ---- */
+
+bool item_takes_water(ItemType type)
+{
+    return (unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].water.room > 0.0f;
+}
+
+/* The sorption curve of wood (moisture at equilibrium by relative humidity),
+ * which every material follows times its factor. */
+static const float SORPTION_HUMIDITY[] = {0.0f, 0.3f, 0.65f, 0.8f, 0.9f, 1.0f};
+static const float SORPTION_MOISTURE[] = {0.0f, 0.06f, 0.12f, 0.16f, 0.2f, 0.28f};
+
+float item_equilibrium_moisture(ItemType type, float humidity)
+{
+    if (!item_takes_water(type)) {
+        return 0.0f;
+    }
+    const ItemWater *water = &ITEM_DEFS[type].water;
+    humidity = clampf(humidity, 0.0f, 1.0f);
+    int last = (int)(sizeof(SORPTION_HUMIDITY) / sizeof(SORPTION_HUMIDITY[0])) - 1;
+    float moisture = SORPTION_MOISTURE[last];
+    for (int i = 1; i <= last; i++) {
+        if (humidity <= SORPTION_HUMIDITY[i]) {
+            float t = (humidity - SORPTION_HUMIDITY[i - 1]) /
+                      (SORPTION_HUMIDITY[i] - SORPTION_HUMIDITY[i - 1]);
+            moisture =
+                SORPTION_MOISTURE[i - 1] + t * (SORPTION_MOISTURE[i] - SORPTION_MOISTURE[i - 1]);
+            break;
+        }
+    }
+    moisture *= water->equilibrium;
+    return moisture < water->room ? moisture : water->room;
+}
+
+float item_fresh_moisture(ItemType type)
+{
+    return item_takes_water(type) ? ITEM_DEFS[type].water.fresh : 0.0f;
+}
+
+float item_reference_moisture(ItemType type)
+{
+    if (!item_takes_water(type)) {
+        return 0.0f;
+    }
+    return ITEM_DEFS[type].water.weighed_fresh
+               ? ITEM_DEFS[type].water.fresh
+               : item_equilibrium_moisture(type, ITEM_MOISTURE_REFERENCE_HUMIDITY);
+}
+
+/* The stored form of a moisture (ItemStack.moisture): 1 + units. */
+static uint16_t moisture_code(ItemType type, float moisture)
+{
+    if (!item_takes_water(type)) {
+        return 0;
+    }
+    float room = ITEM_DEFS[type].water.room;
+    moisture = clampf(moisture, 0.0f, room);
+    return (uint16_t)(1 + lroundf(moisture * (float)ITEM_MOISTURE_UNITS));
+}
+
+/* A moisture code made valid for its type: unknown (0) is the reference. */
+static uint16_t valid_moisture(ItemType type, uint16_t code)
+{
+    if (!item_takes_water(type)) {
+        return 0;
+    }
+    if (code == 0) {
+        return moisture_code(type, item_reference_moisture(type));
+    }
+    int most = 1 + (int)lroundf(ITEM_DEFS[type].water.room * (float)ITEM_MOISTURE_UNITS);
+    return (uint16_t)clampi(code, 1, most);
+}
+
+static float moisture_of(ItemType type, uint16_t code)
+{
+    if (!item_takes_water(type)) {
+        return 0.0f;
+    }
+    if (code == 0) {
+        return item_reference_moisture(type);
+    }
+    return (float)(code - 1) / (float)ITEM_MOISTURE_UNITS;
+}
+
+float item_moisture(const Item *item)
+{
+    return moisture_of((ItemType)item->type, item->moisture);
+}
+
+float item_stack_moisture(ItemStack stack)
+{
+    return moisture_of((ItemType)stack.type, stack.moisture);
+}
+
+void item_stack_set_moisture(ItemStack *stack, float moisture)
+{
+    stack->moisture = moisture_code((ItemType)stack->type, moisture);
+}
+
+void item_stack_set_fresh(ItemStack *stack)
+{
+    item_stack_set_moisture(stack, item_fresh_moisture((ItemType)stack->type));
+}
+
+bool item_moisture_dry(ItemType type, float moisture)
+{
+    return !item_takes_water(type) || moisture < ITEM_DEFS[type].water.dry_below;
+}
+
+/* Soaked within this much of its room. */
+#define SOAKED_MARGIN 0.03f
+
+ItemMoistureState item_moisture_state(ItemType type, float moisture)
+{
+    if (!item_takes_water(type)) {
+        return ITEM_MOISTURE_NONE;
+    }
+    if (item_moisture_dry(type, moisture)) {
+        return ITEM_MOISTURE_DRY;
+    }
+    return moisture >= ITEM_DEFS[type].water.room - SOAKED_MARGIN ? ITEM_MOISTURE_SOAKED
+                                                                  : ITEM_MOISTURE_WET;
+}
+
+const char *item_moisture_state_key(ItemMoistureState state)
+{
+    switch (state) {
+    case ITEM_MOISTURE_DRY: return N_("item.moisture.state.dry");
+    case ITEM_MOISTURE_WET: return N_("item.moisture.state.wet");
+    case ITEM_MOISTURE_SOAKED: return N_("item.moisture.state.soaked");
+    default: return NULL;
+    }
+}
+
+float item_moisture_weight_factor(ItemType type, float moisture)
+{
+    if (!item_takes_water(type)) {
+        return 1.0f;
+    }
+    float room = ITEM_DEFS[type].water.room;
+    moisture = clampf(moisture, 0.0f, room);
+    return (1.0f - item_reference_moisture(type)) / (1.0f - moisture);
+}
+
+float item_rot_moisture_factor(ItemType type, float moisture)
+{
+    if (!item_takes_water(type)) {
+        return 1.0f;
+    }
+    const ItemWater *water = &ITEM_DEFS[type].water;
+    if (moisture > water->fresh) {
+        float span = water->room - water->fresh;
+        float t = span > 0.0f ? clampf((moisture - water->fresh) / span, 0.0f, 1.0f) : 1.0f;
+        return 1.0f + t * (ITEM_ROT_RAINED_ON - 1.0f);
+    }
+    float halfway = 0.5f * (water->dry_below + water->fresh);
+    if (moisture >= halfway) {
+        return 1.0f;
+    }
+    if (moisture <= water->dry_below || halfway <= water->dry_below) {
+        return ITEM_ROT_DRY;
+    }
+    float t = (moisture - water->dry_below) / (halfway - water->dry_below);
+    return ITEM_ROT_DRY + t * (1.0f - ITEM_ROT_DRY);
+}
+
+float item_drying_speed(float celsius, float sun)
+{
+    float speed = (1.0f + ITEM_DRYING_SUN * clampf(sun, 0.0f, 1.0f)) *
+                  exp2f((celsius - ITEM_DRYING_REFERENCE_CELSIUS) / ITEM_DRYING_DOUBLING_CELSIUS);
+    if (celsius <= 0.0f && speed > ITEM_DRYING_FROZEN) {
+        speed = ITEM_DRYING_FROZEN; /* Its water is ice. */
+    }
+    return clampf(speed, 0.02f, 8.0f);
+}
+
+float item_moisture_target(ItemType type, ItemConditions here)
+{
+    if (!item_takes_water(type)) {
+        return 0.0f;
+    }
+    if (here.in_water || here.wetting > 0.0f) {
+        return ITEM_DEFS[type].water.room;
+    }
+    return item_equilibrium_moisture(type, here.humidity);
+}
+
+/* Hours an item is soaked through in, lying in water. */
+#define SOAK_HOURS 0.25f
+/* Rain wets nothing faster than this. */
+#define WETTING_MIN_HOURS 0.5f
+
+float item_moisture_hours(ItemType type, float moisture, ItemConditions here)
+{
+    if (!item_takes_water(type)) {
+        return -1.0f;
+    }
+    float hours = ITEM_DEFS[type].water.dry_hours;
+    if (here.in_water) {
+        return SOAK_HOURS;
+    }
+    if (here.wetting > 0.0f) {
+        float wet = hours / (ITEM_WETTING_SPEED * here.wetting);
+        return wet > WETTING_MIN_HOURS ? wet : WETTING_MIN_HOURS;
+    }
+    if (item_moisture_target(type, here) < moisture) {
+        return hours / (here.drying > 0.02f ? here.drying : 0.02f);
+    }
+    return hours; /* Damp air soaks in at its own pace, sun or not. */
+}
+
+float item_hours_to_dry(ItemType type, float moisture, ItemConditions here)
+{
+    if (item_moisture_dry(type, moisture)) {
+        return 0.0f;
+    }
+    float dry = ITEM_DEFS[type].water.dry_below;
+    float target = item_moisture_target(type, here);
+    if (target >= dry - 1e-4f) {
+        return -1.0f;
+    }
+    return item_moisture_hours(type, moisture, here) * logf((moisture - target) / (dry - target));
+}
+
 float item_stack_rot_hours(ItemStack stack, float rate)
 {
+    rate *= item_rot_moisture_factor((ItemType)stack.type, item_stack_moisture(stack));
     if (stack.type == ITEM_NONE || !item_rots((ItemType)stack.type) || rate <= 0.0f) {
         return -1.0f;
     }
@@ -353,6 +619,7 @@ float item_stack_mass(ItemStack stack)
     }
     float whole =
         def->weight * (float)stack.count * (def->wooden ? wood_weight(stack.woods) : 1.0f);
+    whole *= item_moisture_weight_factor((ItemType)stack.type, item_stack_moisture(stack));
     return whole * (1.0f - (float)stack.eaten / (float)ITEM_EATEN_FULL);
 }
 
@@ -381,18 +648,13 @@ ItemStack item_stack_make(ItemType type, int count, int quality, int hit_points)
     };
 }
 
-/* Transformation or rot progress made valid for a type: 0 when it neither
- * transforms nor rots. */
+/* Rot progress made valid for a type: 0 when it does not rot. */
 static uint16_t valid_progress(ItemType type, int progress)
 {
-    const ItemDef *def = &ITEM_DEFS[type];
-    if (def->rot_days > 0.0f) {
+    if (ITEM_DEFS[type].rot_days > 0.0f) {
         return (uint16_t)clampi(progress, 0, ITEM_ROT_STEP - 1);
     }
-    if (def->transforms_into == ITEM_NONE) {
-        return 0;
-    }
-    return (uint16_t)clampi(progress, 0, def->transform_hours);
+    return 0;
 }
 
 ItemStack item_stack_pristine(ItemType type, int count)
@@ -491,6 +753,12 @@ bool item_stack_merge(ItemStack *into, ItemStack from)
     into->progress =
         (uint16_t)weighted_average(into->progress, into->count, from.progress, from.count);
     into->eaten = (uint16_t)weighted_average(into->eaten, into->count, from.eaten, from.count);
+    ItemType type = (ItemType)into->type;
+    if (item_takes_water(type)) {
+        float a = item_stack_moisture(*into), b = item_stack_moisture(from);
+        float total = (float)into->count + (float)from.count;
+        item_stack_set_moisture(into, (a * (float)into->count + b * (float)from.count) / total);
+    }
     into->count = (uint16_t)count;
     return true;
 }
@@ -630,7 +898,7 @@ static void count_item(Items *items, const Item *item, int sign)
  * empty stack when there are none. */
 static ItemStack group_of(const Items *items, size_t index, ItemStack key)
 {
-    long count = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0;
+    long count = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0, moisture = 0;
     for (const Item *item = slot_item(items, items->heads[index]); item != NULL;
          item = slot_item(items, item->next)) {
         if (item_matches(item, &key)) {
@@ -639,6 +907,7 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
             hit_points += item->hit_points;
             progress += item->progress;
             eaten += item->eaten;
+            moisture += item->moisture;
         }
     }
     if (count == 0) {
@@ -652,7 +921,8 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
                        .quality = (uint8_t)((quality + count / 2) / count),
                        .hit_points = (uint16_t)((hit_points + count / 2) / count),
                        .progress = (uint16_t)((progress + count / 2) / count),
-                       .eaten = (uint16_t)((eaten + count / 2) / count)};
+                       .eaten = (uint16_t)((eaten + count / 2) / count),
+                       .moisture = (uint16_t)((moisture + count / 2) / count)};
 }
 
 /* An item as the key of its group. */
@@ -896,7 +1166,7 @@ int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int ca
     /* One pass: each item added to its group's sums (groups beyond
      * `capacity` are left out). */
     enum { MOST = 16 };
-    long sums[MOST][5] = {{0}};
+    long sums[MOST][6] = {{0}};
     capacity = capacity < MOST ? capacity : MOST;
     int count = 0;
     for (const Item *item = items_first(items, index); item != NULL;
@@ -917,6 +1187,7 @@ int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int ca
         sum[2] += item->hit_points;
         sum[3] += item->progress;
         sum[4] += item->eaten;
+        sum[5] += item->moisture;
     }
     for (int group = 0; group < count; group++) {
         const long *sum = sums[group];
@@ -926,6 +1197,7 @@ int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int ca
         out[group].hit_points = (uint16_t)((sum[2] + n / 2) / n);
         out[group].progress = (uint16_t)((sum[3] + n / 2) / n);
         out[group].eaten = (uint16_t)((sum[4] + n / 2) / n);
+        out[group].moisture = (uint16_t)((sum[5] + n / 2) / n);
     }
     return count;
 }
@@ -1034,6 +1306,7 @@ static ItemStack valid_batch(ItemStack batch)
     valid.forbidden = batch.forbidden != 0;
     valid.made = batch.made;
     valid.maker = batch.maker;
+    valid.moisture = valid_moisture(type, batch.moisture);
     return valid;
 }
 
@@ -1079,6 +1352,7 @@ static uint32_t new_item(Items *items, const ItemStack *batch, uint32_t tile)
                        .eaten = batch->eaten,
                        .corpse = batch->corpse,
                        .woods = batch->woods,
+                       .moisture = valid_moisture((ItemType)batch->type, batch->moisture),
                        .forbidden = batch->forbidden,
                        .made = batch->made != 0 ? batch->made : items->now + 1,
                        .maker = batch->maker,
@@ -1138,13 +1412,14 @@ static void refresh_load(const Items *items, ItemStack *load)
         *load = (ItemStack){.type = ITEM_NONE};
         return;
     }
-    long count = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0;
+    long count = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0, moisture = 0;
     for (const Item *item = head; item != NULL; item = slot_item(items, item->next)) {
         count++;
         quality += item->quality;
         hit_points += item->hit_points;
         progress += item->progress;
         eaten += item->eaten;
+        moisture += item->moisture;
     }
     *load = (ItemStack){.type = head->type,
                         .corpse = head->corpse,
@@ -1157,6 +1432,7 @@ static void refresh_load(const Items *items, ItemStack *load)
                         .hit_points = (uint16_t)((hit_points + count / 2) / count),
                         .progress = (uint16_t)((progress + count / 2) / count),
                         .eaten = (uint16_t)((eaten + count / 2) / count),
+                        .moisture = (uint16_t)((moisture + count / 2) / count),
                         .held = load->held};
 }
 
@@ -1347,7 +1623,8 @@ void items_load_set_woods(Items *items, ItemStack *load, WoodMask woods)
 static bool chosen(const Item *item, const ItemStack *stack, ItemChoice choice)
 {
     return item_matches(item, stack) && item->quality >= choice.min_quality &&
-           item->quality <= choice.max_quality;
+           item->quality <= choice.max_quality &&
+           (!choice.dry || item_moisture_dry((ItemType)item->type, item_moisture(item)));
 }
 
 int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, ItemChoice choice)
@@ -1416,11 +1693,46 @@ ItemType items_soonest_rotting(const Items *items, int x, int y, int z, ItemType
     return type;
 }
 
+ItemType items_chosen_type(const Items *items, int x, int y, int z, ItemTypeMask types,
+                           ItemChoice choice, int min_count)
+{
+    if (!in_bounds(items, x, y, z) || items->heads[index_of(items, x, y, z)] == 0) {
+        return ITEM_NONE;
+    }
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        if ((types & ITEM_TYPE_BIT(type)) &&
+            items_count_chosen(items, x, y, z, (ItemType)type, choice) >= min_count) {
+            return (ItemType)type;
+        }
+    }
+    return ITEM_NONE;
+}
+
+bool items_any_chosen(const Items *items, ItemTypeMask types, ItemChoice choice)
+{
+    bool any = false;
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && !any; type++) {
+        any = (types & ITEM_TYPE_BIT(type)) && items->totals[type] > 0;
+    }
+    for (uint32_t slot = 0; any && slot < items->pool_used; slot++) {
+        const Item *item = &items->pool[slot];
+        if (item->type == ITEM_NONE || item->tile == ITEM_TILE_HELD || item->forbidden ||
+            !(types & ITEM_TYPE_BIT(item->type))) {
+            continue;
+        }
+        ItemStack key = key_of(item);
+        if (chosen(item, &key, choice) && item_woods_allowed(key, choice.woods)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int count,
                          ItemChoice choice, ItemStack *load)
 {
     if (choice.min_quality <= ITEM_QUALITY_WORST && choice.max_quality >= ITEM_QUALITY_BEST &&
-        !choice.soonest_rot && choice.woods == 0) {
+        !choice.soonest_rot && choice.woods == 0 && !choice.dry) {
         return items_pick_up_of(items, x, y, z, ITEM_TYPE_BIT(type), count, load);
     }
     if (!in_bounds(items, x, y, z) || count <= 0) {
@@ -1594,7 +1906,7 @@ static ItemStack take_group(Items *items, size_t index, const ItemStack stack, i
     if (stack.type == ITEM_NONE || count <= 0) {
         return (ItemStack){.type = ITEM_NONE};
     }
-    long taken = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0;
+    long taken = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0, moisture = 0;
     uint32_t previous = 0;
     uint32_t slot = items->heads[index];
     while (slot != 0 && taken < count) {
@@ -1606,6 +1918,7 @@ static ItemStack take_group(Items *items, size_t index, const ItemStack stack, i
             hit_points += item->hit_points;
             progress += item->progress;
             eaten += item->eaten;
+            moisture += item->moisture;
             unlink_item(items, index, previous, slot);
         } else {
             previous = slot;
@@ -1622,6 +1935,7 @@ static ItemStack take_group(Items *items, size_t index, const ItemStack stack, i
     result.hit_points = (uint16_t)((hit_points + taken / 2) / taken);
     result.progress = (uint16_t)((progress + taken / 2) / taken);
     result.eaten = (uint16_t)((eaten + taken / 2) / taken);
+    result.moisture = (uint16_t)((moisture + taken / 2) / taken);
     return result;
 }
 
@@ -1811,7 +2125,8 @@ ItemStack item_as_stack(const Item *item)
                        .woods = item->woods,
                        .forbidden = item->forbidden != 0,
                        .made = item->made,
-                       .maker = item->maker};
+                       .maker = item->maker,
+                       .moisture = item->moisture};
 }
 
 void items_set_now(Items *items, uint64_t tick)
@@ -2058,42 +2373,48 @@ int items_drop(Items *items, const Map *map, int x, int y, int z, ItemStack batc
     return items_drop_load(items, map, x, y, z, &batch);
 }
 
-/* Turns an item that has reached its transformation into the new type (same
- * hit points in percent, quality kept when both types have one). */
-static void transform(Items *items, Item *item, ItemType to)
-{
-    ItemType from = (ItemType)item->type;
-    ItemStack old = {.type = item->type, .count = 1, .hit_points = item->hit_points};
-    int percent = item_stack_hit_points_percent(old);
-    int quality = ITEM_DEFS[from].has_quality ? item->quality : ITEM_QUALITY_BEST;
-    ItemStack made = item_stack_make(to, 1, quality, item_hit_points_at_percent(to, percent));
-    item->type = made.type;
-    item->quality = made.quality;
-    item->hit_points = made.hit_points;
-    item->progress = 0;
-    item->eaten = 0;
-    item->corpse = 0;
-    item->woods = ITEM_DEFS[to].wooden ? item->woods : 0;
-    items->totals[from]--;
-    items->totals[to]++;
-}
-
 /* What `hours` do to one item in the conditions of its tile. */
 typedef enum ItemFate {
     ITEM_FATE_SAME,
-    ITEM_FATE_CHANGED,
-    ITEM_FATE_TRANSFORMED,
+    ITEM_FATE_CHANGED,  /* Its condition: the tile changes. */
+    ITEM_FATE_MOISTURE, /* Only its moisture. */
     ITEM_FATE_GONE
 } ItemFate;
 
-static ItemFate advance_item(Items *items, Item *item, int hours, ItemConditions here)
+/* Moves an item's moisture towards its target; whether it changed. */
+static bool advance_moisture(Item *item, int hours, ItemConditions here)
+{
+    ItemType type = (ItemType)item->type;
+    float moisture = item_moisture(item);
+    float target = item_moisture_target(type, here);
+    float tau = item_moisture_hours(type, moisture, here);
+    float step = (target - moisture) * (1.0f - expf(-(float)hours / tau));
+    /* At least a unit while it is a unit or more away: slow materials near
+     * their target would otherwise round to standing still. */
+    float unit = 1.0f / (float)ITEM_MOISTURE_UNITS;
+    if (fabsf(step) < unit && fabsf(target - moisture) >= unit) {
+        step = target > moisture ? unit : -unit;
+    }
+    uint16_t code = moisture_code(type, moisture + step);
+    if (code == item->moisture) {
+        return false;
+    }
+    item->moisture = code;
+    return true;
+}
+
+static ItemFate advance_item(Item *item, int hours, ItemConditions here)
 {
     const ItemDef *def = &ITEM_DEFS[item->type];
-    if (def->rot_days > 0.0f) {
-        if (here.rot_rate <= 0.0f) {
-            return ITEM_FATE_SAME;
+    bool wet = def->water.room > 0.0f && advance_moisture(item, hours, here);
+    if (def->rot_days > 0.0f && here.rot_rate > 0.0f) {
+        float rate = here.rot_rate;
+        if (def->water.room > 0.0f) {
+            rate *= item_rot_moisture_factor((ItemType)item->type, item_moisture(item));
+        } else if (here.rained_on) {
+            rate *= ITEM_ROT_RAINED_ON;
         }
-        float units = rot_units_per_hour(def, here.rot_rate) * (float)hours;
+        float units = rot_units_per_hour(def, rate) * (float)hours;
         long total = (long)item->progress + lroundf(units);
         long lost = total / ITEM_ROT_STEP;
         if (lost >= item->hit_points) {
@@ -2103,29 +2424,13 @@ static ItemFate advance_item(Items *items, Item *item, int hours, ItemConditions
         item->progress = (uint16_t)(total % ITEM_ROT_STEP);
         return ITEM_FATE_CHANGED;
     }
-    if (!here.dries) { /* Out in the rain: what gets wet does. */
-        if (def->wets_into != ITEM_NONE) {
-            transform(items, item, def->wets_into);
-            return ITEM_FATE_TRANSFORMED;
-        }
-        return ITEM_FATE_SAME;
-    }
-    if (def->transforms_into == ITEM_NONE) {
-        return ITEM_FATE_SAME;
-    }
-    int progress = (int)item->progress + hours;
-    if (progress >= def->transform_hours) {
-        transform(items, item, def->transforms_into);
-        return ITEM_FATE_TRANSFORMED;
-    }
-    item->progress = (uint16_t)progress;
-    return ITEM_FATE_CHANGED;
+    return wet ? ITEM_FATE_MOISTURE : ITEM_FATE_SAME;
 }
 
 static bool type_changes(ItemType type)
 {
     const ItemDef *def = &ITEM_DEFS[type];
-    return def->rot_days > 0.0f || def->transforms_into != ITEM_NONE || def->wets_into != ITEM_NONE;
+    return def->rot_days > 0.0f || def->water.room > 0.0f;
 }
 
 int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditionsFn conditions,
@@ -2138,7 +2443,7 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
     if (hours <= 0) {
         return 0;
     }
-    int transformed = 0;
+    int rotted = 0;
     const size_t level_size = (size_t)items->width * (size_t)items->height;
     for (size_t i = begin; i < end; i++) {
         if (items->level_stacks[i / level_size] == 0) {
@@ -2148,8 +2453,8 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
         if (items->heads[i] == 0) {
             continue;
         }
-        bool asked = false, changed = false, counted = false, renewed = false;
-        ItemConditions here = {1.0f, true};
+        bool asked = false, changed = false, wet = false, counted = false;
+        ItemConditions here = ITEM_CONDITIONS_STILL;
         uint32_t previous = 0;
         uint32_t slot = items->heads[i];
         while (slot != 0) {
@@ -2164,31 +2469,28 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
                 here = conditions != NULL ? conditions(context, i) : here;
                 asked = true;
             }
-            ItemFate fate = advance_item(items, item, hours, here);
+            ItemFate fate = advance_item(item, hours, here);
             if (fate == ITEM_FATE_GONE) {
                 items->rotted[item->type]++;
                 unlink_item(items, i, previous, slot);
+                if (!counted) {
+                    rotted++; /* One per tile. */
+                    counted = true;
+                }
             } else {
                 previous = slot;
             }
-            if (fate != ITEM_FATE_SAME) {
-                changed = true;
-            }
-            renewed |= fate == ITEM_FATE_TRANSFORMED;
-            if ((fate == ITEM_FATE_GONE || fate == ITEM_FATE_TRANSFORMED) && !counted) {
-                transformed++; /* One per tile. */
-                counted = true;
-            }
+            changed |= fate == ITEM_FATE_GONE || fate == ITEM_FATE_CHANGED;
+            wet |= fate == ITEM_FATE_MOISTURE;
             slot = next;
-        }
-        if (renewed) {
-            items->additions++; /* Something new to store: haulers look again. */
         }
         if (changed) {
             note_change(items, i);
+        } else if (wet) {
+            refresh_tile(items, i); /* The summary's moisture; no new stamp. */
         }
     }
-    return transformed;
+    return rotted;
 }
 
 /* Notes a problem found by items_check() (the first one is described). */
@@ -2236,7 +2538,8 @@ ItemsCheck items_check(const Items *items)
                 stack->corpse != expected.corpse || stack->woods != expected.woods ||
                 stack->forbidden != expected.forbidden || stack->quality != expected.quality ||
                 stack->hit_points != expected.hit_points || stack->progress != expected.progress ||
-                stack->eaten != expected.eaten || stack->held != 0) {
+                stack->moisture != expected.moisture || stack->eaten != expected.eaten ||
+                stack->held != 0) {
                 found(&check, "a tile's summary is not its newest group", (long)i);
             }
             bool mixed = false;
@@ -2360,6 +2663,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
             if (item->woods != 0) {
                 hash = hash_fnv1a64(hash, &item->woods, sizeof(item->woods));
             }
+            if (item->moisture != 0) {
+                hash = hash_fnv1a64(hash, &item->moisture, sizeof(item->moisture));
+            }
         }
     }
     /* Items in loads, by slot. */
@@ -2380,6 +2686,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         }
         if (item->woods != 0) {
             hash = hash_fnv1a64(hash, &item->woods, sizeof(item->woods));
+        }
+        if (item->moisture != 0) {
+            hash = hash_fnv1a64(hash, &item->moisture, sizeof(item->moisture));
         }
     }
     return hash;

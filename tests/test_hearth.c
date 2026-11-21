@@ -142,11 +142,19 @@ static void test_fuel(void)
           (ITEM_TINDER_TYPES & ITEM_TYPE_BIT(ITEM_MOSS)));
     CHECK_NEAR(hearth_fuel_value(ITEM_COBBLE), 0.0, 1e-9);
     CHECK_NEAR(hearth_fuel_value(ITEM_NONE), 0.0, 1e-9);
-    /* Wet twigs burn as much as dry ones (the water gives no heat), but are
-     * left to dry by default. */
-    CHECK_NEAR(hearth_fuel_value(ITEM_WET_TWIGS), hearth_fuel_value(ITEM_TWIGS), 1e-6);
-    CHECK(HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_WET_TWIGS));
-    CHECK(!(HEARTH_DEFAULT_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_WET_TWIGS)));
+    /* Wet fuel burns worse: green logs give about half what seasoned ones do,
+     * fresh grass next to nothing; stones are no fuel wet or dry. */
+    CHECK_NEAR(hearth_moisture_factor(ITEM_WOOD, item_reference_moisture(ITEM_WOOD)), 1.0f, 1e-6);
+    float green = hearth_moisture_factor(ITEM_WOOD, item_fresh_moisture(ITEM_WOOD));
+    CHECK(green > 0.45f && green < 0.65f);
+    CHECK(hearth_moisture_factor(ITEM_GRASS, item_fresh_moisture(ITEM_GRASS)) < 0.1f);
+    CHECK(hearth_moisture_factor(ITEM_WOOD, 0.05f) > 1.0f);
+    ItemStack logs = item_stack_pristine(ITEM_WOOD, 1);
+    item_stack_set_fresh(&logs);
+    CHECK_NEAR(hearth_stack_fuel_value(logs),
+               hearth_stack_fuel_value(item_stack_pristine(ITEM_WOOD, 1)) * green, 1e-4);
+    CHECK(hearth_ingredient_dry(HEARTH_TINDER) && hearth_ingredient_dry(HEARTH_KINDLING));
+    CHECK(!hearth_ingredient_dry(HEARTH_BRANCH));
 
     Game game;
     REQUIRE(init_flat_game(&game));
@@ -501,9 +509,8 @@ static void test_laying_the_fire(void)
     CHECK_EQ_INT(hearth_next_to_lay(station), HEARTH_KINDLING);
     CHECK(!hearth_laid(station, HEARTH_KINDLING) && !hearth_laid(station, HEARTH_BRANCH));
     CHECK(hearth_wants_fuel_to_light(station));
-    /* Dry twigs first: not a branch, not wet twigs. */
+    /* Twigs first, not a branch. */
     CHECK(!hearth_lay(stations, index, ITEM_BRANCHES));
-    CHECK(!hearth_lay(stations, index, ITEM_WET_TWIGS));
     CHECK(hearth_lay(stations, index, ITEM_TWIGS));
     CHECK(hearth_laid(station, HEARTH_KINDLING));
     CHECK_NEAR(station->fuel, 1.0f + hearth_fuel_value(ITEM_TWIGS), 1e-5);
@@ -513,7 +520,6 @@ static void test_laying_the_fire(void)
     CHECK_EQ_INT(hearth_next_to_lay(station), HEARTH_INGREDIENT_COUNT);
     CHECK(!hearth_lay(stations, index, ITEM_BRANCHES));
     CHECK(hearth_ingredient_types(HEARTH_TINDER) & ITEM_TYPE_BIT(ITEM_GRASS));
-    CHECK(!(hearth_ingredient_types(HEARTH_KINDLING) & ITEM_TYPE_BIT(ITEM_WET_TWIGS)));
     /* It catches: laid again next time. */
     CHECK(hearth_light(stations, index));
     CHECK_EQ_UINT(station->laid, 0);
@@ -532,17 +538,19 @@ static void test_no_lighting_without_kindling(void)
     items_add(&game.items, 18, 13, 0, item_stack_make(ITEM_GRASS, 3, 0, 0));
     /* Branches but only wet twigs: nothing catches. */
     items_add(&game.items, 6, 14, 0, item_stack_make(ITEM_BRANCHES, 2, 0, 0));
-    items_add(&game.items, 6, 16, 0, item_stack_make(ITEM_WET_TWIGS, 2, 0, 0));
+    ItemStack wet = item_stack_make(ITEM_TWIGS, 2, 0, 0);
+    item_stack_set_moisture(&wet, 0.5f);
+    items_add(&game.items, 6, 16, 0, wet);
     run_ticks(&game, 2000, true);
     CHECK(!hearth(&game, index)->burning);
     CHECK(lighter->task != TASK_LIGHT);
     CHECK_EQ_INT((int)game.items.totals[ITEM_GRASS], 3);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_WET_TWIGS], 2);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 2);
     /* Dry twigs come: laid, then lit. */
     items_add(&game.items, 8, 16, 0, item_stack_make(ITEM_TWIGS, 2, 0, 0));
     run_ticks(&game, 3000, true);
     CHECK(hearth(&game, index)->burning);
-    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 3); /* The wet ones left alone. */
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 1);
     game_shutdown(&game);
 }
@@ -557,7 +565,9 @@ static void test_what_lighting_lacks(void)
         CHECK(game_hearth_lacks(&game, station, i));
     }
     /* Wet twigs are no kindling. */
-    items_add(&game.items, 4, 4, 0, item_stack_make(ITEM_WET_TWIGS, 2, 0, 0));
+    ItemStack wet = item_stack_make(ITEM_TWIGS, 2, 0, 0);
+    item_stack_set_moisture(&wet, 0.5f);
+    items_add(&game.items, 4, 4, 0, wet);
     CHECK(game_hearth_lacks(&game, station, HEARTH_KINDLING));
     items_add(&game.items, 5, 4, 0, item_stack_make(ITEM_TWIGS, 1, 0, 0));
     items_add(&game.items, 6, 4, 0, item_stack_make(ITEM_MOSS, 1, 0, 0));
@@ -820,7 +830,7 @@ static void test_bill_ingredient_quality(void)
     CHECK_EQ_INT(carrots_left(&game, 20, 12), 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_WILD_CARROTS], 8);
     CHECK_EQ_INT(items_count_chosen(&game.items, 16, 12, 0, ITEM_WILD_CARROTS,
-                                    (ItemChoice){80, 100, false, 0}),
+                                    (ItemChoice){80, 100, false, 0, false}),
                  4);
     game_shutdown(&game);
 }

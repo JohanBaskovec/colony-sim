@@ -115,6 +115,11 @@ const StructureDef *structure_def(StructureType type);
  * as well (docs/PLANTS.md §10). */
 ItemTypeMask structure_material_types(StructureType type, ItemType material);
 
+/* Whether a material must be brought dry (item_moisture_dry(), docs/WATER.md
+ * §7.4): grass and the fibres standing in for it (wet thatch rots, a wet bed
+ * chills). */
+bool structure_material_dry(ItemType material);
+
 /* Whether a structure of this type blocks movement. */
 bool structure_blocks(StructureType type);
 

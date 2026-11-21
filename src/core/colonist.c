@@ -3299,6 +3299,17 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
                                         : items_get_allowed_of_woods(search->items, x, y, z,
                                                                      search->types, search->woods);
     }
+    if (stack.type != ITEM_NONE && search->by_item && search->choice.dry &&
+        search->match.count == 0) {
+        /* Dry items of any of the types, under wet ones of another. */
+        ItemType type = items_chosen_type(search->items, x, y, z, search->types, search->choice,
+                                          search->min_count);
+        if (type == ITEM_NONE) {
+            return false;
+        }
+        stack =
+            items_get_allowed_of_woods(search->items, x, y, z, ITEM_TYPE_BIT(type), search->woods);
+    }
     if (stack.type != ITEM_NONE && search->by_item && (search->types & ITEM_TYPE_BIT(stack.type))) {
         ItemType type = (ItemType)stack.type;
         if (items_count_chosen(search->items, x, y, z, type, search->choice) < search->min_count) {
@@ -3370,7 +3381,7 @@ static ItemChoice bill_choice(const Bill *bill, ItemType type)
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     int low = def != NULL && def->input_min_quality > bill->min_quality ? def->input_min_quality
                                                                         : bill->min_quality;
-    return (ItemChoice){low, bill->max_quality, item_rots(type), bill->woods};
+    return (ItemChoice){low, bill->max_quality, item_rots(type), bill->woods, false};
 }
 
 /* Hours of rot (x1) the ingredient that rots away soonest has left, among
@@ -4064,6 +4075,8 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
         if (wanted > 0 && room > 0) {
             FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(colonist->carried.type));
             search.match = colonist->carried;
+            search.by_item = construction_material_dry(site, colonist->supply_slot);
+            search.choice.dry = search.by_item;
             if (start_fetch(colonist, context, &search, current_tile(colonist),
                             COLONIST_WORK_SEARCH_MAX_COST, false)) {
                 return true;
@@ -4080,6 +4093,9 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
         ItemType type = construction_material(site, slot);
         FetchSearch search = fetch_search(context, construction_material_types(site, slot));
         search.woods = site->wood_choice;
+        search.by_item = construction_material_dry(site, slot); /* Only dry grass. */
+        search.choice.dry = search.by_item;
+        search.choice.woods = site->wood_choice;
         if (start_fetch(colonist, context, &search, current_tile(colonist),
                         COLONIST_WORK_SEARCH_MAX_COST, false)) {
             int load = colonist_carry_capacity(colonist, type);
@@ -4222,6 +4238,14 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     ItemTypeMask types = colonist->carried.count > 0
                              ? ITEM_TYPE_BIT(colonist->carried.type)
                              : construction_material_types(site, colonist->supply_slot);
+    bool dry = construction_material_dry(site, colonist->supply_slot);
+    ItemChoice choice = ITEM_CHOICE_DRY;
+    choice.woods = site->wood_choice;
+    if (dry && colonist->carried.count == 0) {
+        ItemType type = items_chosen_type(context->items, colonist->x, colonist->y, colonist->z,
+                                          types, choice, 1);
+        types = type != ITEM_NONE ? ITEM_TYPE_BIT(type) : 0;
+    }
     ItemStack stack =
         colonist->carried.count > 0
             ? items_get_allowed_of(context->items, colonist->x, colonist->y, colonist->z, types)
@@ -4241,6 +4265,10 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     wanted = wanted < room ? wanted : room;
     if (wanted <= 0) {
         return false;
+    }
+    if (dry) {
+        return items_pick_up_chosen(context->items, colonist->x, colonist->y, colonist->z,
+                                    (ItemType)stack.type, wanted, choice, &colonist->carried) > 0;
     }
     return items_pick_up_group(context->items, colonist->x, colonist->y, colonist->z, stack,
                                stack.count < wanted ? stack.count : wanted, &colonist->carried) > 0;
@@ -4749,8 +4777,13 @@ static bool light_wanted(const ColonistContext *context, const Workstation *stat
 {
     /* What is to be laid in it must lie somewhere. */
     for (HearthIngredient lay = HEARTH_KINDLING; lay <= HEARTH_BRANCH; lay++) {
-        if (!hearth_laid(station, lay) &&
-            !items_exist(context->plan_items, hearth_ingredient_types(lay), 1)) {
+        if (hearth_laid(station, lay)) {
+            continue;
+        }
+        ItemTypeMask types = hearth_ingredient_types(lay);
+        if (!items_exist(context->plan_items, types, 1) ||
+            (hearth_ingredient_dry(lay) && /* Wet twigs are no kindling. */
+             !items_any_chosen(context->plan_items, types, ITEM_CHOICE_DRY))) {
             return false;
         }
     }
@@ -4807,6 +4840,23 @@ static bool is_fire_source(const Map *map, int x, int y, int z, void *userdata)
             station->z != search->hearth.z);
 }
 
+/* Picks up one item of `types` where the colonist stands, a dry one when
+ * `dry` (tinder, kindling). Whether it got one. */
+static bool pick_up_ingredient(Colonist *colonist, const ColonistContext *context,
+                               ItemTypeMask types, bool dry)
+{
+    int x = colonist->x, y = colonist->y, z = colonist->z;
+    if (dry) {
+        ItemType type = items_chosen_type(context->items, x, y, z, types, ITEM_CHOICE_DRY, 1);
+        return type != ITEM_NONE && items_pick_up_chosen(context->items, x, y, z, type, 1,
+                                                         ITEM_CHOICE_DRY, &colonist->carried) > 0;
+    }
+    ItemStack stack = items_get_allowed_of(context->items, x, y, z, types);
+    return (types & ITEM_TYPE_BIT(stack.type)) &&
+           items_pick_up_of(context->items, x, y, z, ITEM_TYPE_BIT(stack.type), 1,
+                            &colonist->carried) > 0;
+}
+
 static bool carries_tinder(const Colonist *colonist)
 {
     return (ITEM_TINDER_TYPES & ITEM_TYPE_BIT(colonist->carried.type)) &&
@@ -4847,6 +4897,8 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
             return go_next_to(colonist, context, hearth);
         }
         FetchSearch wanted = fetch_search(context, hearth_ingredient_types(lay));
+        wanted.by_item = hearth_ingredient_dry(lay); /* Dry kindling. */
+        wanted.choice.dry = wanted.by_item;
         colonist->light_step = LIGHT_FETCH_LAY;
         if (!items_exist(context->plan_items, wanted.types, 1)) {
             return false; /* None anywhere: no search over the map for nothing. */
@@ -4880,6 +4932,8 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
         return go_next_to(colonist, context, source);
     }
     FetchSearch tinder = fetch_search(context, ITEM_TINDER_TYPES);
+    tinder.by_item = true; /* Only dry tinder takes a spark. */
+    tinder.choice.dry = true;
     colonist->light_step = LIGHT_FETCH_TINDER;
     if (!items_exist(context->plan_items, ITEM_TINDER_TYPES, 1)) {
         return false; /* None anywhere. */
@@ -4983,18 +5037,13 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
     }
     case LIGHT_FETCH_LAY: {
         HearthIngredient next = hearth_next_to_lay(station);
-        ItemStack stack = next == HEARTH_INGREDIENT_COUNT
-                              ? (ItemStack){.type = ITEM_NONE}
-                              : items_get_allowed_of(context->items, colonist->x, colonist->y,
-                                                     colonist->z, hearth_ingredient_types(next));
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
             next == HEARTH_INGREDIENT_COUNT ||
-            !(hearth_ingredient_types(next) & ITEM_TYPE_BIT(stack.type))) {
+            !pick_up_ingredient(colonist, context, hearth_ingredient_types(next),
+                                hearth_ingredient_dry(next))) {
             set_idle(colonist, context, 0);
             return;
         }
-        items_pick_up_of(context->items, colonist->x, colonist->y, colonist->z,
-                         ITEM_TYPE_BIT(stack.type), 1, &colonist->carried);
         reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
                                   context->worker_id);
         break; /* Then to the hearth. */
@@ -5010,15 +5059,11 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
         }
         break; /* Laid: the next one, or the flame. */
     case LIGHT_FETCH_TINDER: {
-        ItemStack stack = items_get_allowed_of(context->items, colonist->x, colonist->y,
-                                               colonist->z, ITEM_TINDER_TYPES);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
-            !(ITEM_TINDER_TYPES & ITEM_TYPE_BIT(stack.type))) {
+            !pick_up_ingredient(colonist, context, ITEM_TINDER_TYPES, true)) {
             set_idle(colonist, context, 0);
             return;
         }
-        items_pick_up_of(context->items, colonist->x, colonist->y, colonist->z,
-                         ITEM_TYPE_BIT(stack.type), 1, &colonist->carried);
         reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
                                   context->worker_id);
         break; /* Then to the hearth. */

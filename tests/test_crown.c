@@ -199,7 +199,7 @@ static void test_an_hour(void)
     CHECK_EQ_INT(items_get_of(&items, 5, 4, 0, ITEM_TYPE_BIT(ITEM_APPLES)).count, 1);
     CHECK(fell > 1 && fell < 30);
     CHECK_EQ_INT(crowns.count, 41 - fell);
-    CHECK_EQ_INT((int)(items.totals[ITEM_TWIGS] + items.totals[ITEM_WET_TWIGS]), fell - 1);
+    CHECK_EQ_INT((int)(items.totals[ITEM_TWIGS]), fell - 1);
     CHECK(crowns_check(&crowns));
     /* A slice of the pool: only those slots. */
     long before = crowns.count;

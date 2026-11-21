@@ -8,19 +8,15 @@
  * player allows once it falls below HEARTH_REFUEL_BELOW of the capacity, and
  * a settler who knows fire lights it when it has no fire. A fire is laid
  * before it is lit: a handful of dry twigs as kindling (wet ones do not
- * catch) and a branch for the flame to take to (HearthIngredient), which go
- * to its fuel; the lighter brings more fuel first when it holds less than
- * HEARTH_LIGHT_FUEL_MIN and some lies in the colony. Then
- * the flame: with embers wrapped in grass at a burning fire within
- * HEARTH_FIRE_CARRY_MAX_COST of it (they go out after HEARTH_EMBER_TICKS),
- * else by friction, an attempt taking HEARTH_FRICTION_WORK and a handful of
- * tinder (dry grass, moss or bracken), which succeeds more often the better
- * the settler knows fire. A burning hearth
- * lights the tiles around it at night, and is where spears are hardened,
- * roots roasted and fireside stories told (core/colonist.h). Rain and snow
- * soak a fire under the open sky until it goes out (its fuel kept), and
- * nobody can light it while they fall (core/weather.h).
- * Design: docs/KNOWLEDGE.md §5.
+ * catch: hearth_ingredient_dry()) and a branch for the flame to take to (HearthIngredient), which
+ * go to its fuel; the lighter brings more fuel first when it holds less than HEARTH_LIGHT_FUEL_MIN
+ * and some lies in the colony. Then the flame: with embers wrapped in grass at a burning fire
+ * within HEARTH_FIRE_CARRY_MAX_COST of it (they go out after HEARTH_EMBER_TICKS), else by friction,
+ * an attempt taking HEARTH_FRICTION_WORK and a handful of tinder (dry grass, moss or bracken),
+ * which succeeds more often the better the settler knows fire. A burning hearth lights the tiles
+ * around it at night, and is where spears are hardened, roots roasted and fireside stories told
+ * (core/colonist.h). Rain and snow soak a fire under the open sky until it goes out (its fuel
+ * kept), and nobody can light it while they fall (core/weather.h). Design: docs/KNOWLEDGE.md §5.
  */
 #ifndef COLONY_CORE_HEARTH_H
 #define COLONY_CORE_HEARTH_H
@@ -82,11 +78,21 @@
 /* Whether a station is a hearth (NULL: no). */
 bool hearth_is(const Workstation *station);
 
-/* Kilograms of fuel one item of this type gives, 0 when it is no fuel. */
+/* Kilograms of fuel one item of this type gives at its reference moisture
+ * (item_reference_moisture()), 0 when it is no fuel. */
 float hearth_fuel_value(ItemType type);
 
-/* The same for an item of a stack: logs and branches by their wood species
- * (core/wood.h: wood_fuel(), beech burning longest). */
+/* Fuel burns worse the wetter it is (docs/WATER.md §7.4): its dry matter
+ * gives its heat less what boiling its water takes, HEARTH_BOIL_SHARE of a
+ * kilogram's heat per kilogram of water, at least HEARTH_WET_FUEL_MIN of it
+ * (tuning). The factor at a moisture (1 at the reference one): a log at
+ * 45 % gives about half what a seasoned one gives. */
+#define HEARTH_BOIL_SHARE 0.6f
+#define HEARTH_WET_FUEL_MIN 0.05f
+float hearth_moisture_factor(ItemType type, float moisture);
+
+/* The same for an item of a stack: by its moisture, logs and branches by
+ * their wood species (core/wood.h: wood_fuel(), beech burning longest). */
 float hearth_stack_fuel_value(ItemStack stack);
 
 /* Kilograms of fuel the hearth wants brought now: none unless it is kept
@@ -135,6 +141,10 @@ typedef enum HearthIngredient {
 
 /* The item types an ingredient can be. */
 ItemTypeMask hearth_ingredient_types(HearthIngredient ingredient);
+
+/* Whether the ingredient must be dry (item_moisture_dry()): tinder and
+ * kindling take no flame wet. */
+bool hearth_ingredient_dry(HearthIngredient ingredient);
 
 /* Whether the ingredient is laid in the hearth (tinder never is: it is used
  * up at the attempt). */

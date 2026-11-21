@@ -405,6 +405,11 @@ ItemTypeMask construction_material_types(const ConstructionSite *site, int slot)
     return structure_material_types((StructureType)site->type, material);
 }
 
+bool construction_material_dry(const ConstructionSite *site, int slot)
+{
+    return structure_material_dry(construction_material(site, slot));
+}
+
 float construction_work_needed(const ConstructionSite *site)
 {
     if (site->workstation != 0) {

@@ -21,15 +21,39 @@ float hearth_fuel_value(ItemType type)
     if (def == NULL || type == ITEM_NONE || !(HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type))) {
         return 0.0f;
     }
-    /* What dries burns as it would dry: the water in it gives no heat. */
-    return def->transforms_into != ITEM_NONE ? item_def(def->transforms_into)->weight : def->weight;
+    return def->weight;
+}
+
+/* The heat of a fuel by its moisture, its dry matter's less what boiling its
+ * water takes (a share of a kilogram's heat per kilogram of water). */
+static float wet_heat(float moisture)
+{
+    float heat = 1.0f - HEARTH_BOIL_SHARE * moisture / (1.0f - moisture);
+    return heat > HEARTH_WET_FUEL_MIN ? heat : HEARTH_WET_FUEL_MIN;
+}
+
+float hearth_moisture_factor(ItemType type, float moisture)
+{
+    if (!item_takes_water(type)) {
+        return 1.0f;
+    }
+    return wet_heat(moisture) / wet_heat(item_reference_moisture(type));
 }
 
 float hearth_stack_fuel_value(ItemStack stack)
 {
-    float value = hearth_fuel_value((ItemType)stack.type);
-    return value > 0.0f && item_def((ItemType)stack.type)->wooden ? value * wood_fuel(stack.woods)
-                                                                  : value;
+    ItemType type = (ItemType)stack.type;
+    float value = hearth_fuel_value(type);
+    if (value <= 0.0f) {
+        return 0.0f;
+    }
+    value *= hearth_moisture_factor(type, item_stack_moisture(stack));
+    return item_def(type)->wooden ? value * wood_fuel(stack.woods) : value;
+}
+
+bool hearth_ingredient_dry(HearthIngredient ingredient)
+{
+    return ingredient == HEARTH_TINDER || ingredient == HEARTH_KINDLING;
 }
 
 float hearth_fuel_wanted(const Workstation *station)

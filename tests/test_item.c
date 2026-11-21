@@ -737,7 +737,6 @@ static void test_rot_definitions(void)
             /* Food, or a body: not food. */
             CHECK(item_is_food((ItemType)type) != (def->category == ITEM_CATEGORY_BODIES));
             CHECK(def->damageable);
-            CHECK_EQ_INT(def->transforms_into, ITEM_NONE);
         }
     }
     /* Every food rots; nuts and roots keep longer than fruit, greens and
@@ -794,28 +793,171 @@ static void test_rot_hours(void)
 static ItemConditions fixed_rate(const void *context, size_t tile)
 {
     (void)tile;
-    return (ItemConditions){*(const float *)context, true};
+    ItemConditions here = ITEM_CONDITIONS_STILL;
+    here.rot_rate = *(const float *)context;
+    return here;
 }
 
-/* Every tile out in the rain: nothing dries. */
+/* Every tile out in the rain. */
 static ItemConditions rained_on(const void *context, size_t tile)
 {
     (void)context;
     (void)tile;
-    return (ItemConditions){ITEM_ROT_RAINED_ON, false};
+    ItemConditions here = ITEM_CONDITIONS_STILL;
+    here.rained_on = true;
+    here.wetting = 1.0f;
+    return here;
 }
 
-static void test_grass_does_not_dry_in_the_rain(void)
+/* Out of the rain in the conditions given as context. */
+static ItemConditions given(const void *context, size_t tile)
+{
+    (void)tile;
+    return *(const ItemConditions *)context;
+}
+
+static float moisture_at(const Items *items, int x, int y)
+{
+    return item_stack_moisture(items_get(items, x, y, 0));
+}
+
+static void test_moisture_definitions(void)
+{
+    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
+        const ItemDef *def = item_def((ItemType)type);
+        if (!item_takes_water((ItemType)type)) {
+            CHECK_NEAR(item_reference_moisture((ItemType)type), 0.0f, 1e-6);
+            continue;
+        }
+        const ItemWater *water = &def->water;
+        CHECK(water->fresh > 0.0f && water->fresh <= water->room && water->room < 1.0f);
+        CHECK(water->dry_hours > 0.0f && water->dry_below > 0.0f);
+        /* Weighed as it is found. */
+        CHECK(item_reference_moisture((ItemType)type) <= water->room);
+        CHECK_NEAR(
+            item_moisture_weight_factor((ItemType)type, item_reference_moisture((ItemType)type)),
+            1.0f, 1e-5);
+    }
+    /* Stones and bodies take no water; grass, wood and food do. */
+    CHECK(!item_takes_water(ITEM_COBBLE) && !item_takes_water(ITEM_FLINT));
+    CHECK(!item_takes_water(ITEM_SETTLER_BODY));
+    CHECK(item_takes_water(ITEM_GRASS) && item_takes_water(ITEM_WOOD));
+    CHECK(item_takes_water(ITEM_BLACKBERRIES));
+    /* The sorption curve: 12 % at 65 %, more in damp air, capped by the room. */
+    CHECK_NEAR(item_equilibrium_moisture(ITEM_WOOD, 0.65f), 0.12f, 1e-5);
+    CHECK_NEAR(item_equilibrium_moisture(ITEM_WOOD, 1.0f), 0.28f, 1e-5);
+    CHECK(item_equilibrium_moisture(ITEM_WOOD, 0.3f) < item_equilibrium_moisture(ITEM_WOOD, 0.8f));
+    CHECK(item_equilibrium_moisture(ITEM_MOSS, 0.65f) >
+          item_equilibrium_moisture(ITEM_GRASS, 0.65f));
+    /* Seasoned materials are dry, fresh grass is not; food is weighed fresh. */
+    CHECK(item_moisture_dry(ITEM_GRASS, item_reference_moisture(ITEM_GRASS)));
+    CHECK(!item_moisture_dry(ITEM_GRASS, item_fresh_moisture(ITEM_GRASS)));
+    CHECK(item_moisture_dry(ITEM_COBBLE, 0.0f));
+    CHECK_NEAR(item_reference_moisture(ITEM_BLACKBERRIES), item_fresh_moisture(ITEM_BLACKBERRIES),
+               1e-6);
+    /* Grass cut fresh weighs three to four times what hay does. */
+    float fresh = item_moisture_weight_factor(ITEM_GRASS, item_fresh_moisture(ITEM_GRASS));
+    CHECK(fresh > 3.0f && fresh < 4.0f);
+    /* The words. */
+    CHECK_EQ_INT(item_moisture_state(ITEM_COBBLE, 0.0f), ITEM_MOISTURE_NONE);
+    CHECK_EQ_INT(item_moisture_state(ITEM_GRASS, 0.1f), ITEM_MOISTURE_DRY);
+    CHECK_EQ_INT(item_moisture_state(ITEM_GRASS, 0.5f), ITEM_MOISTURE_WET);
+    CHECK_EQ_INT(item_moisture_state(ITEM_GRASS, item_def(ITEM_GRASS)->water.room),
+                 ITEM_MOISTURE_SOAKED);
+    for (int state = ITEM_MOISTURE_DRY; state < ITEM_MOISTURE_STATE_COUNT; state++) {
+        CHECK(item_moisture_state_key((ItemMoistureState)state) != NULL);
+    }
+    CHECK(item_moisture_state_key(ITEM_MOISTURE_NONE) == NULL);
+}
+
+static void test_moisture_of_stacks(void)
 {
     Items items;
     REQUIRE(items_init(&items, 4, 4, 1));
-    REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_FRESH_GRASS, 3)) == 3);
-    int hours = item_def(ITEM_FRESH_GRASS)->transform_hours;
-    CHECK_EQ_INT(items_advance(&items, 0, 16, hours, rained_on, NULL), 0);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_FRESH_GRASS);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).progress, 0);
-    CHECK_EQ_INT(items_advance(&items, 0, 16, hours, NULL, NULL), 1);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_GRASS);
+    /* Unknown: the reference moisture. Stones: none. */
+    REQUIRE(items_add(&items, 0, 0, 0, item_stack_pristine(ITEM_GRASS, 2)) == 2);
+    CHECK_NEAR(moisture_at(&items, 0, 0), item_reference_moisture(ITEM_GRASS), 1e-4);
+    REQUIRE(items_add(&items, 1, 0, 0, item_stack_pristine(ITEM_COBBLE, 2)) == 2);
+    CHECK_EQ_INT(items_get(&items, 1, 0, 0).moisture, 0);
+    /* Fresh grass: heavier, and it shares a stack with hay (the moisture is
+     * averaged, never part of a match). */
+    ItemStack fresh = item_stack_pristine(ITEM_GRASS, 2);
+    item_stack_set_fresh(&fresh);
+    CHECK_NEAR(item_stack_moisture(fresh), item_fresh_moisture(ITEM_GRASS), 1e-4);
+    CHECK(item_stack_mass(fresh) > 3.0f * item_stack_mass(item_stack_pristine(ITEM_GRASS, 2)));
+    REQUIRE(items_add(&items, 0, 0, 0, fresh) == 2);
+    CHECK(!items_mixed(&items, 0, 0, 0));
+    float average = 0.5f * (item_reference_moisture(ITEM_GRASS) + item_fresh_moisture(ITEM_GRASS));
+    CHECK_NEAR(moisture_at(&items, 0, 0), average, 1e-3);
+    /* Clamped to the room; ignored for what takes none. */
+    ItemStack soaked = item_stack_pristine(ITEM_GRASS, 1);
+    item_stack_set_moisture(&soaked, 0.99f);
+    CHECK_NEAR(item_stack_moisture(soaked), item_def(ITEM_GRASS)->water.room, 1e-4);
+    ItemStack stone = item_stack_pristine(ITEM_COBBLE, 1);
+    item_stack_set_moisture(&stone, 0.5f);
+    CHECK_EQ_INT(stone.moisture, 0);
+    /* Merging averages it by count. */
+    ItemStack merged = item_stack_pristine(ITEM_GRASS, 3);
+    item_stack_set_moisture(&merged, 0.1f);
+    ItemStack more = item_stack_pristine(ITEM_GRASS, 1);
+    item_stack_set_moisture(&more, 0.5f);
+    REQUIRE(item_stack_merge(&merged, more));
+    CHECK_NEAR(item_stack_moisture(merged), 0.2f, 1e-3);
+    /* Picked up, the items keep theirs: the load is their average. */
+    ItemStack load = {.type = ITEM_NONE};
+    REQUIRE(items_pick_up(&items, 0, 0, 0, 4, &load) == 4);
+    CHECK_NEAR(item_stack_moisture(load), average, 1e-3);
+    REQUIRE(items_put(&items, 3, 3, 0, &load) == 4);
+    CHECK_NEAR(moisture_at(&items, 3, 3), average, 1e-3);
+    ItemsCheck check = items_check(&items);
+    CHECK_EQ_INT(check.problems, 0);
+    items_free(&items);
+}
+
+/* Fresh grass dries into hay out of the rain, faster in the sun, not in the
+ * rain nor on soaked ground. */
+static void test_grass_dries(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 4, 4, 1));
+    ItemStack fresh = item_stack_pristine(ITEM_GRASS, 3);
+    item_stack_set_fresh(&fresh);
+    for (int x = 0; x < 4; x++) {
+        REQUIRE(items_add(&items, x, 0, 0, fresh) == 3);
+    }
+    ItemConditions shade = ITEM_CONDITIONS_STILL;
+    ItemConditions sun = shade;
+    sun.drying = item_drying_speed(ITEM_DRYING_REFERENCE_CELSIUS, 1.0f);
+    CHECK_NEAR(sun.drying, 1.0f + ITEM_DRYING_SUN, 1e-4);
+    ItemConditions damp = shade;
+    damp.humidity = 1.0f; /* Soaked ground, saturated air. */
+    /* A day: in the sun it is well on its way, in the shade less so. */
+    items_advance(&items, 0, 1, 24, given, &sun);
+    items_advance(&items, 1, 2, 24, given, &shade);
+    items_advance(&items, 2, 3, 24, rained_on, NULL);
+    items_advance(&items, 3, 4, 24, given, &damp);
+    float fresh_moisture = item_fresh_moisture(ITEM_GRASS);
+    CHECK(moisture_at(&items, 0, 0) < moisture_at(&items, 1, 0));
+    CHECK(moisture_at(&items, 1, 0) < fresh_moisture - 0.1f);
+    CHECK(moisture_at(&items, 2, 0) > fresh_moisture); /* Wetter still. */
+    CHECK(moisture_at(&items, 3, 0) > item_def(ITEM_GRASS)->water.dry_below);
+    /* Two days in the sun make hay: dry, it takes a spark. */
+    items_advance(&items, 0, 1, 24, given, &sun);
+    CHECK(item_moisture_dry(ITEM_GRASS, moisture_at(&items, 0, 0)));
+    CHECK_EQ_INT(items_count_chosen(&items, 0, 0, 0, ITEM_GRASS, ITEM_CHOICE_DRY), 3);
+    CHECK_EQ_INT(items_count_chosen(&items, 1, 0, 0, ITEM_GRASS, ITEM_CHOICE_DRY), 0);
+    /* Grass on damp ground never dries. */
+    items_advance(&items, 3, 4, 24 * 30, given, &damp);
+    CHECK(!item_moisture_dry(ITEM_GRASS, moisture_at(&items, 3, 0)));
+    CHECK(item_hours_to_dry(ITEM_GRASS, moisture_at(&items, 3, 0), damp) < 0.0f);
+    CHECK(item_hours_to_dry(ITEM_GRASS, moisture_at(&items, 1, 0), sun) > 0.0f);
+    CHECK_NEAR(item_hours_to_dry(ITEM_GRASS, moisture_at(&items, 0, 0), sun), 0.0f, 1e-6);
+    /* Moisture alone is no change of the tile: same stamp, summary right. */
+    uint32_t stamp = items.stamps[1];
+    items_advance(&items, 1, 2, 24, given, &sun);
+    CHECK_EQ_UINT(items.stamps[1], stamp);
+    ItemsCheck check = items_check(&items);
+    CHECK_EQ_INT(check.problems, 0);
     items_free(&items);
 }
 
@@ -824,32 +966,71 @@ static void test_twigs_get_wet_in_the_rain_and_dry_again(void)
     Items items;
     REQUIRE(items_init(&items, 4, 4, 1));
     REQUIRE(items_add(&items, 1, 1, 0, item_stack_pristine(ITEM_TWIGS, 3)) == 3);
-    CHECK_EQ_INT(item_def(ITEM_TWIGS)->wets_into, ITEM_WET_TWIGS);
-    CHECK_EQ_INT(item_def(ITEM_WET_TWIGS)->transforms_into, ITEM_TWIGS);
-    /* Dry weather: they stay dry. */
-    CHECK_EQ_INT(items_advance(&items, 0, 16, 48, NULL, NULL), 0);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_TWIGS);
-    /* An hour in the rain: wet, and they do not dry while it lasts. */
-    CHECK_EQ_INT(items_advance(&items, 0, 16, 1, rained_on, NULL), 1);
-    ItemStack wet = items_get(&items, 1, 1, 0);
-    CHECK_EQ_INT(wet.type, ITEM_WET_TWIGS);
-    CHECK_EQ_INT(wet.count, 3);
-    CHECK_EQ_INT((int)items.totals[ITEM_TWIGS], 0);
-    CHECK_EQ_INT((int)items.totals[ITEM_WET_TWIGS], 3);
-    CHECK_EQ_INT(items_advance(&items, 0, 16, 48, rained_on, NULL), 0);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).progress, 0);
-    /* Dry again in a day out of the rain. */
-    int hours = item_def(ITEM_WET_TWIGS)->transform_hours;
-    CHECK_EQ_INT(items_advance(&items, 0, 16, hours - 1, NULL, NULL), 0);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_WET_TWIGS);
-    CHECK_EQ_INT(items_advance(&items, 0, 16, 1, NULL, NULL), 1);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).type, ITEM_TWIGS);
-    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, 3);
-    /* Branches and logs do not soak through in a shower. */
-    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_BRANCHES, 2)) == 2);
+    /* Still air: they stay dry. */
+    items_advance(&items, 0, 16, 48, NULL, NULL);
+    CHECK(item_moisture_dry(ITEM_TWIGS, moisture_at(&items, 1, 1)));
+    /* A few hours in the rain: wet, no kindling. */
+    items_advance(&items, 0, 16, 3, rained_on, NULL);
+    CHECK(!item_moisture_dry(ITEM_TWIGS, moisture_at(&items, 1, 1)));
+    CHECK_EQ_INT(items_count_chosen(&items, 1, 1, 0, ITEM_TWIGS, ITEM_CHOICE_DRY), 0);
+    ItemStack load = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_chosen(&items, 1, 1, 0, ITEM_TWIGS, 1, ITEM_CHOICE_DRY, &load), 0);
+    CHECK_EQ_INT(items_chosen_type(&items, 1, 1, 0, ITEM_TINDER_TYPES | ITEM_TYPE_BIT(ITEM_TWIGS),
+                                   ITEM_CHOICE_DRY, 1),
+                 ITEM_NONE);
+    CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, 3); /* Still twigs. */
+    /* Dry again within a couple of days out of the rain. */
+    items_advance(&items, 0, 16, 48, NULL, NULL);
+    CHECK(item_moisture_dry(ITEM_TWIGS, moisture_at(&items, 1, 1)));
+    CHECK_EQ_INT(items_pick_up_chosen(&items, 1, 1, 0, ITEM_TWIGS, 1, ITEM_CHOICE_DRY, &load), 1);
+    /* Logs do not soak through in a shower. */
+    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WOOD, 2)) == 2);
     items_advance(&items, 0, 16, 1, rained_on, NULL);
-    CHECK_EQ_INT(items_get(&items, 2, 2, 0).type, ITEM_BRANCHES);
+    CHECK(item_moisture_dry(ITEM_WOOD, moisture_at(&items, 2, 2)));
+    /* Lying in water, anything is soaked within the hour. */
+    ItemConditions water = ITEM_CONDITIONS_STILL;
+    water.in_water = true;
+    items_advance(&items, 0, 16, 1, given, &water);
+    CHECK_EQ_INT(item_moisture_state(ITEM_WOOD, moisture_at(&items, 2, 2)), ITEM_MOISTURE_SOAKED);
     items_free(&items);
+}
+
+/* Green wood seasons over weeks, an hour at a time. */
+static void test_logs_season_slowly(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 2, 2, 1));
+    ItemStack green = item_stack_pristine(ITEM_WOOD, 1);
+    item_stack_set_fresh(&green);
+    REQUIRE(items_add(&items, 0, 0, 0, green) == 1);
+    float before = moisture_at(&items, 0, 0);
+    items_advance(&items, 0, 4, 1, NULL, NULL);
+    CHECK(moisture_at(&items, 0, 0) < before);
+    for (int hour = 0; hour < 24 * 7; hour++) {
+        items_advance(&items, 0, 4, 1, NULL, NULL);
+    }
+    CHECK(!item_moisture_dry(ITEM_WOOD, moisture_at(&items, 0, 0))); /* A week: still green. */
+    for (int hour = 0; hour < 24 * 90; hour++) {
+        items_advance(&items, 0, 4, 1, NULL, NULL);
+    }
+    CHECK(item_moisture_dry(ITEM_WOOD, moisture_at(&items, 0, 0))); /* A season: seasoned. */
+    CHECK_NEAR(moisture_at(&items, 0, 0), item_reference_moisture(ITEM_WOOD), 0.05f);
+    items_free(&items);
+}
+
+/* Dry food rots slower, soaked food faster. */
+static void test_rot_by_moisture(void)
+{
+    ItemType berries = ITEM_BLACKBERRIES;
+    const ItemWater *water = &item_def(berries)->water;
+    CHECK_NEAR(item_rot_moisture_factor(berries, water->fresh), 1.0f, 1e-6);
+    CHECK_NEAR(item_rot_moisture_factor(berries, water->room), ITEM_ROT_RAINED_ON, 1e-5);
+    CHECK_NEAR(item_rot_moisture_factor(berries, water->dry_below), ITEM_ROT_DRY, 1e-6);
+    CHECK_NEAR(item_rot_moisture_factor(ITEM_SETTLER_BODY, 0.5f), 1.0f, 1e-6);
+    ItemStack dried = item_stack_pristine(berries, 1);
+    item_stack_set_moisture(&dried, 0.1f);
+    CHECK(item_stack_rot_hours(dried, 1.0f) >
+          5.0f * item_stack_rot_hours(item_stack_pristine(berries, 1), 1.0f));
 }
 
 /* Stacks are counted per level, for searches to skip the empty ones. */
@@ -1039,26 +1220,27 @@ static void test_items_keep_their_own_rot(void)
     items_free(&items);
 }
 
-/* Items dry one by one: a tile holds dry and wet twigs for a while, and room
- * counts both. */
+/* Items dry one by one: each keeps its own moisture on a shared tile. */
 static void test_items_dry_one_by_one(void)
 {
     Items items;
     REQUIRE(items_init(&items, 4, 4, 1));
-    int dry_hours = item_def(ITEM_WET_TWIGS)->transform_hours;
-    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WET_TWIGS, 10)) == 10);
-    items_advance(&items, 0, 16, dry_hours / 2, NULL, NULL);
-    REQUIRE(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WET_TWIGS, 5)) == 5);
-    CHECK_EQ_INT(items_advance(&items, 0, 16, dry_hours - dry_hours / 2, NULL, NULL), 1);
-    CHECK_EQ_INT(items_count_at(&items, 2, 2, 0, ITEM_TWIGS), 10);
-    CHECK_EQ_INT(items_count_at(&items, 2, 2, 0, ITEM_WET_TWIGS), 5);
-    CHECK_EQ_INT(items.totals[ITEM_TWIGS], 10);
-    CHECK_EQ_INT(items.totals[ITEM_WET_TWIGS], 5);
-    /* The summary is the newest item's type. */
-    CHECK_EQ_INT(items_get(&items, 2, 2, 0).type, ITEM_WET_TWIGS);
-    CHECK_EQ_INT(items_get(&items, 2, 2, 0).count, 5);
-    int room = item_stack_limit(ITEM_WET_TWIGS) - 15;
-    CHECK_EQ_INT(items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WET_TWIGS, 1000)), room);
+    ItemStack wet = item_stack_pristine(ITEM_TWIGS, 10);
+    item_stack_set_moisture(&wet, 0.5f);
+    REQUIRE(items_add(&items, 2, 2, 0, wet) == 10);
+    items_advance(&items, 0, 16, 48, NULL, NULL);
+    wet.count = 5;
+    REQUIRE(items_add(&items, 2, 2, 0, wet) == 5);
+    CHECK_EQ_INT(items_count_at(&items, 2, 2, 0, ITEM_TWIGS), 15);
+    CHECK_EQ_INT(items_count_chosen(&items, 2, 2, 0, ITEM_TWIGS, ITEM_CHOICE_DRY), 10);
+    CHECK(!items_mixed(&items, 2, 2, 0));
+    ItemStack load = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_chosen(&items, 2, 2, 0, ITEM_TWIGS, 20, ITEM_CHOICE_DRY, &load), 10);
+    CHECK(item_moisture_dry(ITEM_TWIGS, item_stack_moisture(load)));
+    CHECK_EQ_INT(items_count_at(&items, 2, 2, 0, ITEM_TWIGS), 5);
+    CHECK_NEAR(moisture_at(&items, 2, 2), 0.5f, 1e-4);
+    ItemsCheck check = items_check(&items);
+    CHECK_EQ_INT(check.problems, 0);
     items_free(&items);
 }
 
@@ -1508,7 +1690,11 @@ int main(void)
     RUN_TEST(test_rot_hours);
     RUN_TEST(test_food_rots_away);
     RUN_TEST(test_rot_progress_merges);
-    RUN_TEST(test_grass_does_not_dry_in_the_rain);
+    RUN_TEST(test_moisture_definitions);
+    RUN_TEST(test_moisture_of_stacks);
+    RUN_TEST(test_grass_dries);
+    RUN_TEST(test_logs_season_slowly);
+    RUN_TEST(test_rot_by_moisture);
     RUN_TEST(test_twigs_get_wet_in_the_rain_and_dry_again);
     RUN_TEST(test_eating_takes_weight_not_hit_points);
     RUN_TEST(test_hash);
