@@ -126,6 +126,7 @@ static void soil_section(Serializer *s, Game *game)
 static void water_section(Serializer *s, Game *game)
 {
     water_serialize(s, &game->water);
+    river_flow_serialize(s, &game->river);
 }
 
 static void light_section(Serializer *s, Game *game)

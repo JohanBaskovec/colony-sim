@@ -2,6 +2,7 @@
 
 #include "core/noise.h"
 #include "core/rng.h"
+#include "core/game_clock.h"
 #include "core/util.h"
 
 #include <float.h>
@@ -31,12 +32,14 @@ void river_default_params(RiverParams *river)
     river->to = MAP_SIDE_COUNT;
     river->from_at = 0.5f;
     river->to_at = 0.5f;
+    river->discharge = 1.0f;
 }
 
 void river_resolve(const RiverParams *river, uint64_t seed, RiverParams *out)
 {
     *out = *river;
     out->width = clampi(river->width, 0, RIVER_MAX_WIDTH);
+    out->discharge = river->discharge > 0.0f ? river->discharge : 0.0f;
     Rng rng;
     rng_seed(&rng, seed, 0x7269766572ULL /* "river" */);
     /* Always the same draws, whatever is already set. */
@@ -179,4 +182,46 @@ bool river_distances(const RiverParams *river, uint64_t seed, int width, int hei
     }
     spread(out, width, height);
     return true;
+}
+
+void river_flow_hour(RiverFlow *flow, float rain_mm)
+{
+    float quick_out = flow->quick / RIVER_QUICK_HOURS;
+    flow->quick += (rain_mm > 0.0f ? rain_mm : 0.0f) - quick_out;
+    flow->slow += quick_out - flow->slow / RIVER_SLOW_HOURS;
+}
+
+int32_t river_stage(const RiverFlow *flow, int day_of_year)
+{
+    float angle = 6.2831853f * (float)(day_of_year - RIVER_SEASON_PEAK_DAY) / (float)DAYS_PER_YEAR;
+    float stage = flow->discharge * (RIVER_SEASON_MM * cosf(angle) + RIVER_RAIN_RISE * flow->slow);
+    return (int32_t)clampf(roundf(stage), (float)RIVER_STAGE_MIN_MM, (float)RIVER_STAGE_MAX_MM);
+}
+
+int32_t river_head(int32_t stage)
+{
+    float factor = clampf(1.0f + (float)stage / 1000.0f, 0.5f, 3.0f);
+    return (int32_t)lroundf((float)RIVER_HEAD_MM * factor);
+}
+
+uint64_t river_flow_hash(const RiverFlow *flow, uint64_t hash)
+{
+    if (!flow->flowing) {
+        return hash; /* No river: hashes stay as they were. */
+    }
+    hash = hash_fnv1a64(hash, &flow->rest, sizeof(flow->rest));
+    float values[3] = {flow->discharge, flow->quick, flow->slow};
+    hash = hash_fnv1a64(hash, values, sizeof(values));
+    return hash_fnv1a64(hash, &flow->stage_set, sizeof(flow->stage_set));
+}
+
+void river_flow_serialize(Serializer *s, RiverFlow *flow)
+{
+    ser_bool(s, &flow->flowing);
+    ser_float(s, &flow->discharge);
+    ser_i64(s, &flow->rest);
+    ser_float(s, &flow->quick);
+    ser_float(s, &flow->slow);
+    ser_i32(s, &flow->stage_set);
+    ser_check(s, flow->stage_set >= RIVER_STAGE_MIN_MM && flow->stage_set <= RIVER_STAGE_MAX_MM);
 }

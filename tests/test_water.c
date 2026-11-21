@@ -6,6 +6,7 @@
 #include "test_framework.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 
 /* Steps until every block sleeps (false when still awake after `limit`),
  * checking that the water is kept at each step. */
@@ -749,6 +750,78 @@ static void test_a_river_flows_then_sleeps(void)
     game_shutdown(&game);
 }
 
+/* The surface of the river at the middle of the map: the lowest column of
+ * its channel there (-1: none found). */
+static int river_middle_mm(const Game *game, const float *distance)
+{
+    const Map *map = &game->map;
+    int best = -1;
+    float nearest = 1e9f;
+    for (int i = 0; i < map->width; i++) {
+        int x = i, y = map->height / 2;
+        for (int pass = 0; pass < 2; pass++, x = map->width / 2, y = i) {
+            float d = distance[(size_t)y * (size_t)map->width + (size_t)x];
+            if (d < nearest) {
+                nearest = d;
+                best = surface_mm(map, x, y);
+            }
+        }
+    }
+    return best;
+}
+
+/* A storm over the catchment (upstream, out of the map) raises the river a
+ * few hours later all along, its ends set on the edges as it rises (its
+ * fall over the days after: test_river). */
+static void test_a_storm_raises_the_river(void)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 11;
+    params.world.width = 64;
+    params.world.height = 64;
+    params.world.water_level = 0;
+    params.world.river.width = RIVER_MAX_WIDTH;
+    params.colonist_count = 0;
+    Game game;
+    REQUIRE(game_init(&game, &params));
+    REQUIRE(game.river.flowing);
+    RiverParams course;
+    river_resolve(&params.world.river, params.world.seed, &course);
+    float *distance = malloc((size_t)64 * 64 * sizeof(*distance));
+    REQUIRE(distance != NULL);
+    REQUIRE(river_distances(&course, params.world.seed, 64, 64, distance));
+    for (int tick = 0; tick < 2 * TICKS_PER_HOUR; tick++) { /* Settled. */
+        game.weather.type = WEATHER_CLEAR;
+        game_tick(&game);
+    }
+    int stage = game.river.stage_set, before = river_middle_mm(&game, distance);
+    REQUIRE(before > 0);
+    game.river.quick += 60.0f; /* A cloudburst upstream, out of the map. */
+    int highest = before, highest_stage = stage;
+    for (int hour = 0; hour < 26; hour++) {
+        for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
+            game.weather.type = WEATHER_CLEAR;
+            game_tick(&game);
+        }
+        int now = river_middle_mm(&game, distance);
+        highest = now > highest ? now : highest;
+        highest_stage = game.river.stage_set > highest_stage ? game.river.stage_set : highest_stage;
+    }
+    CHECK(highest_stage > stage + 300);
+    CHECK(highest > before + 200); /* All along: in the middle of the map too. */
+    /* Its ends hold the stage: the outlet at the lakes' level and the stage. */
+    size_t edges = 2 * (size_t)game.map.width + 2 * (size_t)game.map.height;
+    for (size_t slot = 0; slot < edges; slot++) {
+        if (game.water.edge_kind[slot] == WATER_EDGE_OUTLET) {
+            int64_t outlet = game.river.rest + (int64_t)game.river.stage_set * WATER_FINE;
+            CHECK(game.water.edge_surface[slot] == outlet * WATER_EDGE_BASIN);
+        }
+    }
+    free(distance);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_water_at_rest_stays_asleep);
@@ -772,5 +845,6 @@ int main(void)
     RUN_TEST(test_a_steady_current_falls_asleep);
     RUN_TEST(test_a_lake_drains_through_a_slow_current);
     RUN_TEST(test_a_river_flows_then_sleeps);
+    RUN_TEST(test_a_storm_raises_the_river);
     return test_summary();
 }

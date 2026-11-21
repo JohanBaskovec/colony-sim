@@ -167,6 +167,9 @@ typedef struct Game {
     Temperatures temperatures; /* Per tile, warmed by burning hearths. */
     Soil soil;                 /* Water in the ground of each tile (docs/CLIMATE.md). */
     Water water; /* The flow of the free water (docs/WATER.md §3), stepped every tick. */
+    /* The river's discharge (core/river.h): its stage beyond the edges, set
+     * on the water's edges as it rises and falls. */
+    RiverFlow river;
     TileLight
         light; /* Sky, sun and sun hours of each tile (docs/SHADOWS.md §5): read by nobody yet. */
     /* Who sees what (core/vision.h): derived from the map and where the

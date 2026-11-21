@@ -1,5 +1,7 @@
 #include "core/river.h"
 
+#include "core/game_clock.h"
+
 #include "test_framework.h"
 
 #include <float.h>
@@ -147,11 +149,113 @@ static void test_no_river_no_course(void)
     CHECK(distance[0] == 7.0f);
 }
 
+/* A river of usual discharge, its catchment dry. */
+static RiverFlow dry_river(void)
+{
+    RiverFlow flow = {.flowing = true, .discharge = 1.0f};
+    return flow;
+}
+
+/* High after the snowmelt of spring, low in early autumn, nothing more
+ * without rain; a river of no discharge keeps the lakes' level. */
+static void test_the_river_follows_the_seasons(void)
+{
+    RiverFlow flow = dry_river();
+    int peak = RIVER_SEASON_PEAK_DAY;
+    int low = (RIVER_SEASON_PEAK_DAY + DAYS_PER_YEAR / 2) % DAYS_PER_YEAR;
+    CHECK_EQ_INT(river_stage(&flow, peak), (int)RIVER_SEASON_MM);
+    CHECK_EQ_INT(river_stage(&flow, low), -(int)RIVER_SEASON_MM);
+    CHECK(peak / DAYS_PER_SEASON == SEASON_SPRING);
+    CHECK(low / DAYS_PER_SEASON == SEASON_AUTUMN);
+    for (int day = 0; day < DAYS_PER_YEAR; day++) {
+        int stage = river_stage(&flow, day);
+        CHECK(stage <= river_stage(&flow, peak) && stage >= river_stage(&flow, low));
+    }
+    flow.discharge = 0.0f;
+    CHECK_EQ_INT(river_stage(&flow, peak), 0);
+    flow.discharge = 2.0f;
+    CHECK_EQ_INT(river_stage(&flow, peak), 2 * (int)RIVER_SEASON_MM);
+    RiverParams river, out;
+    river_default_params(&river);
+    CHECK(river.discharge == 1.0f);
+    river.discharge = -3.0f;
+    river_resolve(&river, 4, &out);
+    CHECK(out.discharge == 0.0f);
+}
+
+/* The hours after a storm over the catchment (`mm` an hour for `hours`):
+ * the highest rise above the dry stage and the hour it came, and the rise a
+ * week after the storm. */
+static void storm_rise(float mm, int hours, int *highest, int *highest_hour, int *week_after)
+{
+    RiverFlow flow = dry_river();
+    int day = RIVER_SEASON_PEAK_DAY, base = river_stage(&flow, day);
+    *highest = 0;
+    *highest_hour = 0;
+    for (int hour = 0; hour < 24 * 7; hour++) {
+        river_flow_hour(&flow, hour < hours ? mm : 0.0f);
+        int rise = river_stage(&flow, day) - base;
+        if (rise > *highest) {
+            *highest = rise;
+            *highest_hour = hour;
+        }
+    }
+    *week_after = river_stage(&flow, day) - base;
+}
+
+/* Rain raises it after a while (the catchment drains into it), the more the
+ * rain the higher; it falls back over days. */
+static void test_rain_raises_it_after_a_while(void)
+{
+    int highest, hour, after;
+    storm_rise(20.0f, 3, &highest, &hour, &after); /* A cloudburst: 60 mm. */
+    CHECK(highest > 400 && highest < 1200);
+    CHECK(hour >= 12 && hour <= 48); /* It keeps rising for hours. */
+    CHECK(after < highest / 3);
+    int light;
+    storm_rise(2.0f, 3, &light, &hour, &after);
+    CHECK(light * 5 < highest);
+    /* A rainy week: tens of centimetres. */
+    RiverFlow flow = dry_river();
+    for (int h = 0; h < 24 * 7; h++) {
+        river_flow_hour(&flow, h % 3 == 0 ? 0.5f : 0.0f);
+    }
+    int rise = river_stage(&flow, 20) - river_stage(&(RiverFlow){.discharge = 1.0f}, 20);
+    CHECK(rise > 100 && rise < 500);
+    /* A wet spell of storms: a flood of one to two metres or more, within
+     * the highest stage. */
+    flow = dry_river();
+    int top = 0;
+    for (int h = 0; h < 24 * 6; h++) {
+        river_flow_hour(&flow, h % 48 < 3 ? 25.0f : 0.3f);
+        top = river_stage(&flow, 20) > top ? river_stage(&flow, 20) : top;
+    }
+    CHECK(top > 1200);
+    CHECK(top <= RIVER_STAGE_MAX_MM);
+    for (int h = 0; h < 24 * 30; h++) {
+        river_flow_hour(&flow, 100.0f);
+    }
+    CHECK_EQ_INT(river_stage(&flow, 20), RIVER_STAGE_MAX_MM);
+}
+
+/* Its slope grows as it rises. */
+static void test_the_slope_follows_the_stage(void)
+{
+    CHECK_EQ_INT(river_head(0), RIVER_HEAD_MM);
+    CHECK_EQ_INT(river_head(1000), 2 * RIVER_HEAD_MM);
+    CHECK_EQ_INT(river_head(-300), (int)(0.7f * (float)RIVER_HEAD_MM + 0.5f));
+    CHECK_EQ_INT(river_head(-900), RIVER_HEAD_MM / 2);
+    CHECK_EQ_INT(river_head(RIVER_STAGE_MAX_MM), 3 * RIVER_HEAD_MM);
+}
+
 int main(void)
 {
     RUN_TEST(test_the_seed_chooses_the_edges);
     RUN_TEST(test_edges_given_are_kept);
     RUN_TEST(test_the_course_runs_from_edge_to_edge);
     RUN_TEST(test_no_river_no_course);
+    RUN_TEST(test_the_river_follows_the_seasons);
+    RUN_TEST(test_rain_raises_it_after_a_while);
+    RUN_TEST(test_the_slope_follows_the_stage);
     return test_summary();
 }

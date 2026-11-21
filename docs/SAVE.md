@@ -143,7 +143,7 @@ round-trip test (§5) shows they come back the same; otherwise they are saved.
   and the future unchanged on a new game, gathering, building, feuds and
   brawls, cooking, wild animals, the fog of war, water flowing and water
   flowing out over the map's edge, a river flowing when saved; saves cut short, changed, of another version, and 300 edited ones
-  with their hash made right; the size of 79 structs. Leaving a field out of
+  with their hash made right; the size of 80 structs. Leaving a field out of
   a settler's save fails them (checked by hand).
 
 ## 7. As built (S2)

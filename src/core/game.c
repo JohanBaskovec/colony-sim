@@ -655,6 +655,27 @@ bool game_prepare_load(Game *game)
 /* The river's ends (docs/WATER.md §4.2): beyond the edge it comes in by,
  * its level held RIVER_HEAD_MM over the lakes'; beyond the one it leaves by,
  * an outlet at the lakes' level: it flows down its slope between them. */
+/* Sets the river's ends beyond the edges at `stage` (mm above the lakes):
+ * its source higher by its head, its outlet at the stage. */
+static void set_river_ends(Game *game, int32_t stage)
+{
+    Water *water = &game->water;
+    int64_t outlet = game->river.rest + (int64_t)stage * WATER_FINE;
+    int64_t source = outlet + (int64_t)river_head(stage) * WATER_FINE;
+    size_t edges = 2 * (size_t)water->width + 2 * (size_t)water->height;
+    for (size_t slot = 0; slot < edges; slot++) {
+        WaterEdgeKind kind = (WaterEdgeKind)water->edge_kind[slot];
+        if (kind != WATER_EDGE_LAND) {
+            water_set_edge(water, &game->map, slot, kind,
+                           kind == WATER_EDGE_SOURCE ? source : outlet);
+        }
+    }
+    game->river.stage_set = stage;
+}
+
+/* The river's ends (docs/WATER.md §4.2): the columns of the edge across its
+ * channel where it comes in (its source) and where it goes out (its outlet),
+ * held at the stage of the day. */
 static bool start_river(Game *game, const WorldGenParams *world)
 {
     RiverParams course;
@@ -671,8 +692,6 @@ static bool start_river(Game *game, const WorldGenParams *world)
         free(distance);
         return true;
     }
-    const int64_t rest =
-        ((int64_t)(map->surface_level - 1) * WATER_CELL_FULL + WORLDGEN_LAKE_MM) * WATER_FINE;
     const float half = (float)course.width * 0.5f;
     for (int end = 0; end < 2; end++) {
         MapSide side = end == 0 ? course.from : course.to;
@@ -686,14 +705,37 @@ static bool start_river(Game *game, const WorldGenParams *world)
             if (distance[(size_t)y * (size_t)map->width + (size_t)x] >= half) {
                 continue;
             }
+            /* Its kind now, its level just below. */
             size_t slot = water_edge_slot(&game->water, x, y, dx, dy);
             water_set_edge(&game->water, map, slot,
-                           end == 0 ? WATER_EDGE_SOURCE : WATER_EDGE_OUTLET,
-                           end == 0 ? rest + (int64_t)RIVER_HEAD_MM * WATER_FINE : rest);
+                           end == 0 ? WATER_EDGE_SOURCE : WATER_EDGE_OUTLET, 0);
         }
     }
     free(distance);
+    game->river = (RiverFlow){
+        .flowing = true,
+        .discharge = course.discharge,
+        .rest =
+            ((int64_t)(map->surface_level - 1) * WATER_CELL_FULL + WORLDGEN_LAKE_MM) * WATER_FINE,
+    };
+    set_river_ends(game, river_stage(&game->river, game_day_of_year(game->clock.tick)));
     return true;
+}
+
+/* Every hour: the rain over the river's catchment, and its ends set again
+ * once its stage moved far enough. */
+static void update_river(Game *game)
+{
+    RiverFlow *river = &game->river;
+    if (!river->flowing || game->clock.tick % TICKS_PER_HOUR != 0) {
+        return;
+    }
+    river_flow_hour(river, weather_rainfall(&game->weather, game->clock.tick));
+    int32_t stage = river_stage(river, game_day_of_year(game->clock.tick));
+    if (stage - river->stage_set >= RIVER_STAGE_STEP_MM ||
+        river->stage_set - stage >= RIVER_STAGE_STEP_MM) {
+        set_river_ends(game, stage);
+    }
 }
 
 bool game_init(Game *game, const NewGameParams *params)
@@ -2900,6 +2942,7 @@ void game_tick(Game *game)
     game->clock.tick++;
     items_set_now(&game->items, game->clock.tick);
     weather_tick(&game->weather, game->clock.tick);
+    update_river(game);
     uint32_t harmful_falls =
         game->gather_zones.harmful_tree_falls + game->designations.harmful_tree_falls;
     if (game->debug.instant_deconstruct) {
@@ -3092,6 +3135,7 @@ uint64_t game_hash(const Game *game)
     hash = temperatures_hash(&game->temperatures, hash);
     hash = soil_hash(&game->soil, hash);
     hash = water_hash(&game->water, hash); /* Nothing while the water lies at rest. */
+    hash = river_flow_hash(&game->river, hash);
     hash = weather_hash(&game->weather, hash);
     if (game->debug.instant_build || game->debug.free_crafts || game->debug.no_tools ||
         game->debug.instant_deconstruct) {

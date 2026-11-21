@@ -176,8 +176,10 @@ Before the world (any time, each useful on its own):
 - **G0b, climate per game**: the mean temperature, the seasonal swing and
   the rain parameters of the weather instead of constants; New game
   options (later the cell's values).
-- **G0c, the river as parameters** (W3c): edge in, edge out, where along
-  them (done with W3c-1: `RiverParams`), discharge.
+- **G0c, the river as parameters** (W3c, done): edge in, edge out, where
+  along them (W3c-1: `RiverParams`), discharge (W3c-3:
+  `RiverParams.discharge`, how much it rises and falls against a usual
+  river).
 - **G0d, a coast**: the sea along chosen edges of the map (W3b's edges with
   a fixed level), salt water.
 

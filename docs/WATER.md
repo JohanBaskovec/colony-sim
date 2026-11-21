@@ -448,6 +448,30 @@ the game's random stream (`weather_roll()`). A flood is announced by the
 river rising for several hours: an alert when it gets within 50 cm of its
 banks (step W5).
 
+*As built (W3c-3, the discharge over time):* the **stage**, how far above
+the lakes' level the river stands beyond its edges (`RiverFlow`,
+`Game.river`, `core/river.h`), moves its source and its outlet together;
+the source stands above the outlet by its head (`river_head()`: 10 cm,
+twice that a metre up). The stage is a seasonal part, ±20 cm around a
+high in the middle of spring (the snowmelt) and a low in early autumn, plus
+the rain over its catchment: the map's own rain (the same weather) fills a
+quick store (the ground and the brooks, emptying in about 12 hours), which
+fills a slow one (the river, about 60 hours), 15 mm of stage for each mm in
+the slow store *(tuning)*. The river rises for about a day after a storm
+and falls over days: a cloudburst of 60 mm raises it by 61 cm a day later,
+half of that three days on; a rainy week by 10 to 15 cm; a wet spell of
+storms by 1.6 m, to the brim of the shallows' banks (1.6 m above the
+lakes' level); the average rain keeps it 6 cm up. Higher, it spills over
+the plain at its level and drains back as it falls: 200 mm of rain over the
+catchment raise a river of seed 11 by 2 m a day later and cover two thirds
+of a plain of 96 tiles with 30 cm of water for a day, gone within twelve
+hours once the river is back below its banks. Within −30 cm and +2.5 m. Both parts are times the river's
+`RiverParams.discharge` (1 by default; the world map will set it, docs/
+WORLD.md G0c). Every hour the stores take the hour's rain, and the ends
+are set again (`water_set_edge()`) once the stage moved by 2 cm: the
+water near the edges wakes, the river follows and falls asleep again
+(about 10 ms of a game hour on a map of 64 tiles). Saved with the water.
+
 ### 4.3 Rain and snowmelt
 
 - What reaches a floor (`docs/CLIMATE.md` §3.1: interception by crowns,
@@ -929,8 +953,11 @@ Each step is tested, measured against the baseline (`bench_simulation`,
        a steady current taking its slope and falling asleep, a lake still
        draining through a slow current, a river in a game flowing then
        falling asleep, a save made while it flows playing on alike.
-     - **W3c-3, the discharge over time**: the seasons, the rain of the last
-       days, floods spilling over the banks.
+     - **W3c-3, the discharge over time (done)**: the seasons, the rain of
+       the last days over the catchment, floods spilling over the banks.
+       Tests: the seasons, rain raising it after a while and the fall after,
+       a wet spell's flood, the slope with the stage, a storm upstream
+       raising the river all along a map.
 5. **W4, water in the ground.** §5: the pore water of every block, the
    new layers (sand, gravel, clay), the water table laid by world
    generation, drainage and Darcy flow, seepage, the root zone draining into
