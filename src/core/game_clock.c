@@ -24,6 +24,8 @@ float game_speed_multiplier(GameSpeed speed)
     case GAME_SPEED_NORMAL: return 1.0f;
     case GAME_SPEED_FAST: return 3.0f;
     case GAME_SPEED_FASTEST: return 6.0f;
+    case GAME_SPEED_BLAZING: return 12.0f;
+    case GAME_SPEED_MAXIMUM: return 24.0f;
     case GAME_SPEED_COUNT: break;
     }
     return 0.0f;
@@ -35,7 +37,7 @@ GameSpeed game_speed_step(GameSpeed speed, int direction)
         return GAME_SPEED_NORMAL;
     }
     int next = (int)speed + (direction > 0) - (direction < 0);
-    return (GameSpeed)clampi(next, GAME_SPEED_SLOWEST, GAME_SPEED_FASTEST);
+    return (GameSpeed)clampi(next, GAME_SPEED_SLOWEST, GAME_SPEED_MAXIMUM);
 }
 
 void game_clock_set_speed(GameClock *clock, GameSpeed speed)

@@ -85,7 +85,11 @@ static void triangle(SDL_Renderer *renderer, float x, float y, float w, float h,
 static void speed_icon(Ui *ui, SDL_FRect rect, GameSpeed speed)
 {
     SDL_Color color = ui->theme.colors[THEME_TEXT];
-    int count = speed == GAME_SPEED_FAST ? 2 : (speed == GAME_SPEED_FASTEST ? 3 : 1);
+    int count = speed == GAME_SPEED_FAST      ? 2
+                : speed == GAME_SPEED_FASTEST ? 3
+                : speed == GAME_SPEED_BLAZING ? 4
+                : speed == GAME_SPEED_MAXIMUM ? 5
+                                              : 1;
     float scale = speed == GAME_SPEED_SLOWEST ? 0.55f : (speed == GAME_SPEED_SLOW ? 0.78f : 1.0f);
     float h = SDL_floorf(rect.h * 0.45f * scale);
     float y = SDL_floorf(rect.y + (rect.h - h) * 0.5f);
@@ -96,7 +100,8 @@ static void speed_icon(Ui *ui, SDL_FRect rect, GameSpeed speed)
         ui_fill(ui, (SDL_FRect){SDL_floorf(cx + bar * 0.5f), y, bar, h}, color);
         return;
     }
-    float w = SDL_floorf(h * 0.6f);
+    /* Narrower triangles when there are many, to fit the button. */
+    float w = SDL_min(SDL_floorf(h * 0.6f), SDL_floorf(rect.w * 0.8f / (float)count));
     float x = SDL_floorf(rect.x + (rect.w - w * (float)count) * 0.5f);
     for (int i = 0; i < count; i++) {
         triangle(ui->renderer, x + w * (float)i, y, w, h, color);
@@ -237,7 +242,8 @@ static void draw_row(App *app, const CornerLayout *layout)
     static const SDL_Scancode SPEED_KEYS[GAME_SPEED_COUNT] = {
         [GAME_SPEED_PAUSED] = APP_KEY_PAUSE,      [GAME_SPEED_SLOWEST] = SDL_SCANCODE_UNKNOWN,
         [GAME_SPEED_SLOW] = SDL_SCANCODE_UNKNOWN, [GAME_SPEED_NORMAL] = SDL_SCANCODE_1,
-        [GAME_SPEED_FAST] = SDL_SCANCODE_2,       [GAME_SPEED_FASTEST] = SDL_SCANCODE_3};
+        [GAME_SPEED_FAST] = SDL_SCANCODE_2,       [GAME_SPEED_FASTEST] = SDL_SCANCODE_3,
+        [GAME_SPEED_BLAZING] = SDL_SCANCODE_4,    [GAME_SPEED_MAXIMUM] = SDL_SCANCODE_5};
     GameClock *clock = &app->game.clock;
     for (int speed = 0; speed < GAME_SPEED_COUNT; speed++) {
         rect = (SDL_FRect){x, y, button, button};

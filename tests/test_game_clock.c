@@ -38,6 +38,10 @@ static void test_speed_multipliers(void)
     CHECK_NEAR(game_speed_multiplier(GAME_SPEED_NORMAL), 1.0f, 1e-6f);
     CHECK(game_speed_multiplier(GAME_SPEED_FAST) > 1.0f);
     CHECK(game_speed_multiplier(GAME_SPEED_FASTEST) > game_speed_multiplier(GAME_SPEED_FAST));
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_FAST), 3.0f, 1e-6f);
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_FASTEST), 6.0f, 1e-6f);
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_BLAZING), 12.0f, 1e-6f);
+    CHECK_NEAR(game_speed_multiplier(GAME_SPEED_MAXIMUM), 24.0f, 1e-6f);
     /* Each speed is faster than the one before it. */
     for (int speed = 1; speed < GAME_SPEED_COUNT; speed++) {
         CHECK(game_speed_multiplier((GameSpeed)speed) >
@@ -53,7 +57,10 @@ static void test_speed_steps(void)
     CHECK_EQ_INT(game_speed_step(GAME_SPEED_SLOW, -1), GAME_SPEED_SLOWEST);
     CHECK_EQ_INT(game_speed_step(GAME_SPEED_SLOWEST, -1), GAME_SPEED_SLOWEST);
     CHECK_EQ_INT(game_speed_step(GAME_SPEED_NORMAL, 1), GAME_SPEED_FAST);
-    CHECK_EQ_INT(game_speed_step(GAME_SPEED_FASTEST, 1), GAME_SPEED_FASTEST);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_FASTEST, 1), GAME_SPEED_BLAZING);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_BLAZING, 1), GAME_SPEED_MAXIMUM);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_MAXIMUM, 1), GAME_SPEED_MAXIMUM);
+    CHECK_EQ_INT(game_speed_step(GAME_SPEED_MAXIMUM, -1), GAME_SPEED_BLAZING);
     CHECK_EQ_INT(game_speed_step(GAME_SPEED_PAUSED, 1), GAME_SPEED_NORMAL);
     GameClock clock;
     game_clock_init(&clock);

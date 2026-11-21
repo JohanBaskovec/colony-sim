@@ -12,7 +12,7 @@ Tick items as they land and add newly discovered tasks.
 - [x] i18n: catalogs, fallback, plurals, positional placeholders, number formatting
 - [x] Translation checks (completeness, placeholders, keys used in code)
 - [x] English and French translations, live language switching, system locale detection
-- [x] Fixed-timestep game clock, speeds (×0.3, ×0.5, ×1, ×3, ×6), pause, calendar, day/night
+- [x] Fixed-timestep game clock, speeds (×0.3, ×0.5, ×1, ×3, ×6, ×12, ×24: keys 1 to 5), pause, calendar, day/night
 - [x] Procedural map: terrain, rock walls, grass/bushes/trees
 - [x] Plant growth by fertility
 - [x] Camera (pan, zoom at cursor), tile inspector, HUD, debug overlay
