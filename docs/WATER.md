@@ -474,8 +474,9 @@ does not change the air over it. Freezing is W6.
 - Puddles are drawn as darker, shining patches on the floor.
 - The tile inspector shows the water: "Water: 63 cm (wading)", and for a
   block "Damp (40 %)".
-- Debug tools (F4): pour water on a tile, empty a tile, start a downpour, a
-  flood of the river.
+- Debug tools (F4): take a block away and pour water on a tile (10 cm a
+  click, Shift to take it away), both done; later a downpour and a flood of
+  the river.
 
 ## 7. Moisture of items
 

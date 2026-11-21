@@ -39,7 +39,9 @@ typedef struct DebugRows {
     bool toggle_plant_tree, toggle_grow_tree;
     bool hurt_active, toggle_hurt;           /* ... in the blow mode. */
     bool move_item_active, toggle_move_item; /* ... in the item dragging mode. */
-    bool fight_active, toggle_fight;         /* ... in the fight mode. */
+    bool remove_block_active, toggle_remove_block;
+    bool pour_water_active, toggle_pour_water;
+    bool fight_active, toggle_fight; /* ... in the fight mode. */
 } DebugRows;
 
 /* A button on its own row. Returns whether it was clicked. */
@@ -132,6 +134,10 @@ static void debug_rows(UiLayout *layout, void *userdata)
     rows->toggle_fight |= checkbox_row(layout, tr("debug.fight_tool"), rows->fight_active);
     rows->toggle_move_item |=
         checkbox_row(layout, tr("debug.move_item_tool"), rows->move_item_active);
+    rows->toggle_remove_block |=
+        checkbox_row(layout, tr("debug.remove_block_tool"), rows->remove_block_active);
+    rows->toggle_pour_water |=
+        checkbox_row(layout, tr("debug.pour_water_tool"), rows->pour_water_active);
 }
 
 void debug_panel_draw(App *app)
@@ -158,7 +164,9 @@ void debug_panel_draw(App *app)
         .grow_tree_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_GROW_TREE),
         .hurt_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_HURT),
         .fight_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_FIGHT),
-        .move_item_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM)};
+        .move_item_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM),
+        .remove_block_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_REMOVE_BLOCK),
+        .pour_water_active = app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_POUR_WATER)};
     bool open = true;
     ui_layout_window(&app->ui, APP_WINDOW_DEBUG, tr("debug.title"), UI_PLACE_TOP_CENTER, debug_rows,
                      &rows, &open);
@@ -245,6 +253,12 @@ void debug_panel_draw(App *app)
     if (rows.toggle_move_item) {
         app->debug_held = ITEM_ID_NONE;
         app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM);
+    }
+    if (rows.toggle_remove_block) {
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_REMOVE_BLOCK);
+    }
+    if (rows.toggle_pour_water) {
+        app_toggle_tool(app, APP_TOOL_DEBUG, APP_DEBUG_POUR_WATER);
     }
     if (rows.toggle_fight) {
         app->debug_attacker = combatant_none();

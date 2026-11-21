@@ -115,6 +115,9 @@ typedef enum FollowKind { FOLLOW_NONE, FOLLOW_COLONIST, FOLLOW_ANIMAL } FollowKi
 #define APP_DEBUG_HURT 5         /* A blow on whoever is on the tile. */
 #define APP_DEBUG_FIGHT 6        /* Click an attacker, then its target (App.debug_attacker). */
 #define APP_DEBUG_MOVE_ITEM 7    /* Drag an item anywhere, the wheel turns it (App.debug_held). */
+#define APP_DEBUG_REMOVE_BLOCK 8 /* A wall, or a floor and the rock under it, gone. */
+#define APP_DEBUG_POUR_WATER 9   /* Water poured on the ground seen (Shift: taken away). */
+#define APP_DEBUG_WATER_MM 100   /* Poured per click: 10 cm. */
 
 /* Types of the forbid tool (see app_toggle_tool()). */
 #define APP_FORBID 0

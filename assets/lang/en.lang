@@ -238,6 +238,8 @@ debug.grow_tree_tool = Grow a tree a step (click on the map)
 debug.hurt_tool = Hurt a settler or an animal (click on the map)
 debug.move_item_tool = Move items by hand (drag them, the wheel turns them)
 debug.fight_tool = Make a settler or an animal attack another (click the attacker, then the target)
+debug.remove_block_tool = Take a block away (click on the map)
+debug.pour_water_tool = Pour water (click on the map)
 
 # Items
 item.wood = Wood
@@ -440,6 +442,8 @@ hud.tool.spawn = Debug: spawn {1} × {0} · Click: on the tile · Esc: back
 hud.tool.teleport.one = Debug: move {0} settler · Click: the tile to go to · Esc: back
 hud.tool.teleport.other = Debug: move {0} settlers · Click: the tile to go to · Esc: back
 hud.tool.plant_tree = Debug: plant a tree seedling · Click: on the tile · Esc: back
+hud.tool.remove_block = Debug: take a block away · Click: a wall goes, or the ground and the earth under it (a hole) · Esc: back
+hud.tool.pour_water = Debug: pour water · Click: {0} cm more · Shift + click: {0} cm less · Esc: back
 hud.tool.grow_tree = Debug: grow a tree · Click: one step · Shift + click: all the way · Esc: back
 hud.tool.hurt = Debug: hurt · Click: a blow of any kind on whoever is on the tile · Esc: back
 hud.tool.move_item = Debug: move items · Drag: an item anywhere, onto the very spot · Wheel over an item: turns it · Esc: back

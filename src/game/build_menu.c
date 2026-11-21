@@ -189,6 +189,12 @@ static void debug_card(App *app, int mode, Card *card)
         card_add_text(card, CARD_TITLE, tr("hud.tool.grow_tree"));
     } else if (mode == APP_DEBUG_HURT) {
         card_add_text(card, CARD_TITLE, tr("hud.tool.hurt"));
+    } else if (mode == APP_DEBUG_REMOVE_BLOCK) {
+        card_add_text(card, CARD_TITLE, tr("hud.tool.remove_block"));
+    } else if (mode == APP_DEBUG_POUR_WATER) {
+        char depth[16];
+        tr_integer(depth, sizeof(depth), APP_DEBUG_WATER_MM / 10);
+        TR_FORMAT(card_add(card, CARD_TITLE), TEXT_SIZE, tr("hud.tool.pour_water"), depth);
     } else if (mode == APP_DEBUG_MOVE_ITEM) {
         card_add_text(card, CARD_TITLE, tr("hud.tool.move_item"));
     } else if (mode == APP_DEBUG_FIGHT) {

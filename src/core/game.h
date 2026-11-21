@@ -482,6 +482,19 @@ bool game_debug_plant_tree(Game *game, int x, int y, int z);
  * where its trunk would rise stops it, as in play). */
 bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully);
 
+/* Debug: takes a block away at once, for tests of water and digging: a wall
+ * of rock or earth on (x, y, z) goes, its floor left; else the floor there
+ * goes with the rock under it, a hole down to the level below (what lay on
+ * it and its water fall in). Trunks, structures and the lowest level stay.
+ * Returns whether something went. */
+bool game_debug_remove_block(Game *game, int x, int y, int z);
+
+/* Debug: pours `mm` of water onto the floor (x, y, z) (takes it away when
+ * negative): what a full tile cannot hold goes into the open tile above it,
+ * and water is taken from the top. Returns the water poured (or taken, as a
+ * negative number). */
+int game_debug_pour_water(Game *game, int x, int y, int z, int mm);
+
 /* Who stands on the tile: a settler first, else an animal (COMBATANT_NONE
  * when nobody; the dead are not counted). */
 Combatant game_combatant_at(const Game *game, int x, int y, int z);

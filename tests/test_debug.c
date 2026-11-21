@@ -773,6 +773,59 @@ static void test_teleport(void)
     game_shutdown(&game);
 }
 
+/* Taking a block away: a wall goes and leaves its floor; a floor goes with
+ * the rock under it, what lay there and its water falling into the hole;
+ * nothing is taken from the lowest level, a trunk or a structure. */
+static void test_remove_block(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    REQUIRE(map->depth >= 3);
+    map_set_rock(map, 10, 10, 1, ROCK_GRANITE);
+    CHECK(game_debug_remove_block(&game, 10, 10, 1));
+    CHECK_EQ_INT(map->rock[map_index(map, 10, 10, 1)], ROCK_NONE);
+
+    /* A raised floor: earth under it. */
+    map_set_rock(map, 12, 12, 0, ROCK_EARTH);
+    map_set_terrain(map, 12, 12, 1, TERRAIN_SOIL);
+    CHECK_EQ_INT(game_debug_pour_water(&game, 12, 12, 1, 300), 300);
+    REQUIRE(game_debug_spawn_items(&game, 12, 12, 1, ITEM_COBBLE, 2) == 2);
+    CHECK(game_debug_remove_block(&game, 12, 12, 1));
+    CHECK_EQ_INT(map->terrain[map_index(map, 12, 12, 1)], TERRAIN_OPEN);
+    CHECK_EQ_INT(map->rock[map_index(map, 12, 12, 0)], ROCK_NONE);
+    CHECK_EQ_INT(map_water(map, 12, 12, 1), 0);
+    CHECK_EQ_INT(map_water(map, 12, 12, 0), 300);
+    CHECK_EQ_INT(items_count_type(&game.items, 12, 12, 0, ITEM_COBBLE), 2);
+
+    CHECK(!game_debug_remove_block(&game, 5, 5, 0)); /* The lowest level. */
+    CHECK(!game_debug_remove_block(&game, 5, 5, 1)); /* Open air. */
+    CHECK(!game_debug_remove_block(&game, -1, 5, 1));
+    game_shutdown(&game);
+}
+
+/* Pouring water: a full tile passes the rest to the open tile over it; water
+ * is taken back from the top; nothing goes into rock. */
+static void test_pour_water(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Map *map = &game.map;
+    CHECK_EQ_INT(game_debug_pour_water(&game, 5, 5, 0, 2500), 2500);
+    CHECK_EQ_INT(map_water(map, 5, 5, 0), WATER_CELL_FULL);
+    CHECK_EQ_INT(map_water(map, 5, 5, 1), 500);
+    CHECK_EQ_INT(map_water_class(map, 5, 5, 0), WATER_DEEP);
+    CHECK(!map_is_passable(map, 5, 5, 0));
+    CHECK_EQ_INT(game_debug_pour_water(&game, 5, 5, 0, -600), -600);
+    CHECK_EQ_INT(map_water(map, 5, 5, 1), 0);
+    CHECK_EQ_INT(map_water(map, 5, 5, 0), 1900);
+    CHECK_EQ_INT(game_debug_pour_water(&game, 5, 5, 0, -5000), -1900);
+    CHECK(map_is_passable(map, 5, 5, 0));
+    map_set_rock(map, 6, 6, 0, ROCK_GRANITE);
+    CHECK_EQ_INT(game_debug_pour_water(&game, 6, 6, 0, 100), 0);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_instant_build);
@@ -794,5 +847,7 @@ int main(void)
     RUN_TEST(test_items_under_a_point);
     RUN_TEST(test_items_in_rect);
     RUN_TEST(test_teleport);
+    RUN_TEST(test_remove_block);
+    RUN_TEST(test_pour_water);
     return test_summary();
 }

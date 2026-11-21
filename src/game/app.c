@@ -1694,6 +1694,18 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
         game_debug_hurt(&app->game, x, y, level >= 0 ? level : z);
         break;
     }
+    case APP_DEBUG_REMOVE_BLOCK: { /* The wall or the ground seen there, however deep. */
+        int level = map_view_level(&app->game.map, x, y, z);
+        game_debug_remove_block(&app->game, x, y, level >= 0 ? level : z);
+        break;
+    }
+    case APP_DEBUG_POUR_WATER: { /* On the ground seen there; Shift: taken away. */
+        int level = map_view_level(&app->game.map, x, y, z);
+        bool take = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+        game_debug_pour_water(&app->game, x, y, level >= 0 ? level : z,
+                              take ? -APP_DEBUG_WATER_MM : APP_DEBUG_WATER_MM);
+        break;
+    }
     case APP_DEBUG_GROW_TREE: /* Shift: all the way. */
         game_debug_grow_tree(&app->game, x, y, z, (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
         break;

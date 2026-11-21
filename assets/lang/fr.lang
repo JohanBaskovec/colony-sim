@@ -235,6 +235,8 @@ debug.grow_tree_tool = Faire grandir un arbre d’un cran (clic sur la carte)
 debug.hurt_tool = Blesser un colon ou un animal (clic sur la carte)
 debug.move_item_tool = Déplacer les objets à la main (glisser-déposer, la molette les tourne)
 debug.fight_tool = Faire attaquer un colon ou un animal (clic sur l’attaquant, puis sur la cible)
+debug.remove_block_tool = Supprimer un bloc (clic sur la carte)
+debug.pour_water_tool = Verser de l’eau (clic sur la carte)
 
 # Objets
 item.wood = Bois
@@ -427,6 +429,8 @@ hud.tool.spawn = Débogage : faire apparaître {1} × {0} · Clic : sur la cas
 hud.tool.teleport.one = Débogage : déplacer {0} colon · Clic : la case où aller · Échap : retour
 hud.tool.teleport.other = Débogage : déplacer {0} colons · Clic : la case où aller · Échap : retour
 hud.tool.plant_tree = Débogage : planter une pousse d’arbre · Clic : sur la case · Échap : retour
+hud.tool.remove_block = Débogage : supprimer un bloc · Clic : un mur disparaît, ou le sol et la terre dessous (un trou) · Échap : retour
+hud.tool.pour_water = Débogage : verser de l’eau · Clic : {0} cm de plus · Maj + clic : {0} cm de moins · Échap : retour
 hud.tool.grow_tree = Débogage : faire grandir un arbre · Clic : d’un cran · Maj + clic : jusqu’au bout · Échap : retour
 hud.tool.hurt = Débogage : blesser · Clic : un coup de toute sorte à qui se trouve sur la case · Échap : retour
 hud.tool.move_item = Débogage : déplacer les objets · Glisser : un objet n’importe où, à l’endroit exact · Molette sur un objet : le tourne · Échap : retour

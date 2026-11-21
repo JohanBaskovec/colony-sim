@@ -2417,6 +2417,77 @@ bool game_debug_grow_tree(Game *game, int x, int y, int z, bool fully)
     return plant->growth > old_growth;
 }
 
+bool game_debug_remove_block(Game *game, int x, int y, int z)
+{
+    Map *map = &game->map;
+    if (!map_in_bounds(map, x, y, z)) {
+        return false;
+    }
+    size_t index = map_index(map, x, y, z);
+    RockType rock = (RockType)map->rock[index];
+    if (rock == ROCK_WOOD || map->structure[index] != STRUCTURE_NONE) {
+        return false;
+    }
+    if (rock != ROCK_NONE) {
+        map_set_rock(map, x, y, z, ROCK_NONE);
+        return true;
+    }
+    Terrain terrain = (Terrain)map->terrain[index];
+    if (z == 0 || terrain == TERRAIN_OPEN || terrain_def(terrain)->built != STRUCTURE_NONE ||
+        terrain_is_foliage(terrain)) {
+        return false;
+    }
+    size_t below = map_index(map, x, y, z - 1);
+    if (map->rock[below] == ROCK_WOOD || map->structure[below] != STRUCTURE_NONE) {
+        return false;
+    }
+    int water = map->water[index];
+    map_set_water(map, x, y, z, 0);
+    map_remove_plant(map, x, y, z);
+    map_set_slope(map, x, y, z, false);
+    map_set_rock(map, x, y, z - 1, ROCK_NONE);
+    map_set_terrain(map, x, y, z, TERRAIN_OPEN);
+    items_move_all(&game->items, map, x, y, z, x, y, z - 1, false);
+    game_debug_pour_water(game, x, y, z - 1, water);
+    return true;
+}
+
+int game_debug_pour_water(Game *game, int x, int y, int z, int mm)
+{
+    Map *map = &game->map;
+    if (!map_in_bounds(map, x, y, z) || map->rock[map_index(map, x, y, z)] != ROCK_NONE) {
+        return 0;
+    }
+    /* The column of water standing on the floor: z up to its top. */
+    int top = z;
+    while (top + 1 < map->depth && map->water[map_index(map, x, y, top)] >= WATER_CELL_FULL &&
+           map->rock[map_index(map, x, y, top + 1)] == ROCK_NONE &&
+           !map_has_floor(map, x, y, top + 1)) {
+        top++;
+    }
+    int done = 0;
+    if (mm >= 0) {
+        for (int at = top; at < map->depth && done < mm; at++) {
+            if (at > top && (map->rock[map_index(map, x, y, at)] != ROCK_NONE ||
+                             map_has_floor(map, x, y, at))) {
+                break;
+            }
+            int held = map->water[map_index(map, x, y, at)];
+            int added = clampi(mm - done, 0, WATER_CELL_FULL - held);
+            map_set_water(map, x, y, at, held + added);
+            done += added;
+        }
+        return done;
+    }
+    for (int at = top; at >= z && done < -mm; at--) {
+        int held = map->water[map_index(map, x, y, at)];
+        int taken = clampi(-mm - done, 0, held);
+        map_set_water(map, x, y, at, held - taken);
+        done += taken;
+    }
+    return -done;
+}
+
 /* A number between `min` and `max` from the game's draws. */
 static float roll_between(Game *game, float min, float max)
 {
