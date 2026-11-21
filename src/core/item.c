@@ -2324,8 +2324,22 @@ void items_set_drop_filter(Items *items, ItemDropFilter filter, const void *data
     items->drop_data = data;
 }
 
+void items_forbid_drops_beyond(Items *items, int x, int y, int radius)
+{
+    items->forbid_far_drops = radius > 0;
+    items->forbid_x = x;
+    items->forbid_y = y;
+    items->forbid_radius_sq = (long)radius * radius;
+}
+
 int items_drop_load(Items *items, const Map *map, int x, int y, int z, ItemStack *load)
 {
+    if (items->forbid_far_drops) {
+        long dx = x - items->forbid_x, dy = y - items->forbid_y;
+        if (dx * dx + dy * dy > items->forbid_radius_sq) {
+            load->forbidden = 1;
+        }
+    }
     int placed = spread_load(items, map, x, y, z, load);
     items_use_up(items, load, load->count); /* No room: lost. */
     return placed;

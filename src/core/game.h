@@ -207,6 +207,9 @@ typedef struct Game {
     bool fog_on;
     bool fog_started; /* The start was explored. */
     TilePos arrival;  /* Where the starting settlers arrived. */
+    /* Tiles around the arrival point where things start allowed (NewGameParams.free_radius):
+     * beyond it, what falls from the trees lands forbidden. 0: nothing is forbidden. */
+    int free_radius;
     bool has_arrival;
     Weather weather; /* The sky, warm and cold spells, snow on the ground. */
     /* Where roofs were last checked for support (core/roof.h): derived from

@@ -52,6 +52,8 @@ typedef enum ActionType {
     ACTION_TOGGLE_FUEL,
     ACTION_TOGGLE_TEACH,
     ACTION_TOGGLE_FORBIDDEN,
+    ACTION_SAVE_DEFAULT, /* A setting of the bill as the station's default: value is the
+                            BillSetting. */
 } ActionType;
 
 typedef struct Action {
@@ -152,6 +154,49 @@ static void duration_text(char *out, size_t size, float work)
         return;
     }
     TR_FORMAT(out, size, tr("unit.hours_minutes"), hours_text, minutes_text);
+}
+
+/* A floppy disk: the label and the shutter on a square body. */
+static void save_icon(Ui *ui, SDL_FRect rect)
+{
+    float side = SDL_floorf(rect.h * 0.6f);
+    SDL_FRect body = {SDL_floorf(rect.x + (rect.w - side) * 0.5f),
+                      SDL_floorf(rect.y + (rect.h - side) * 0.5f), side, side};
+    SDL_Color color = ui->theme.colors[THEME_TEXT];
+    SDL_Color hole = ui->theme.colors[THEME_BUTTON];
+    ui_fill(ui, body, color);
+    float shutter = SDL_max(2.0f, SDL_floorf(side * 0.4f));
+    ui_fill(ui, (SDL_FRect){body.x + side * 0.28f, body.y, shutter, SDL_floorf(side * 0.34f)},
+            hole);
+    float label = SDL_floorf(side * 0.6f);
+    ui_fill(ui,
+            (SDL_FRect){body.x + SDL_floorf((side - label) * 0.5f), body.y + side - label * 0.5f,
+                        label, SDL_ceilf(label * 0.5f)},
+            hole);
+}
+
+/* A small button at the right end of the row at `row_y`: saves one setting of the bill as the
+ * station's default for the bills added later (lit while the bill has what is saved). */
+static void save_default_button(UiLayout *layout, float row_y, const Workstation *station,
+                                const Bill *bill, int index, BillSetting setting, Action *action)
+{
+    Ui *ui = layout->ui;
+    float size = layout->button_height;
+    ui_layout_measure(layout, LEVEL_SLIDER_WIDTH);
+    if (!layout->draw) {
+        return;
+    }
+    SDL_FRect rect = {layout->x + layout->width - size, row_y, size, size};
+    bool saved = workstation_bill_has_default(station, bill, setting);
+    if (ui_toggle_button(ui, rect, "", saved) && !saved) {
+        *action = (Action){.type = ACTION_SAVE_DEFAULT, .bill = index, .value = (int)setting};
+    }
+    save_icon(ui, rect);
+    if (ui_hovered(ui, rect)) {
+        const char *lines[2] = {tr("bill.save_default"),
+                                tr(saved ? "bill.save_default.saved" : "bill.save_default.hint")};
+        ui_tooltip(ui, lines, 2);
+    }
 }
 
 static const char *mode_label(char *out, size_t size, const Bill *bill)
@@ -874,8 +919,11 @@ static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workst
                                const Bill *bill, int index)
 {
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    Action *action = &rows->action;
+    float row_y = layout->y;
     item_info_heading(layout, "bill.heading.goal");
-    bill_mode_row(layout, rows->game, bill, index, 0.0f, &rows->action);
+    save_default_button(layout, row_y, known, bill, index, BILL_SETTING_GOAL, action);
+    bill_mode_row(layout, rows->game, bill, index, 0.0f, action);
     layout->y += GAP;
     item_info_heading(layout, "station.recipe.ingredients");
     bill_ingredients_row(layout, rows->game, bill);
@@ -883,12 +931,18 @@ static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workst
     item_info_heading(layout, "bill.heading.tools");
     bill_tool_row(layout, rows->game, bill);
     layout->y += GAP;
+    row_y = layout->y;
     item_info_heading(layout, "bill.heading.worker");
-    bill_worker_rows(layout, rows->game, bill, index, &rows->action);
+    save_default_button(layout, row_y, known, bill, index, BILL_SETTING_WORKER, action);
+    bill_worker_rows(layout, rows->game, bill, index, action);
     layout->y += GAP;
-    bill_radius_row(layout, rows->app, rows->station, bill, index, &rows->action);
+    row_y = layout->y;
+    bill_radius_row(layout, rows->app, rows->station, bill, index, action);
+    save_default_button(layout, row_y, known, bill, index, BILL_SETTING_RADIUS, action);
     if (def->inputs[0] != ITEM_NONE) {
-        bill_quality_row(layout, bill, index, &rows->action);
+        row_y = layout->y;
+        bill_quality_row(layout, bill, index, action);
+        save_default_button(layout, row_y, known, bill, index, BILL_SETTING_QUALITY, action);
     }
     ItemType wooden = wooden_input(def);
     if (wooden != ITEM_NONE) {
@@ -911,6 +965,20 @@ static void bill_rows(UiLayout *layout, void *userdata)
     int index = rows->app->station_bill;
     if (index >= 0 && index < known.bill_count) {
         bill_settings_rows(layout, rows, &known, &known.bills[index], index);
+    }
+}
+
+/* The settings of a bill to add: what the station has saved (workstation_bill_draft()), but for
+ * a settler who is gone. */
+static void new_draft(App *app, int station, RecipeType recipe)
+{
+    Bill *draft = &app->station_draft;
+    if (!workstation_bill_draft(&app->game.workstations, station, recipe, draft)) {
+        bill_init(draft, recipe);
+    }
+    if (draft->worker == BILL_WORKER_SPECIFIC &&
+        game_colonist_const(&app->game, draft->colonist) == NULL) {
+        bill_set_worker(draft, BILL_WORKER_ANYONE, ENTITY_NONE);
     }
 }
 
@@ -1381,7 +1449,7 @@ static void add_windows(App *app, StationRows *rows)
     /* Its settings, then what it makes at their right. */
     RecipeType recipe = (RecipeType)app->station_recipe;
     if (app->station_draft.recipe != (uint8_t)recipe) {
-        bill_init(&app->station_draft, recipe);
+        new_draft(app, app->selected_station, recipe);
     }
     bool shown = true;
     inspector_side_window(app, APP_WINDOW_STATION_DRAFT,
@@ -1443,6 +1511,17 @@ static void edit_draft(App *app, const Action *action)
 
 static void apply(App *app, int index, const Action *action)
 {
+    if (action->type == ACTION_SAVE_DEFAULT) {
+        const Workstation *station = workstation_get_const(&app->game.workstations, index);
+        const Bill *bill =
+            action->bill == DRAFT_BILL ? &app->station_draft
+            : station != NULL && action->bill >= 0 && action->bill < station->bill_count
+                ? &station->bills[action->bill]
+                : NULL;
+        workstation_save_bill_default(&app->game.workstations, index, bill,
+                                      (BillSetting)action->value);
+        return;
+    }
     if (action->bill == DRAFT_BILL) {
         edit_draft(app, action);
         return;
@@ -1548,7 +1627,7 @@ static void apply(App *app, int index, const Action *action)
         break;
     case ACTION_PICK_RECIPE:
         if (!app->station_recipe_picked || app->station_recipe != action->value) {
-            bill_init(&app->station_draft, (RecipeType)action->value); /* Settings anew. */
+            new_draft(app, index, (RecipeType)action->value); /* Settings anew. */
         }
         app->station_recipe = action->value;
         app->station_recipe_picked = true;
@@ -1574,6 +1653,7 @@ static void apply(App *app, int index, const Action *action)
         game_set_forbidden(&app->game, station->x, station->y, station->z, FORBID_STATION,
                            !station->forbidden);
         break;
+    case ACTION_SAVE_DEFAULT: /* (Applied above.) */
     case ACTION_NONE: break;
     }
 }

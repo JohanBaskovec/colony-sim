@@ -345,7 +345,7 @@ static void test_serialized_structs_keep_their_size(void)
         size_t size;
         size_t expected;
     } SIZES[] = {
-        {"Game", sizeof(Game), 2717440},
+        {"Game", sizeof(Game), 2719032},
         {"Map", sizeof(Map), 1096},
         {"Plant", sizeof(Plant), 20},
         {"MapTopologyChange", sizeof(MapTopologyChange), 8},
@@ -361,7 +361,7 @@ static void test_serialized_structs_keep_their_size(void)
         {"GatherZone", sizeof(GatherZone), 224},
         {"GatherOrder", sizeof(GatherOrder), 8},
         {"GatherGroupOrder", sizeof(GatherGroupOrder), 6},
-        {"Items", sizeof(Items), 11088},
+        {"Items", sizeof(Items), 11112},
         {"Item", sizeof(Item), 36},
         {"ItemStack", sizeof(ItemStack), 28},
         {"ItemId", sizeof(ItemId), 8},
@@ -372,8 +372,8 @@ static void test_serialized_structs_keep_their_size(void)
         {"Corpse", sizeof(Corpse), 7928},
         {"Stockpiles", sizeof(Stockpiles), 4648},
         {"Stockpile", sizeof(Stockpile), 72},
-        {"Workstations", sizeof(Workstations), 26664},
-        {"Workstation", sizeof(Workstation), 416},
+        {"Workstations", sizeof(Workstations), 28200},
+        {"Workstation", sizeof(Workstation), 440},
         {"Bill", sizeof(Bill), 40},
         {"Constructions", sizeof(Constructions), 47152},
         {"ConstructionSite", sizeof(ConstructionSite), 92},
@@ -393,7 +393,7 @@ static void test_serialized_structs_keep_their_size(void)
         {"TileLightSweep", sizeof(TileLightSweep), 40},
         {"Vision", sizeof(Vision), 2696},
         {"VisionViewer", sizeof(VisionViewer), 40},
-        {"KnownWorld", sizeof(KnownWorld), 20848},
+        {"KnownWorld", sizeof(KnownWorld), 20872},
         {"KnownStation", sizeof(KnownStation), 4},
         {"KnownAnimal", sizeof(KnownAnimal), 32},
         {"Weather", sizeof(Weather), 48},

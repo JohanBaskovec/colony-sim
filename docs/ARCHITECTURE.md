@@ -726,6 +726,18 @@ order is left alone; once done, the order is gone and the next shoot gets a new
 one. The work is the Uproot order's: gatherers, level and tool as for a single
 plant (see below).
 
+**Bill defaults.** Each setting of a bill (goal, ingredient range, who works, quality of the
+ingredients: `BillSetting`) has a small save button in the bill's settings window; it keeps
+the setting as the station's default (`Workstation.defaults`, `workstation_save_bill_default()`).
+The next bill added there starts from them (`workstation_bill_draft()`: `bill_init()` with what
+was saved, as far as the recipe allows; the frontend drops a saved settler who is gone).
+
+**Falling items and the free radius.** At the start of a game as played the items beyond
+`NewGameParams.free_radius` of the arrival point are forbidden; the dead wood and fruit that
+fall from the crowns later land forbidden there too (`update_crowns()` turns
+`items_forbid_drops_beyond()` on around `crowns_hour()`; `Game.free_radius` is saved), so that
+settlers do not walk across the map for a branch.
+
 **Harvest when ripe** (`DESIGNATION_HARVEST_RIPE`) is Harvest that waits for the
 plant's full harvest, the rule of a zone's "wait for the full harvest"
 (`gather_plant_ripe()`: every fruit ripe, every armful grown, a plant taken

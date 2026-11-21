@@ -4,6 +4,7 @@
  * game_set_forbidden() API). */
 #include "core/game.h"
 #include "core/gather_zone.h"
+#include "core/crown.h"
 #include "core/hauling.h"
 #include "core/pathfinding.h"
 #include "core/tree.h"
@@ -751,6 +752,76 @@ static void test_items_start_forbidden_far_from_the_arrival(void)
     game_shutdown(&game);
 }
 
+/* What falls from the trees during a game lands forbidden beyond the free radius of the arrival
+ * point, and allowed within it: nobody walks across the map for a branch. */
+static void test_what_falls_from_trees_lands_forbidden_far_away(void)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.flat = true;
+    params.world.seed = 5;
+    params.world.width = 40;
+    params.world.height = 40;
+    params.colonist_count = 1;
+    params.free_radius = 10;
+    Game game;
+    REQUIRE(game_init(&game, &params));
+    REQUIRE(game.has_arrival);
+    CHECK_EQ_INT(game.free_radius, 10);
+    const int ax = game.arrival.x, ay = game.arrival.y;
+    const int near_x = ax + 2, far_x = ax + 18 < 36 ? ax + 18 : ax - 18;
+    CHECK(far_x >= 0 && far_x + 4 < 40);
+    /* Dead wood hanging in foliage over a near and a far tile, marked by a quality of its own. */
+    const int marked = 91;
+    int hang[2] = {near_x, far_x};
+    for (int i = 0; i < 2; i++) {
+        for (int dx = 0; dx < 4; dx++) { /* A tile holds only so much. */
+            map_set_rock(&game.map, hang[i] + dx, ay, 1, ROCK_NONE); /* No trunk in the way. */
+            map_set_terrain(&game.map, hang[i] + dx, ay, 1, TERRAIN_FOLIAGE);
+        }
+        for (int n = 0; n < 40; n++) {
+            CrownItem branch = {.type = ITEM_BRANCHES,
+                                .quality = (uint8_t)marked,
+                                .hit_points = (uint16_t)item_def(ITEM_BRANCHES)->max_hit_points};
+            REQUIRE(crowns_add(&game.crowns, &game.map, hang[i] + n / 10, ay, 1, branch));
+        }
+    }
+    /* The settler does nothing meanwhile: it would carry the branches. */
+    EntityId settler = game_colonist_id_at(&game, 0);
+    for (int type = 0; type < WORK_TYPE_COUNT; type++) {
+        game_set_work_priority(&game, settler, (WorkType)type, WORK_PRIORITY_DISABLED);
+    }
+    /* A few hours: some of them fall (a chance an hour each). */
+    for (int i = 0; i < 6 * TICKS_PER_HOUR; i++) {
+        for (int need = 0; need < NEED_COUNT; need++) {
+            game.colonists[settler.index].needs[need] = 1.0f;
+        }
+        game_tick(&game);
+    }
+    int near_found = 0, far_found = 0, wrong = 0;
+    for (int y = 0; y < 40; y++) {
+        for (int x = 0; x < 40; x++) {
+            for (const Item *item = items_first(&game.items, map_index(&game.map, x, y, 0));
+                 item != NULL; item = items_next(&game.items, item)) {
+                if (item->type != ITEM_BRANCHES || item->quality != marked) {
+                    continue;
+                }
+                bool near = (x - ax) * (x - ax) + (y - ay) * (y - ay) <= 100;
+                near_found += near;
+                far_found += !near;
+                wrong += near == (item->forbidden != 0);
+            }
+        }
+    }
+    CHECK(near_found > 0);
+    CHECK(far_found > 0);
+    CHECK_EQ_INT(wrong, 0);
+    /* Not for the other drops: what a settler puts down far away stays allowed. */
+    items_drop(&game.items, &game.map, far_x, ay + 8, 0, item_stack_pristine(ITEM_COBBLE, 1));
+    CHECK(!items_forbidden(&game.items, far_x, ay + 8, 0));
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_map_forbid_bits);
@@ -772,5 +843,6 @@ int main(void)
     RUN_TEST(test_settlers_leave_a_forbidden_site);
     RUN_TEST(test_forbid_rect_plans_and_zones);
     RUN_TEST(test_items_start_forbidden_far_from_the_arrival);
+    RUN_TEST(test_what_falls_from_trees_lands_forbidden_far_away);
     return test_summary();
 }

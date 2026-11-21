@@ -132,6 +132,29 @@ typedef struct Bill {
 #define WORKSTATION_NONE (-1)
 #define WORKSTATION_BILL_MAX 8
 
+/* The settings of a bill a station remembers for the bills added there later (each saved on
+ * its own with workstation_save_bill_default()): the goal, how far ingredients are looked for,
+ * who works, and the quality of the ingredients. */
+typedef enum BillSetting {
+    BILL_SETTING_GOAL,    /* Mode and target. */
+    BILL_SETTING_RADIUS,  /* Input radius. */
+    BILL_SETTING_WORKER,  /* Who may take the bill: the mode, levels and settler. */
+    BILL_SETTING_QUALITY, /* The range of quality of the ingredients. */
+    BILL_SETTING_COUNT
+} BillSetting;
+
+typedef struct BillDefaults {
+    uint8_t mode; /* BillMode */
+    uint16_t target;
+    uint16_t input_radius;
+    uint8_t worker; /* BillWorker */
+    uint8_t min_level;
+    uint8_t max_level;
+    EntityId colonist;
+    uint8_t min_quality;
+    uint8_t max_quality;
+} BillDefaults;
+
 typedef struct Workstation {
     bool used;
     uint8_t type; /* WorkstationType */
@@ -167,6 +190,10 @@ typedef struct Workstation {
     /* Crafters take the bills of the stations of the highest priority first
      * (JOB_PRIORITY_HIGHEST..JOB_PRIORITY_LOWEST, core/work.h). */
     uint8_t priority;
+    /* What new bills start with here (bill_init()'s values until the player saves some), and
+     * whether any was saved. */
+    BillDefaults defaults;
+    bool defaults_saved;
 } Workstation;
 
 typedef struct Workstations {
@@ -245,6 +272,21 @@ bool workstation_set_priority(Workstations *workstations, int index, int priorit
  * quality and species): what the player sets up before adding it. False
  * for no recipe. */
 bool bill_init(Bill *bill, RecipeType recipe);
+
+/* A new bill's draft for a recipe at a station: bill_init() with the settings the player saved
+ * for this station (workstation_save_bill_default()), as far as the recipe allows them (a
+ * recipe that needs no knowledge has no levels to choose). False for no station or recipe. */
+bool workstation_bill_draft(const Workstations *workstations, int index, RecipeType recipe,
+                            Bill *draft);
+
+/* Saves one setting of `bill` (a bill of the station, or a draft) as the default of the bills
+ * added at the station later. Returns whether it changed what was saved. */
+bool workstation_save_bill_default(Workstations *workstations, int index, const Bill *bill,
+                                   BillSetting setting);
+
+/* Whether the setting of `bill` is what the station has saved for it. */
+bool workstation_bill_has_default(const Workstation *station, const Bill *bill,
+                                  BillSetting setting);
 
 /* Adds a bill for a recipe made at this kind of station (bill_init()).
  * Returns its index, or -1. */

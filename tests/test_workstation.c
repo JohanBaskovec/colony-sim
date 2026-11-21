@@ -432,6 +432,90 @@ static void test_work_zones(void)
     free_world(&map, &stations, &items);
 }
 
+/* Each setting of a bill can be saved as the station's default for the bills added later, on its
+ * own; what is saved comes back in the next draft (as far as the recipe allows it). */
+static void test_saved_bill_defaults(void)
+{
+    Map map;
+    Workstations stations;
+    Items items;
+    REQUIRE(init_world(&map, &stations, &items));
+    int spot = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
+    int other = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8, 0);
+    REQUIRE(spot != WORKSTATION_NONE && other != WORKSTATION_NONE);
+    const Workstation *station = workstation_get_const(&stations, spot);
+
+    /* Nothing saved: a draft is a plain new bill. */
+    Bill plain, draft;
+    REQUIRE(bill_init(&plain, RECIPE_THROWING_SPEAR));
+    REQUIRE(workstation_bill_draft(&stations, spot, RECIPE_THROWING_SPEAR, &draft));
+    CHECK(memcmp(&plain, &draft, sizeof(Bill)) == 0);
+    CHECK(!workstation_bill_draft(&stations, 40, RECIPE_THROWING_SPEAR, &draft));
+    CHECK(!workstation_bill_draft(&stations, spot, RECIPE_COUNT, &draft));
+    for (int setting = 0; setting < BILL_SETTING_COUNT; setting++) {
+        CHECK(workstation_bill_has_default(station, &plain, (BillSetting)setting));
+        CHECK(!workstation_save_bill_default(&stations, spot, &plain, (BillSetting)setting));
+    }
+    CHECK(!station->defaults_saved);
+
+    /* A bill set up as the player likes it. */
+    const EntityId ann = {3, 1};
+    REQUIRE(bill_set_mode(&draft, BILL_UNTIL_STOCK));
+    REQUIRE(bill_set_target(&draft, 12));
+    REQUIRE(bill_set_input_radius(&draft, 30));
+    REQUIRE(bill_set_worker(&draft, BILL_WORKER_SPECIFIC, ann));
+    REQUIRE(bill_set_quality_range(&draft, 40, 90));
+    uint64_t before = workstations_hash(&stations, HASH_FNV1A64_INIT);
+    /* Only the setting asked for is saved. */
+    CHECK(workstation_save_bill_default(&stations, spot, &draft, BILL_SETTING_GOAL));
+    CHECK(station->defaults_saved);
+    CHECK(workstations_hash(&stations, HASH_FNV1A64_INIT) != before);
+    CHECK(workstation_bill_has_default(station, &draft, BILL_SETTING_GOAL));
+    CHECK(!workstation_bill_has_default(station, &draft, BILL_SETTING_RADIUS));
+    CHECK(!workstation_save_bill_default(&stations, spot, &draft, BILL_SETTING_GOAL)); /* Again. */
+    Bill next;
+    REQUIRE(workstation_bill_draft(&stations, spot, RECIPE_FLAKES, &next));
+    CHECK_EQ_INT(next.mode, BILL_UNTIL_STOCK);
+    CHECK_EQ_INT(next.target, 12);
+    CHECK_EQ_INT(next.input_radius, BILL_INPUT_RADIUS_DEFAULT);
+    CHECK_EQ_INT(next.worker, BILL_WORKER_ANYONE);
+    CHECK_EQ_INT(next.min_quality, ITEM_QUALITY_WORST);
+    CHECK_EQ_INT(next.recipe, RECIPE_FLAKES); /* The recipe is the draft's own. */
+
+    CHECK(workstation_save_bill_default(&stations, spot, &draft, BILL_SETTING_RADIUS));
+    CHECK(workstation_save_bill_default(&stations, spot, &draft, BILL_SETTING_WORKER));
+    CHECK(workstation_save_bill_default(&stations, spot, &draft, BILL_SETTING_QUALITY));
+    REQUIRE(workstation_bill_draft(&stations, spot, RECIPE_THROWING_SPEAR, &next));
+    CHECK_EQ_INT(next.input_radius, 30);
+    CHECK_EQ_INT(next.worker, BILL_WORKER_SPECIFIC);
+    CHECK(entity_id_equal(next.colonist, ann));
+    CHECK_EQ_INT(next.min_quality, 40);
+    CHECK_EQ_INT(next.max_quality, 90);
+    for (int setting = 0; setting < BILL_SETTING_COUNT; setting++) {
+        CHECK(workstation_bill_has_default(station, &next, (BillSetting)setting));
+    }
+    /* Another station keeps its own. */
+    REQUIRE(workstation_bill_draft(&stations, other, RECIPE_THROWING_SPEAR, &next));
+    CHECK(memcmp(&plain, &next, sizeof(Bill)) == 0);
+    /* Levels are a worker setting too, and a recipe that needs no knowledge has none to choose. */
+    REQUIRE(bill_init(&draft, RECIPE_THROWING_SPEAR));
+    REQUIRE(bill_set_worker(&draft, BILL_WORKER_LEVEL, ENTITY_NONE));
+    REQUIRE(bill_set_min_level(&draft, 30));
+    REQUIRE(bill_set_max_level(&draft, 70));
+    CHECK(workstation_save_bill_default(&stations, spot, &draft, BILL_SETTING_WORKER));
+    REQUIRE(workstation_bill_draft(&stations, spot, RECIPE_THROWING_SPEAR, &next));
+    CHECK_EQ_INT(next.worker, BILL_WORKER_LEVEL);
+    CHECK_EQ_INT(next.min_level, 30);
+    CHECK_EQ_INT(next.max_level, 70);
+    /* Taken away with the station: a new one starts plain. */
+    ItemStack returned[1];
+    workstations_remove(&stations, spot, returned);
+    int again = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
+    REQUIRE(again != WORKSTATION_NONE);
+    CHECK(!workstation_get_const(&stations, again)->defaults_saved);
+    free_world(&map, &stations, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -439,6 +523,7 @@ int main(void)
     RUN_TEST(test_work_zones);
     RUN_TEST(test_bills);
     RUN_TEST(test_bill_drafts);
+    RUN_TEST(test_saved_bill_defaults);
     RUN_TEST(test_crafting);
     RUN_TEST(test_crafting_with_a_load);
     RUN_TEST(test_bill_inputs_after_tools);

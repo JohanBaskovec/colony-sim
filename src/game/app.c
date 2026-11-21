@@ -1319,6 +1319,19 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
             current = item_count + plant_count + i;
         }
     }
+    /* A click on a settler goes on to what is under it when the settler is the one selected, and
+     * through the things of the tile in turn, back to the settler at the end: a station a settler
+     * stands on can be selected too. */
+    int total = item_count + plant_count + pick_count;
+    bool go_on = false;
+    if (!entity_id_is_none(id) && !additive && total > 0) {
+        if (app->selected_count == 1 && entity_id_equal(app->selected[0], id)) {
+            go_on = true;
+            current = -1;
+        } else if (current >= 0 && current + 1 < total) {
+            go_on = true;
+        }
+    }
     /* A click on the selected animal goes on to what is under it. */
     EntityId was_animal = app->selected_animal;
     if (!additive) {
@@ -1329,23 +1342,26 @@ static void select_at_point(App *app, float screen_x, float screen_y, bool addit
     app->selected_gather_zone = GATHER_ZONE_NONE;
     app->tile_selected = false;
     app->selected_animal = ENTITY_NONE;
-    if (entity_id_is_none(id)) {
+    if (entity_id_is_none(id) || go_on) {
         if (additive) {
             return;
         }
         /* An animal the colony sees, before what is on the ground. */
-        EntityId animal = game_animal_at(&app->game, world_x, world_y, z);
-        if (entity_id_is_none(animal)) {
-            animal = game_animal_at(&app->game, world_x, world_y + APP_PICK_ANIMAL_OFFSET, z);
+        EntityId animal = ENTITY_NONE;
+        if (!go_on) {
+            animal = game_animal_at(&app->game, world_x, world_y, z);
+            if (entity_id_is_none(animal)) {
+                animal = game_animal_at(&app->game, world_x, world_y + APP_PICK_ANIMAL_OFFSET, z);
+            }
         }
         if (!entity_id_is_none(animal) && !entity_id_equal(animal, was_animal)) {
             app->selected_animal = animal;
             return;
         }
-        if (item_count + plant_count + pick_count == 0) {
+        if (total == 0) {
             return;
         }
-        int next = (current + 1) % (item_count + plant_count + pick_count);
+        int next = (current + 1) % total;
         if (next < item_count) {
             select_item(app, items[next]);
             return;

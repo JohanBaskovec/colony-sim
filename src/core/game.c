@@ -800,6 +800,7 @@ bool game_init(Game *game, const NewGameParams *params)
     /* The light of the world was worked out with it (the plants are set where
      * they can live all year); brought up to date at the end. */
     spawn_starting_colonists(game, params->colonist_count);
+    game->free_radius = params->free_radius;
     if (params->free_radius > 0 && game->has_arrival) {
         forbid_far_items(game, params->free_radius);
     }
@@ -1161,7 +1162,13 @@ static void update_crowns(Game *game, uint64_t phase)
                       .day = crowns->day,
                       .day_of_year = game_day_of_year(tick),
                       .storm = game->weather.type == WEATHER_STORM};
+    /* What falls far from the colony lands forbidden: nobody walks across the map for it. */
+    if (game->free_radius > 0 && game->has_arrival) {
+        items_forbid_drops_beyond(&game->items, game->arrival.x, game->arrival.y,
+                                  game->free_radius);
+    }
     crowns_hour(crowns, &game->map, &game->items, begin, end, &hour);
+    items_forbid_drops_beyond(&game->items, 0, 0, 0);
 }
 
 static void update_plants(Game *game)

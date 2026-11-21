@@ -31,6 +31,7 @@ static void game_fields_serialize(Serializer *s, Game *game)
     ser_bool(s, &game->fog_started);
     tile_pos_serialize(s, &game->arrival);
     ser_bool(s, &game->has_arrival);
+    ser_int(s, &game->free_radius);
     ser_bool(s, &game->colony_lost);
     ser_u32(s, &game->strikes_resolved);
     ser_u32(s, &game->tree_falls_seen);

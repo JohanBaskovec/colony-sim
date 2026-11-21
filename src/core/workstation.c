@@ -147,6 +147,20 @@ bool workstation_needs_construction(WorkstationType type)
     return def->build_work > 0.0f;
 }
 
+/* What a bill starts with before anything is saved (bill_init()). */
+static void defaults_standard(BillDefaults *defaults)
+{
+    *defaults = (BillDefaults){.mode = BILL_DO_TIMES,
+                               .target = BILL_TARGET_DEFAULT,
+                               .input_radius = BILL_INPUT_RADIUS_DEFAULT,
+                               .worker = BILL_WORKER_ANYONE,
+                               .min_level = (uint8_t)BILL_LEVEL_MIN,
+                               .max_level = (uint8_t)BILL_LEVEL_MAX,
+                               .colonist = ENTITY_NONE,
+                               .min_quality = ITEM_QUALITY_WORST,
+                               .max_quality = ITEM_QUALITY_BEST};
+}
+
 int workstations_place(Workstations *workstations, const Map *map, WorkstationType type, int x,
                        int y, int z)
 {
@@ -168,6 +182,7 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         station->number = workstations->next_number++;
         station->work_recipe = RECIPE_COUNT;
         station->priority = JOB_PRIORITY_DEFAULT;
+        defaults_standard(&station->defaults);
         if (WORKSTATION_DEFS[type].hearth) {
             station->keep_burning = true;
             station->fuel_types = HEARTH_DEFAULT_FUEL_TYPES;
@@ -244,6 +259,73 @@ bool bill_init(Bill *bill, RecipeType recipe)
     bill->input_radius = BILL_INPUT_RADIUS_DEFAULT;
     bill->min_quality = ITEM_QUALITY_WORST;
     bill->max_quality = ITEM_QUALITY_BEST;
+    return true;
+}
+
+bool workstation_bill_draft(const Workstations *workstations, int index, RecipeType recipe,
+                            Bill *draft)
+{
+    const Workstation *station = workstation_get_const(workstations, index);
+    if (station == NULL || !bill_init(draft, recipe)) {
+        return false;
+    }
+    const BillDefaults *saved = &station->defaults;
+    bill_set_mode(draft, (BillMode)saved->mode);
+    bill_set_target(draft, saved->target);
+    bill_set_input_radius(draft, saved->input_radius);
+    /* Levels first, then the worker: a recipe that needs no knowledge keeps "anyone". */
+    bill_set_max_level(draft, saved->max_level);
+    bill_set_min_level(draft, saved->min_level);
+    bill_set_worker(draft, (BillWorker)saved->worker, saved->colonist);
+    bill_set_quality_range(draft, saved->min_quality, saved->max_quality);
+    return true;
+}
+
+bool workstation_bill_has_default(const Workstation *station, const Bill *bill, BillSetting setting)
+{
+    const BillDefaults *saved = &station->defaults;
+    switch (setting) {
+    case BILL_SETTING_GOAL: return bill->mode == saved->mode && bill->target == saved->target;
+    case BILL_SETTING_RADIUS: return bill->input_radius == saved->input_radius;
+    case BILL_SETTING_WORKER:
+        return bill->worker == saved->worker && bill->min_level == saved->min_level &&
+               bill->max_level == saved->max_level &&
+               entity_id_equal(bill->colonist, saved->colonist);
+    case BILL_SETTING_QUALITY:
+        return bill->min_quality == saved->min_quality && bill->max_quality == saved->max_quality;
+    case BILL_SETTING_COUNT: break;
+    }
+    return false;
+}
+
+bool workstation_save_bill_default(Workstations *workstations, int index, const Bill *bill,
+                                   BillSetting setting)
+{
+    Workstation *station = workstation_get(workstations, index);
+    if (station == NULL || bill == NULL || (unsigned)setting >= BILL_SETTING_COUNT ||
+        workstation_bill_has_default(station, bill, setting)) {
+        return false;
+    }
+    BillDefaults *saved = &station->defaults;
+    switch (setting) {
+    case BILL_SETTING_GOAL:
+        saved->mode = bill->mode;
+        saved->target = bill->target;
+        break;
+    case BILL_SETTING_RADIUS: saved->input_radius = bill->input_radius; break;
+    case BILL_SETTING_WORKER:
+        saved->worker = bill->worker;
+        saved->min_level = bill->min_level;
+        saved->max_level = bill->max_level;
+        saved->colonist = bill->colonist;
+        break;
+    case BILL_SETTING_QUALITY:
+        saved->min_quality = bill->min_quality;
+        saved->max_quality = bill->max_quality;
+        break;
+    case BILL_SETTING_COUNT: break;
+    }
+    station->defaults_saved = true;
     return true;
 }
 
@@ -629,6 +711,19 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         if (station->priority != JOB_PRIORITY_DEFAULT) { /* Likewise. */
             hash = hash_fnv1a64(hash, &station->priority, sizeof(station->priority));
         }
+        if (station->defaults_saved) { /* Likewise. */
+            const BillDefaults *saved = &station->defaults;
+            uint32_t defaults[9] = {saved->mode,
+                                    saved->target,
+                                    saved->input_radius,
+                                    saved->worker,
+                                    saved->min_level,
+                                    saved->max_level,
+                                    saved->colonist.index,
+                                    saved->colonist.generation,
+                                    (uint32_t)saved->min_quality << 8 | saved->max_quality};
+            hash = hash_fnv1a64(hash, defaults, sizeof(defaults));
+        }
         float fire[3] = {station->fuel, station->fuel_promised, station->soaked};
         hash = hash_fnv1a64(hash, fire, sizeof(fire));
         uint32_t fire_state[3] = {station->burning, station->keep_burning,
@@ -706,6 +801,16 @@ void workstations_serialize(Serializer *s, Workstations *stations)
         ser_u8(s, &station->laid);
         ser_bool(s, &station->forbidden);
         ser_u8(s, &station->priority);
+        ser_u8_below(s, &station->defaults.mode, BILL_MODE_COUNT);
+        ser_u16(s, &station->defaults.target);
+        ser_u16(s, &station->defaults.input_radius);
+        ser_u8_below(s, &station->defaults.worker, BILL_WORKER_COUNT);
+        ser_u8(s, &station->defaults.min_level);
+        ser_u8(s, &station->defaults.max_level);
+        entity_id_serialize(s, &station->defaults.colonist);
+        ser_u8(s, &station->defaults.min_quality);
+        ser_u8(s, &station->defaults.max_quality);
+        ser_bool(s, &station->defaults_saved);
     }
     ser_int_in(s, &stations->used_count, 0, WORKSTATION_MAX);
     ser_int(s, &stations->next_number);
