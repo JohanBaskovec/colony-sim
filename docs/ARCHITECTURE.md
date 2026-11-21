@@ -57,7 +57,7 @@ simulation:
 | `hauling`    | Queries: which stack needs hauling (any group of a tile), best storage tile for it (one group per storage tile) |
 | `item_move`  | Item moves ordered by the player: the items of a tile, or one item, → chosen tile (`ItemMoves`, 64 orders), room at a destination, pruning |
 | `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
-| `workstation`| Workstations (crafting spot, knapping spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
+| `workstation`| Workstations (crafting spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
 | `hearth`     | The fire of an open hearth: fuel values, fuel wanted, burning, lighting rules, light around burning hearths, the hours of fireside stories |
 | `structure`  | Structure definitions (grass bed, ground bedding, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by quality, quality cap from the materials |
 | `bed`        | Bed ownership: one bed per settler, one settler per bed, kept on the bed's head; beds gone from the map are forgotten |
@@ -713,6 +713,22 @@ clearing's (`gather_uproot_work()`). The plant decides the level and the tool
 mistaken for a poisonous one needs `GATHER_CAREFUL_MIN_LEVEL`, roots the
 digging stick; work searches and the action menu check it on the tile
 (`colonist_can_do_at()`, `game_designation_available_at()`).
+**Harvest when ripe** (`DESIGNATION_HARVEST_RIPE`) is Harvest that waits for the
+plant's full harvest, the rule of a zone's "wait for the full harvest"
+(`gather_plant_ripe()`: every fruit ripe, every armful grown, a plant taken
+whole fully grown). It can be given to any plant that bears something, even
+with nothing to take yet; `designation_waits_to_ripen()` keeps settlers off it
+(work searches, the job under way, the tile inspector says so) until the stock
+is full, then it is carried out as a Harvest and the order is gone.
+
+Orders live on tiles (`Designations.type`, one layer), not on the plants, and a
+settler drops one that no longer makes sense (`designation_can_apply()`) when
+he comes to work on it. A plant that goes some other way (a builder clears it
+for a site, a tree falls) would leave its order standing until someone looks,
+so `game_tick()` also runs `designations_drop_void()` every
+`GAME_ORDER_CHECK_INTERVAL` ticks while orders of gathering or felling exist:
+it drops the fell, harvest and uproot orders whose plant is gone or has
+nothing to take.
 
 **Support** (step 3b): a tile without rock whose next level up has a floor
 or rock right over it has a ceiling (`map_has_ceiling()`), held up by the
@@ -1976,7 +1992,7 @@ Workstations (`core/workstation.h`, owned by `Game`, at most
 (`game_place_workstation()`, which takes the tile out of any zone): a
 construction site of one tile (`ConstructionSite.workstation`, its type +
 1; `constructions_place_workstation()`), built like a structure's. Haulers
-bring its materials (a knapping spot needs a cobble as its anvil), a
+bring its materials (a hearth needs six cobbles), a
 colonist with the construction work type and the knowledge the station
 needs (`colonist_can_build_site()`) fetches what is still missing and does
 the work from a neighboring tile; `construction_add_work()` then places the
@@ -1987,8 +2003,8 @@ once; a structure with no material and no work (ground bedding,
 (`game_place_structure()` returns `CONSTRUCTION_BUILT_AT_ONCE`, no site). The
 plants under them are left alone and ordered uprooted (`DESIGNATION_UPROOT`,
 `order_uprooting()`), a settler does it. They are drawn as an outline only,
-since nothing was built. A knapping spot or a hearth (six cobbles) is a site
-as before, its plant cleared first. `game_can_place_workstation()` keeps room in the station list for
+since nothing was built. A hearth (six cobbles) is a site as before, its plant
+cleared first. `game_can_place_workstation()` keeps room in the station list for
 every site (`Constructions.workstation_count`); should a station still not
 fit when its work is done (a tree grown on the tile), the site waits. The
 cancel tool removes blueprints; removing a station drops the input of a
@@ -2031,9 +2047,15 @@ rots away soonest (`items_soonest_rot_hours()`), then fetches from the nearest
 heap holding one that rots within six hours of it, and picks up the soonest
 to rot first; when none of those can be reached, any heap in range will do.
 
-"Until N" counts `Game.stock`: items lying in a stockpile that accepts them, and
-nothing else (not what waits on a workstation, is carried or lies in the wild: a
-crafter may therefore start more crafts while the last products wait for a hauler).
+"Until N" counts `Game.stock`: everything lying on a stockpile tile (the zone
+accepting it or not: `stockpiles_count_stored()`) and in the **work zone** of a
+station (its tile and the eight around it, `WORKSTATION_ZONE_REACH`, minus the
+stockpile tiles and counted once where zones overlap:
+`workstations_count_stored()`), as in a stockpile that takes nothing. Nothing else
+counts (not what is carried or lies in the wild). A station's products, dropped on its
+tile, are thus in stock at once: a bill with nobody to haul them away stops by itself
+instead of making more for ever. Haulers still carry them to a stockpile that accepts
+them (the work zone has no storage priority).
 Gathering zones' targets, the food alert and the resources list count the same
 stock. `game_count_stock()` scans the stockpiles (their bounding boxes) without
 touching the game (the frontend does it every frame into `App.stock`);
@@ -2041,6 +2063,14 @@ touching the game (the frontend does it every frame into `App.stock`);
 "until N" mode (it costs as much as the rest of a small colony's tick), else every
 `GAME_STOCK_INTERVAL` ticks, on a schedule of the tick only, so that the frontend's
 counts never reach the simulation.
+
+The work zone is also where a crafter takes what the craft needs without walking
+(`zone_take()` in `core/colonist.c`): the tools it lacks, a better tool than the one
+in hand, then the input (a heap holding enough of the first allowed type, not
+forbidden, not promised to a hauler), the way `pick_up_at()` takes a fetched
+stack. `plan_station_job()` goes to the station first when the zone holds something
+the craft lacks (known items), takes it there, and fetches only what is still missing
+from farther; `arrive_at_station()` plans again if something is still lacking.
 
 Bills are worked through from the top: a crafter takes the first one that
 is not paused, wants more, whose recipe it knows at a level the bill accepts

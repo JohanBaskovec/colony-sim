@@ -725,6 +725,8 @@ static void plant_box_actions(App *app, int *slot)
     if (gather_plant_harvest_job(map, first.x, first.y, first.z) != GATHER_JOB_NONE) {
         plant_box_order(app, slot, DESIGNATION_HARVEST, RENDER_ICON_HARVEST,
                         tr("designation.harvest"), tr("tile_panel.harvest.description"));
+        plant_box_order(app, slot, DESIGNATION_HARVEST_RIPE, RENDER_ICON_HARVEST_RIPE,
+                        tr("designation.harvest_ripe"), tr("tile_panel.harvest_ripe.description"));
     }
     if (gather_plant_uprootable(map, first.x, first.y, first.z)) {
         plant_box_order(app, slot, DESIGNATION_UPROOT, RENDER_ICON_UPROOT, tr("designation.uproot"),
@@ -802,6 +804,13 @@ static void thing_actions(App *app, const ThingRows *rows)
                                        order == DESIGNATION_HARVEST, reason,
                                        order == DESIGNATION_HARVEST)) {
                 toggle_order(app, DESIGNATION_HARVEST, foot);
+            }
+            if (inspector_order_action(
+                    app, slot++, RENDER_ICON_HARVEST_RIPE, tr("designation.harvest_ripe"),
+                    tr("tile_panel.harvest_ripe.description"), order == DESIGNATION_HARVEST_RIPE,
+                    unavailable(game, DESIGNATION_HARVEST_RIPE, x, y, z),
+                    order == DESIGNATION_HARVEST_RIPE)) {
+                toggle_order(app, DESIGNATION_HARVEST_RIPE, foot);
             }
         }
         if (gather_plant_uprootable(map, x, y, z) &&
@@ -960,7 +969,7 @@ bool tile_panel_cancel(App *app)
         }
         DesignationType order = designation_get(&game->designations, foot.x, foot.y, foot.z);
         if (order != DESIGNATION_CHOP && order != DESIGNATION_HARVEST &&
-            order != DESIGNATION_UPROOT) {
+            order != DESIGNATION_HARVEST_RIPE && order != DESIGNATION_UPROOT) {
             return false;
         }
         toggle_order(app, order, foot);
@@ -984,7 +993,7 @@ bool tile_panel_cancel(App *app)
             TilePos at = app->selected_plants[i];
             DesignationType order = designation_get(&game->designations, at.x, at.y, at.z);
             if (order == DESIGNATION_CHOP || order == DESIGNATION_HARVEST ||
-                order == DESIGNATION_UPROOT) {
+                order == DESIGNATION_HARVEST_RIPE || order == DESIGNATION_UPROOT) {
                 cancelled +=
                     game_designate_rect(game, at.x, at.y, at.x, at.y, at.z, DESIGNATION_NONE);
             }

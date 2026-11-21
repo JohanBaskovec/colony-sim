@@ -96,10 +96,22 @@ static void test_placing(void)
     CHECK_EQ_INT(
         game_place_structure_rect(&game, STRUCTURE_NONE, DIRECTION_SOUTH, 20, 20, 21, 21, 0), 0);
 
-    /* Not on a stockpile, a workstation or another site; no workstation on a
-     * site or a structure. */
-    CHECK(stockpile_create(&game.stockpiles, &game.map, 20, 20, 21, 21, 0) != STOCKPILE_NONE);
-    CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 20, 20, 0, DIRECTION_SOUTH));
+    /* Not on a workstation or another site; no workstation on a site or a structure. A
+     * stockpile or a gathering zone does not stop it: the tile leaves the zone. */
+    int pile = stockpile_create(&game.stockpiles, &game.map, 20, 20, 21, 21, 0);
+    int gather = gather_zone_create(&game.gather_zones, &game.map, 20, 21, 22, 21, 0);
+    REQUIRE(pile != STOCKPILE_NONE && gather != GATHER_ZONE_NONE);
+    CHECK(game_can_place_structure(&game, STRUCTURE_WALL, 20, 20, 0, DIRECTION_SOUTH));
+    CHECK(game_place_structure(&game, STRUCTURE_WALL, 20, 20, 0, DIRECTION_SOUTH) !=
+          CONSTRUCTION_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 20, 20, 0), STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 20, 0), pile);
+    CHECK_EQ_INT(stockpile_get(&game.stockpiles, pile)->cell_count, 3);
+    CHECK(game_place_structure(&game, STRUCTURE_WALL, 21, 21, 0, DIRECTION_SOUTH) !=
+          CONSTRUCTION_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 21, 21, 0), GATHER_ZONE_NONE);
+    CHECK_EQ_INT(gather_zone_at(&game.gather_zones, 20, 21, 0), gather);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 21, 21, 0), STOCKPILE_NONE);
     CHECK(game_place_workstation(&game, WORKSTATION_CRAFTING_SPOT, 25, 25, 0));
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 25, 25, 0, DIRECTION_SOUTH));
     CHECK(!game_can_place_structure(&game, STRUCTURE_WALL, 3, 3, 0, DIRECTION_SOUTH));
@@ -204,11 +216,11 @@ static void test_a_new_plan_replaces_the_one_in_progress(void)
     CHECK_EQ_INT(construction_at(&game.constructions, 6, 5, 0), turned);
 
     /* A workstation over a structure's site, and the other way round. */
-    CHECK(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 6, 5, 0));
+    CHECK(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 6, 5, 0));
     CHECK_EQ_INT(game.constructions.used_count, 1);
     CHECK_EQ_INT(construction_at(&game.constructions, 5, 5, 0), CONSTRUCTION_NONE);
     CHECK_EQ_INT(game.constructions.workstation_count, 1);
-    CHECK(!game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 6, 5, 0));
+    CHECK(!game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 6, 5, 0));
     CHECK_EQ_INT(game.constructions.workstation_count, 1);
     int replacing = game_place_structure(&game, STRUCTURE_WALL, 6, 5, 0, DIRECTION_SOUTH);
     REQUIRE(replacing != CONSTRUCTION_NONE);
@@ -691,10 +703,15 @@ static void test_planning_beds(void)
     CHECK_EQ_INT(planned.count, 2);
     CHECK(planned.heads[1][0] == 12 && planned.heads[1][1] == 20);
 
-    /* A bed whose foot would lie on a stockpile is refused. */
-    CHECK(stockpile_create(&game.stockpiles, &game.map, 30, 31, 30, 31, 0) != STOCKPILE_NONE);
-    CHECK(!game_can_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, 0, DIRECTION_SOUTH));
-    CHECK(game_can_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, 0, DIRECTION_NORTH));
+    /* A bed whose foot lies on a stockpile takes both its tiles out of it. */
+    int bed_pile = stockpile_create(&game.stockpiles, &game.map, 30, 30, 30, 32, 0);
+    REQUIRE(bed_pile != STOCKPILE_NONE);
+    CHECK(game_can_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, 0, DIRECTION_SOUTH));
+    CHECK(game_place_structure(&game, STRUCTURE_GRASS_BED, 30, 30, 0, DIRECTION_SOUTH) !=
+          CONSTRUCTION_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 30, 30, 0), STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 30, 31, 0), STOCKPILE_NONE);
+    CHECK_EQ_INT(stockpile_at(&game.stockpiles, 30, 32, 0), bed_pile);
     CHECK_EQ_INT(
         game_place_structure_rect(&game, STRUCTURE_GRASS_BED, DIRECTION_EAST, 10, 20, 13, 20, 0),
         2);

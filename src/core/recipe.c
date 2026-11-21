@@ -23,7 +23,6 @@
 #define HAND_AXE_FAILURE_PER_LEVEL 0.02f
 #define FAILED_FLAKES_BASE 1
 
-#define KNAPPING_SPOT WORKSTATION_BIT(WORKSTATION_KNAPPING_SPOT)
 #define CRAFTING_SPOT WORKSTATION_BIT(WORKSTATION_CRAFTING_SPOT)
 #define OPEN_HEARTH WORKSTATION_BIT(WORKSTATION_OPEN_HEARTH)
 /* Knapping is done with a plain cobble as a hammer. */
@@ -33,7 +32,7 @@
 static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
     [RECIPE_CHOPPER] = {"chopper",
                         N_("recipe.chopper"),
-                        KNAPPING_SPOT,
+                        CRAFTING_SPOT,
                         {ITEM_COBBLE, ITEM_FLINT},
                         1,
                         ITEM_QUALITY_WORST,
@@ -46,7 +45,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                         TOOL_USE_KNAPPING},
     [RECIPE_FLAKES] = {"flakes",
                        N_("recipe.flakes"),
-                       KNAPPING_SPOT,
+                       CRAFTING_SPOT,
                        {ITEM_FLINT, ITEM_COBBLE},
                        1,
                        ITEM_QUALITY_WORST,
@@ -59,7 +58,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                        TOOL_USE_KNAPPING},
     [RECIPE_HAND_AXE] = {"hand_axe",
                          N_("recipe.hand_axe"),
-                         KNAPPING_SPOT,
+                         CRAFTING_SPOT,
                          {ITEM_FLINT, ITEM_COBBLE},
                          1,
                          ITEM_QUALITY_WORST,
@@ -180,7 +179,6 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                               TOOL_USE_NONE},
 };
 
-#undef KNAPPING_SPOT
 #undef CRAFTING_SPOT
 #undef OPEN_HEARTH
 #undef HAMMER

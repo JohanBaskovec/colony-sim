@@ -83,7 +83,7 @@ static void test_priority_values(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     int index =
-        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 10, 10, 0);
+        workstations_place(&game.workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 10, 10, 0);
     REQUIRE(index != WORKSTATION_NONE);
     const Workstation *station = workstation_get_const(&game.workstations, index);
     CHECK_EQ_INT(station->priority, JOB_PRIORITY_DEFAULT);
@@ -127,9 +127,9 @@ static void test_station_priority(void)
     REQUIRE(colonist != NULL);
     colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 0));
     int near =
-        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 12, 10, 0);
+        workstations_place(&game.workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 12, 10, 0);
     int far =
-        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 30, 10, 0);
+        workstations_place(&game.workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 30, 10, 0);
     REQUIRE(near != WORKSTATION_NONE && far != WORKSTATION_NONE);
     items_add(&game.items, 12, 11, 0, item_stack_make(ITEM_FLINT, 2, ITEM_QUALITY_STANDARD, 0));
     items_add(&game.items, 30, 11, 0, item_stack_make(ITEM_FLINT, 2, ITEM_QUALITY_STANDARD, 0));
@@ -149,8 +149,8 @@ static void test_station_priority(void)
     REQUIRE(second != NULL);
     colonist_add_tool(second, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 0));
     near =
-        workstations_place(&other.workstations, &other.map, WORKSTATION_KNAPPING_SPOT, 12, 10, 0);
-    far = workstations_place(&other.workstations, &other.map, WORKSTATION_KNAPPING_SPOT, 30, 10, 0);
+        workstations_place(&other.workstations, &other.map, WORKSTATION_CRAFTING_SPOT, 12, 10, 0);
+    far = workstations_place(&other.workstations, &other.map, WORKSTATION_CRAFTING_SPOT, 30, 10, 0);
     items_add(&other.items, 12, 11, 0, item_stack_make(ITEM_FLINT, 2, ITEM_QUALITY_STANDARD, 0));
     items_add(&other.items, 30, 11, 0, item_stack_make(ITEM_FLINT, 2, ITEM_QUALITY_STANDARD, 0));
     REQUIRE(workstation_add_bill(&other.workstations, near, RECIPE_FLAKES) >= 0);

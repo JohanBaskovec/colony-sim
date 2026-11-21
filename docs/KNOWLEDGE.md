@@ -438,7 +438,7 @@ quickly). Two types are enough for the start; others are noted in §13, each
 with its own use.
 
 - **Cobble**: a rounded stone that fits the hand (quartzite, sandstone,
-  granite). The hammer of the knapper, the anvil of the knapping spot,
+  granite). The hammer of the knapper, the anvil stone,
   a building material. It can be knapped, as the first tools in history
   were, but coarsely: as a knapping material **a cobble counts as crude**
   whatever its quality, so what is knapped from it is at best rough (§2.2). Its
@@ -605,9 +605,9 @@ no spear, no butchering.*
 
 | Recipe           | Ingredients | Tools       | Station       | Work         | Min level | Products |
 |------------------|-------------|-------------|---------------|--------------|-----------|----------|
-| Knap chopper     | 1 cobble or flint | cobble      | Knapping spot | 250 (0.1 h)  | 50 | 1 chopper |
-| Strike flakes    | 1 flint or cobble | cobble      | Knapping spot | 375 (0.15 h) | 55 | `3 + (L − 50) / 10` flakes (3 to 8) |
-| Shape hand axe   | 1 flint or cobble | cobble      | Knapping spot | 2,500 (1 h)  | 70 | 1 hand axe + 2 flakes |
+| Knap chopper     | 1 cobble or flint | cobble      | Crafting spot | 250 (0.1 h)  | 50 | 1 chopper |
+| Strike flakes    | 1 flint or cobble | cobble      | Crafting spot | 375 (0.15 h) | 55 | `3 + (L − 50) / 10` flakes (3 to 8) |
+| Shape hand axe   | 1 flint or cobble | cobble      | Crafting spot | 2,500 (1 h)  | 70 | 1 hand axe + 2 flakes |
 
 - The tool of every knapping recipe is a plain cobble, so the chain can
   always start with two stones: one to strike with, one to knap. A cobble
@@ -621,10 +621,28 @@ no spear, no butchering.*
   none from 90) *(tuning)*. A failure still gives `1 + (L − 50) / 10` flakes;
   the stone is lost.
 
-### 6.3 Construction: knapping spot
+### 6.3 Construction: the crafting spot
+
+Knapping is done at the **crafting spot**, the one workstation of the chain
+(§8.2): no materials, no work, no knowledge (a place on the ground to sit and
+work). It was once two stations, a knapping spot (a cobble as its anvil, 250
+work, Basic shelters 50) and a crafting spot.
 
 | Field       | Value |
 |-------------|-------|
+| id          | `crafting_spot` |
+| Footprint   | 1 × 1, passable |
+| Materials   | none |
+| Work        | none: ready as soon as it is placed |
+| Workstation | Knapping and woodworking recipes |
+| Side effect | Chips: dirt on the tile and its neighbours (§2.4) |
+
+The tools and ingredients lying in its **work zone** (its tile and the eight
+around it) are used without walking, and what lies there counts in the
+colony's stock (a stockpile that takes nothing, so that a bill "until N in
+stock" stops once its products lie by the station).
+
+-------------|-------|
 | id          | `knapping_spot` |
 | Footprint   | 1 × 1, passable (an anvil stone to sit by) |
 | Materials   | 1 cobble (the anvil) |
@@ -791,10 +809,10 @@ Damage values are relative, for the M6 health system; quality multiplies damage
 | Make throwing spear  | 1 branches (quality standard or better: straight) | flake or hand axe | Crafting spot | 3,750 (1.5 h) | 50 | 1 throwing spear |
 | Make thrusting spear | 2 branches (standard or better) | hand axe, flake | Crafting spot | 6,250 (2.5 h) | 60 | 1 thrusting spear |
 
-Construction **crafting spot**: 1 × 1, passable, no materials, so no
+Construction **crafting spot** (§6.3): 1 × 1, passable, no materials, so no
 construction work either: it is ready as soon as it is placed; needs no
-knowledge (a place to sit and work). Workstation for torches, digging
-sticks and spears.
+knowledge (a place to sit and work). Workstation for knapping, torches,
+digging sticks and spears.
 
 ### 8.3 Spear hunting
 
@@ -1007,7 +1025,7 @@ Suggested order, each step with its tests:
      world generation (one guaranteed near the start), shown in the tile
      inspector;
    - workstations built from a blueprint: a builder brings the materials and
-     does the work (crafting spot, knapping spot);
+     does the work (hearth); the crafting spot is ready at once;
    - bills (recipe, repeat mode, filters) and crafting: fetching
      ingredients, working at the station, products on the output tile;
    - carried tools (one per type, counted in the carried weight), fetched

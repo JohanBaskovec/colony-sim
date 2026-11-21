@@ -38,6 +38,9 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
     [DESIGNATION_UPROOT] = {"uproot", N_("designation.uproot"), N_("colonist.task.uproot"),
                             WORK_GATHERING, KNOWLEDGE_GATHERING, KNOWLEDGE_MASTERY_LEVEL,
                             TOOL_USE_NONE},
+    [DESIGNATION_HARVEST_RIPE] = {"harvest_ripe", N_("designation.harvest_ripe"),
+                                  N_("colonist.task.harvest"), WORK_GATHERING, KNOWLEDGE_GATHERING,
+                                  KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
 };
 
 const DesignationDef *designation_def(DesignationType type)
@@ -154,6 +157,8 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
                map_roof(map, x, y, z) != STRUCTURE_NONE;
     case DESIGNATION_CHOP: return plant_is_tree(map->plants[map_index(map, x, y, z)].type);
     case DESIGNATION_HARVEST: return gather_plant_harvestable(map, x, y, z);
+    /* Even with nothing to take yet: the order waits for the ripening. */
+    case DESIGNATION_HARVEST_RIPE: return gather_plant_harvest_job(map, x, y, z) != GATHER_JOB_NONE;
     case DESIGNATION_UPROOT: return gather_plant_uprootable(map, x, y, z);
     default: return false;
     }
@@ -165,7 +170,8 @@ float designation_min_level_at(const Map *map, int x, int y, int z, DesignationT
     if (def == NULL) {
         return 0.0f;
     }
-    if (type == DESIGNATION_HARVEST || type == DESIGNATION_UPROOT) {
+    if (type == DESIGNATION_HARVEST || type == DESIGNATION_HARVEST_RIPE ||
+        type == DESIGNATION_UPROOT) {
         const GatherJobDef *job = gather_job_def(gather_plant_harvest_job(map, x, y, z));
         if (job != NULL && job->min_level > def->min_level) {
             return job->min_level;
@@ -180,7 +186,8 @@ ToolUse designation_tool_use_at(const Map *map, int x, int y, int z, Designation
     if (def == NULL) {
         return TOOL_USE_NONE;
     }
-    if (type == DESIGNATION_HARVEST || type == DESIGNATION_UPROOT) {
+    if (type == DESIGNATION_HARVEST || type == DESIGNATION_HARVEST_RIPE ||
+        type == DESIGNATION_UPROOT) {
         const GatherJobDef *job = gather_job_def(gather_plant_harvest_job(map, x, y, z));
         return job != NULL ? job->tool_use : TOOL_USE_NONE;
     }
@@ -235,6 +242,36 @@ bool designation_waits_for_support(const Designations *designations, const Map *
     return !map_dig_keeps_ceilings(map, x, y, z, type == DESIGNATION_DIG_RAMP);
 }
 
+int designations_drop_void(Designations *designations, const Map *map)
+{
+    int dropped = 0;
+    const TileBox *box = &designations->box;
+    if (tile_box_is_empty(box)) {
+        return 0;
+    }
+    for (int z = box->z0; z <= box->z1; z++) {
+        for (int y = box->y0; y <= box->y1; y++) {
+            for (int x = box->x0; x <= box->x1; x++) {
+                DesignationType type = designation_get(designations, x, y, z);
+                if ((type == DESIGNATION_CHOP || type == DESIGNATION_HARVEST ||
+                     type == DESIGNATION_HARVEST_RIPE || type == DESIGNATION_UPROOT) &&
+                    !designation_can_apply(map, x, y, z, type)) {
+                    designation_set(designations, map, x, y, z, DESIGNATION_NONE);
+                    dropped++;
+                }
+            }
+        }
+    }
+    return dropped;
+}
+
+bool designation_waits_to_ripen(const Designations *designations, const Map *map, int x, int y,
+                                int z)
+{
+    return designation_get(designations, x, y, z) == DESIGNATION_HARVEST_RIPE &&
+           !gather_plant_ripe(map, x, y, z);
+}
+
 bool designation_forbidden(const Designations *designations, const Map *map, int x, int y, int z)
 {
     if (map->forbidden_count == 0) {
@@ -247,6 +284,7 @@ bool designation_forbidden(const Designations *designations, const Map *map, int
                    : map_forbidden(map, x, y, z, MAP_FORBID_ROOF);
     case DESIGNATION_CHOP:
     case DESIGNATION_HARVEST:
+    case DESIGNATION_HARVEST_RIPE:
     case DESIGNATION_UPROOT:
     case DESIGNATION_DIG_DOWN: return map_forbidden(map, x, y, z, MAP_FORBID_PLANT);
     case DESIGNATION_DIG_RAMP: return map_forbidden(map, x, y, z + 1, MAP_FORBID_PLANT);
@@ -355,6 +393,7 @@ float designation_work_needed(const Designations *designations, const Map *map, 
                                               : map_roof(map, x, y, z));
     case DESIGNATION_CHOP: return tree_fell_work(&map->plants[index]);
     case DESIGNATION_HARVEST:
+    case DESIGNATION_HARVEST_RIPE:
         return gather_job_work_needed(map, x, y, z, gather_plant_harvest_job(map, x, y, z));
     case DESIGNATION_UPROOT: return gather_uproot_work(map, x, y, z);
     default: return 0.0f;
@@ -490,7 +529,7 @@ bool designation_add_work(Designations *designations, Map *map, Items *items, in
     }
     int count;
     ItemType product = designation_yield(designations, map, x, y, z, &count);
-    if (type == DESIGNATION_HARVEST) {
+    if (type == DESIGNATION_HARVEST || type == DESIGNATION_HARVEST_RIPE) {
         gather_harvest_plant(map, items, x, y, z, level, rng);
         product = ITEM_NONE; /* Dropped there. */
     } else if (type == DESIGNATION_UPROOT) {

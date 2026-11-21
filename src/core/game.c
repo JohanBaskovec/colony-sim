@@ -61,6 +61,7 @@ void game_default_params(NewGameParams *params)
     worldgen_default_params(&params->world);
     params->colonist_count = GAME_DEFAULT_COLONIST_COUNT;
     params->wildlife = 0.0f;
+    params->free_radius = 0;
 }
 
 /* ---- Colonist storage ---------------------------------------------------- */
@@ -739,6 +740,27 @@ static void update_river(Game *game)
     }
 }
 
+/* Every item lying more than `radius` tiles (straight line on the map) from the arrival point
+ * is forbidden, to be allowed by the player when wanted. */
+static void forbid_far_items(Game *game, int radius)
+{
+    const Map *map = &game->map;
+    const long limit = (long)radius * radius;
+    for (int z = 0; z < map->depth; z++) {
+        if (game->items.level_stacks[z] == 0) {
+            continue;
+        }
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                long dx = x - game->arrival.x, dy = y - game->arrival.y;
+                if (dx * dx + dy * dy > limit) {
+                    items_set_forbidden(&game->items, x, y, z, true);
+                }
+            }
+        }
+    }
+}
+
 bool game_init(Game *game, const NewGameParams *params)
 {
     memset(game, 0, sizeof(*game));
@@ -773,6 +795,9 @@ bool game_init(Game *game, const NewGameParams *params)
     /* The light of the world was worked out with it (the plants are set where
      * they can live all year); brought up to date at the end. */
     spawn_starting_colonists(game, params->colonist_count);
+    if (params->free_radius > 0 && game->has_arrival) {
+        forbid_far_items(game, params->free_radius);
+    }
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     if (params->wildlife > 0.0f) {
         animals_populate(&game->animals, &game->map, &game->pathfinder, &game->regions,
@@ -823,6 +848,7 @@ void game_count_stock(const Game *game, long stock[ITEM_TYPE_COUNT])
      * so that items out of view count as they were last seen. */
     memset(stock, 0, sizeof(long) * ITEM_TYPE_COUNT);
     stockpiles_count_stored(&game->stockpiles, game_view_items(game), stock);
+    workstations_count_stored(&game->workstations, &game->stockpiles, game_view_items(game), stock);
 }
 
 void game_update_stock(Game *game)
@@ -2975,6 +3001,12 @@ void game_tick(Game *game)
     if (game->clock.tick % GAME_STOCK_INTERVAL == 0 || stock_counted(game)) {
         game_update_stock(game);
     }
+    /* Orders on plants that are gone (cleared for a building site...) are dropped. */
+    if (game->clock.tick % GAME_ORDER_CHECK_INTERVAL == 0 &&
+        (game->designations.count_by_work[WORK_GATHERING] > 0 ||
+         game->designations.count_by_work[WORK_WOODCUTTING] > 0)) {
+        designations_drop_void(&game->designations, &game->map);
+    }
     tile_light_tick(&game->light, &game->map, game->clock.tick);
     update_plants(game);
     if (game->clock.tick % GAME_PLANT_UPDATE_INTERVAL == 0) {
@@ -3415,7 +3447,8 @@ bool game_designation_available(const Game *game, DesignationType type)
 
 bool game_designation_available_at(const Game *game, DesignationType type, int x, int y, int z)
 {
-    if (type == DESIGNATION_HARVEST || type == DESIGNATION_UPROOT) {
+    if (type == DESIGNATION_HARVEST || type == DESIGNATION_HARVEST_RIPE ||
+        type == DESIGNATION_UPROOT) {
         for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
             if (!entity_id_is_none(game_colonist_id_at(game, slot)) &&
                 colonist_can_do_at(&game->colonists[slot], game_view_map(game), x, y, z, type)) {
@@ -4414,14 +4447,28 @@ bool game_can_place_structure(const Game *game, StructureType type, int x, int y
             return false;
         }
         int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
-        if (stockpile_at(&game->stockpiles, px, py, z) != STOCKPILE_NONE ||
-            workstation_at(&game->workstations, px, py, z) != WORKSTATION_NONE) {
+        /* A zone does not stop it: the tile leaves the zone (game_place_structure()). */
+        if (workstation_at(&game->workstations, px, py, z) != WORKSTATION_NONE) {
             return false;
         }
     }
     return !construction_is_planned(&game->constructions, type, x, y, z, direction) &&
            construction_can_replace_structure(&game->constructions, &game->map, type, x, y, z,
                                               direction);
+}
+
+/* A structure planned over a stockpile or a gathering zone takes its tiles out of it, as a
+ * workstation does (a roof, laid over what is below it, leaves zones alone). */
+static void leave_zones(Game *game, StructureType type, int x, int y, int z, Direction direction)
+{
+    if (structure_is_roof(type)) {
+        return;
+    }
+    for (int part = 0; part < structure_length(type); part++) {
+        int px = x + part * direction_dx(direction), py = y + part * direction_dy(direction);
+        stockpiles_remove_rect(&game->stockpiles, px, py, px, py, z);
+        gather_zones_remove_rect(&game->gather_zones, px, py, px, py, z);
+    }
 }
 
 int game_place_structure(Game *game, StructureType type, int x, int y, int z, Direction direction)
@@ -4452,9 +4499,14 @@ int game_place_structure(Game *game, StructureType type, int x, int y, int z, Di
             game->map.plants[map_index(&game->map, px, py, z)] = plants[part];
             order_uprooting(game, px, py, z);
         }
+        leave_zones(game, type, x, y, z, direction);
         return CONSTRUCTION_BUILT_AT_ONCE;
     }
-    return constructions_place(&game->constructions, &game->map, type, x, y, z, direction);
+    int site = constructions_place(&game->constructions, &game->map, type, x, y, z, direction);
+    if (site != CONSTRUCTION_NONE) {
+        leave_zones(game, type, x, y, z, direction);
+    }
+    return site;
 }
 
 void game_plan_structure_rect(const Game *game, StructureType type, Direction direction, int x0,

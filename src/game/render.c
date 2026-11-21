@@ -126,11 +126,16 @@ static const SDL_Color HAIR_COLORS[HAIR_COLOR_COUNT] = {
 };
 /* Designation marks; index DESIGNATION_NONE is the color of the cancel tool. */
 static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
-    [DESIGNATION_NONE] = {230, 70, 60, 255},         [DESIGNATION_MINE] = {250, 140, 60, 255},
-    [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255}, [DESIGNATION_DIG] = {250, 140, 60, 255},
-    [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},    [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
-    [DESIGNATION_CHOP] = {240, 90, 80, 255},         [DESIGNATION_HARVEST] = {130, 210, 90, 255},
+    [DESIGNATION_NONE] = {230, 70, 60, 255},
+    [DESIGNATION_MINE] = {250, 140, 60, 255},
+    [DESIGNATION_DECONSTRUCT] = {240, 200, 70, 255},
+    [DESIGNATION_DIG] = {250, 140, 60, 255},
+    [DESIGNATION_DIG_RAMP] = {250, 170, 90, 255},
+    [DESIGNATION_DIG_DOWN] = {250, 120, 70, 255},
+    [DESIGNATION_CHOP] = {240, 90, 80, 255},
+    [DESIGNATION_HARVEST] = {130, 210, 90, 255},
     [DESIGNATION_UPROOT] = {220, 120, 200, 255},
+    [DESIGNATION_HARVEST_RIPE] = {90, 200, 170, 255},
 };
 /* Where a roof could rest, while planning roofs. */
 static const SDL_Color ROOF_SUPPORT_COLOR = {120, 220, 140, 60};
@@ -2249,8 +2254,8 @@ static void render_hearth_fire(SDL_Renderer *renderer, const SDL_FRect *tile,
     }
 }
 
-/* The station itself: a mat to sit on; a knapping spot adds a flat anvil stone;
- * an open hearth is a ring of stones. */
+/* The station itself: a crafting spot is only marked (nothing is built); an open hearth is a
+ * ring of stones; any other built station would get a mat to sit on. */
 static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
                                  WorkstationType type, Uint8 alpha)
 {
@@ -2262,9 +2267,8 @@ static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
         render_hearth_shape(renderer, tile, alpha);
         return;
     }
-    SDL_Color mat = MAT_COLOR, anvil = ANVIL_COLOR, weave = shade(MAT_COLOR, -30);
-    SDL_Color edge = ITEM_OUTLINE;
-    mat.a = anvil.a = weave.a = edge.a = alpha;
+    SDL_Color mat = MAT_COLOR, weave = shade(MAT_COLOR, -30);
+    mat.a = weave.a = alpha;
     SDL_FRect area = inset(tile, 0.84f);
     fill(renderer, mat, &area);
     float step = SDL_max(3.0f, floorf(area.h / 4.0f));
@@ -2272,13 +2276,18 @@ static void render_station_shape(SDL_Renderer *renderer, const SDL_FRect *tile,
         SDL_FRect line = {area.x, y, area.w, 1.0f};
         fill(renderer, weave, &line);
     }
-    if (type == WORKSTATION_KNAPPING_SPOT) {
-        SDL_FRect stone = {tile->x + floorf(tile->w * 0.3f), tile->y + floorf(tile->h * 0.34f),
-                           floorf(tile->w * 0.4f), floorf(tile->h * 0.28f)};
-        fill(renderer, edge, &stone);
-        SDL_FRect top = {stone.x + 1.0f, stone.y + 1.0f, stone.w - 2.0f, stone.h - 2.0f};
-        fill(renderer, anvil, &top);
-    }
+}
+
+/* The work zone of the selected station (its tile and the eight around it: tools and
+ * ingredients there are used without walking, and count in the stock), as a thin frame. */
+static void render_work_zone(SDL_Renderer *renderer, const SDL_FRect *tile)
+{
+    SDL_FRect zone = {
+        tile->x - tile->w * WORKSTATION_ZONE_REACH, tile->y - tile->h * WORKSTATION_ZONE_REACH,
+        tile->w * (2 * WORKSTATION_ZONE_REACH + 1), tile->h * (2 * WORKSTATION_ZONE_REACH + 1)};
+    SDL_Color color = SELECTION_COLOR;
+    color.a = 150;
+    outline(renderer, zone, 1.0f, color);
 }
 
 /* Under the fog: the workstations the colony remembers on the level shown, as
@@ -2317,6 +2326,7 @@ static void render_known_workstations(SDL_Renderer *renderer, const Game *game,
                 progress_bar(renderer, &tile, craft_fraction(station));
                 if (index == selected) {
                     outline(renderer, tile, 2.0f, SELECTION_COLOR);
+                    render_work_zone(renderer, &tile);
                 }
             }
         }
@@ -2354,6 +2364,7 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
         progress_bar(renderer, &tile, craft_fraction(station));
         if (i == selected) {
             outline(renderer, tile, 2.0f, SELECTION_COLOR);
+            render_work_zone(renderer, &tile);
         }
     }
 }
@@ -2787,7 +2798,9 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_CHOP]);
         break;
     }
-    case RENDER_ICON_HARVEST: { /* A bush bearing berries. */
+    case RENDER_ICON_HARVEST:
+    case RENDER_ICON_HARVEST_RIPE: { /* A bush bearing berries (ripe: with a check mark). */
+        bool ripe = icon == RENDER_ICON_HARVEST_RIPE;
         SDL_FRect area = inset(&rect, 0.8f);
         fill(renderer, ROCK_COLORS[ROCK_EARTH], &area);
         SDL_FRect bush = {area.x + area.w * 0.12f, area.y + area.h * 0.18f, area.w * 0.76f,
@@ -2803,7 +2816,18 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
                                floorf(area.y + area.h * SPOTS[i][1]), size, size};
             fill(renderer, BERRY_COLOR, &berry);
         }
-        outline(renderer, area, 2.0f, DESIGNATION_COLORS[DESIGNATION_HARVEST]);
+        if (ripe) {
+            /* A check mark in the corner. */
+            SDL_Color mark = DESIGNATION_COLORS[DESIGNATION_HARVEST_RIPE];
+            SDL_SetRenderDrawColor(renderer, mark.r, mark.g, mark.b, 255);
+            float cx = area.x + area.w * 0.74f, cy = area.y + area.h * 0.8f, unit = area.w * 0.1f;
+            for (float d = 0.0f; d < 2.0f; d += 1.0f) {
+                SDL_RenderLine(renderer, cx - 2.0f * unit, cy - unit + d, cx - unit, cy + d);
+                SDL_RenderLine(renderer, cx - unit, cy + d, cx + 2.0f * unit, cy - 3.0f * unit + d);
+            }
+        }
+        outline(renderer, area, 2.0f,
+                DESIGNATION_COLORS[ripe ? DESIGNATION_HARVEST_RIPE : DESIGNATION_HARVEST]);
         break;
     }
     case RENDER_ICON_UPROOT: { /* A plant pulled out of the ground, roots and all. */

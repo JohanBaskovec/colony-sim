@@ -379,19 +379,19 @@ static void test_built_stations_on_their_level(void)
     REQUIRE(init_raised_game(&game));
     Colonist *colonist = spawn_worker(&game, 10, 20, LOW);
     REQUIRE(colonist != NULL);
-    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 16, LOW));
-    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 30, 16, HIGH));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 14, 16, LOW));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 30, 16, HIGH));
     REQUIRE(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 14, 24, LOW));
     CHECK(construction_at(&game.constructions, 14, 16, LOW) != CONSTRUCTION_NONE);
     CHECK(construction_at(&game.constructions, 30, 16, HIGH) != CONSTRUCTION_NONE);
     CHECK_EQ_INT(game.workstations.used_count, 0);
-    items_add(&game.items, 8, 14, LOW, item_stack_pristine(ITEM_COBBLE, 9));
+    items_add(&game.items, 8, 14, LOW, item_stack_pristine(ITEM_COBBLE, 20));
 
-    run_ticks(&game, 6000);
+    run_ticks(&game, 12000);
     CHECK_EQ_INT(game.constructions.workstation_count, 0);
     CHECK_EQ_INT(game.workstations.used_count, 3);
-    station_on(&game, WORKSTATION_KNAPPING_SPOT, 14, 16, LOW);
-    station_on(&game, WORKSTATION_KNAPPING_SPOT, 30, 16, HIGH);
+    station_on(&game, WORKSTATION_OPEN_HEARTH, 14, 16, LOW);
+    station_on(&game, WORKSTATION_OPEN_HEARTH, 30, 16, HIGH);
     station_on(&game, WORKSTATION_OPEN_HEARTH, 14, 24, LOW);
     check_stations_on_their_tiles(&game);
     game_shutdown(&game);
@@ -405,9 +405,9 @@ static void test_crafting_on_a_raised_level(void)
     Colonist *colonist = spawn_worker(&game, 10, 20, LOW);
     REQUIRE(colonist != NULL);
     int index =
-        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 30, 12, HIGH);
+        workstations_place(&game.workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 30, 12, HIGH);
     REQUIRE(index != WORKSTATION_NONE);
-    station_on(&game, WORKSTATION_KNAPPING_SPOT, 30, 12, HIGH);
+    station_on(&game, WORKSTATION_CRAFTING_SPOT, 30, 12, HIGH);
     items_add(&game.items, 12, 20, LOW, item_stack_pristine(ITEM_COBBLE, 1)); /* The hammer. */
     items_add(&game.items, 32, 14, HIGH, item_stack_pristine(ITEM_FLINT, 2));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);

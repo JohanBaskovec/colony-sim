@@ -2339,6 +2339,61 @@ static void test_harvest_and_uproot_orders_are_carried_out(void)
     game_shutdown(&game);
 }
 
+/* Harvest when ripe: a settler leaves a plant that is not fully ripe alone, the order waiting,
+ * and takes its fruit once every one is ripe. */
+static void test_harvest_when_ripe_waits_on_the_plant(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(spawn_rested(&game, 10, 10) != NULL);
+    Plant *bramble = add_bramble(&game.map, 16, 10);
+    REQUIRE(plant_has_food(bramble));
+    plant_take_stock(bramble, 0, 1); /* One berry gone: not fully ripe. */
+    CHECK_EQ_INT(game_designate_rect(&game, 16, 10, 16, 10, 0, DESIGNATION_HARVEST_RIPE), 1);
+    for (int i = 0; i < 600; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(game.designations.count, 1); /* Still waiting. */
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BLACKBERRIES], 0);
+    plant_regrow_stocks(bramble, 24 * 30); /* Ripe. */
+    for (int i = 0; i < 6000 && game.designations.count > 0; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(game.designations.count, 0);
+    const Colonist *colonist = game_colonist(&game, game_colonist_id_at(&game, 0));
+    long berries = game.items.totals[ITEM_BLACKBERRIES] +
+                   (colonist->carried.type == ITEM_BLACKBERRIES ? colonist->carried.count : 0);
+    CHECK(berries > 0);
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 16, 10, 0)].type, PLANT_BRAMBLE);
+    game_shutdown(&game);
+}
+
+/* An order on a plant that goes some other way (a builder clears it for a building site) does
+ * not stay on its tile: it is dropped with nobody there to look at it. */
+static void test_orders_on_plants_that_are_gone_are_dropped(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    /* No settler at all: nobody comes to look at the order. */
+    add_bramble(&game.map, 16, 10);
+    Plant *kept = add_bramble(&game.map, 16, 14);
+    REQUIRE(kept != NULL);
+    CHECK_EQ_INT(game_designate_rect(&game, 16, 10, 16, 10, 0, DESIGNATION_UPROOT), 1);
+    CHECK_EQ_INT(game_designate_rect(&game, 16, 14, 16, 14, 0, DESIGNATION_UPROOT), 1);
+    for (int i = 0; i < 2 * GAME_ORDER_CHECK_INTERVAL; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(game.designations.count, 2);                          /* Both plants are there. */
+    gather_clear_plant(&game.map, &game.items, 16, 10, 0, 75.0, NULL); /* A builder's clearing. */
+    for (int i = 0; i < 2 * GAME_ORDER_CHECK_INTERVAL; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(designation_get(&game.designations, 16, 10, 0), DESIGNATION_NONE);
+    CHECK_EQ_INT(designation_get(&game.designations, 16, 14, 0), DESIGNATION_UPROOT);
+    CHECK_EQ_INT(game.designations.count, 1);
+    game_shutdown(&game);
+}
+
 /* A plant easily mistaken for a poisonous one: only a careful gatherer takes the order. */
 static void test_careful_plants_need_a_careful_gatherer(void)
 {
@@ -2776,6 +2831,8 @@ static void test_move_order_between_tiles_waits_for_the_next(void)
 int main(void)
 {
     RUN_TEST(test_harvest_and_uproot_orders_are_carried_out);
+    RUN_TEST(test_harvest_when_ripe_waits_on_the_plant);
+    RUN_TEST(test_orders_on_plants_that_are_gone_are_dropped);
     RUN_TEST(test_careful_plants_need_a_careful_gatherer);
     RUN_TEST(test_move_order_walks_holds_and_releases);
     RUN_TEST(test_heading_follows_the_walk);

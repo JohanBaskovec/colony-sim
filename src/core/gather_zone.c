@@ -1006,6 +1006,16 @@ static int product_slot_for(const Plant *plant, GatherJob job)
     return -1;
 }
 
+/* Whether a plant is fully ripe for a job that takes what it bears: a full stock, and a plant
+ * that is taken whole (grass cut, roots dug up) fully grown. */
+static bool ripe_for_product(const Plant *plant, GatherJob job)
+{
+    int slot = product_slot_for(plant, job);
+    return slot >= 0 && stock_full(plant, slot) &&
+           (plant_def((PlantType)plant->type)->harvest != PLANT_HARVEST_RESETS ||
+            plant->growth >= 1.0f);
+}
+
 /* Whether a plant is ready for a resource's order: always, unless it waits for
  * the full harvest (a full stock; a plant that is taken whole, grass cut or
  * roots dug up, and trees, fully grown). */
@@ -1016,10 +1026,7 @@ static bool ripe_enough(const GatherZone *zone, GatherResource resource, const P
     }
     GatherJob job = RESOURCE_DEFS[resource].job;
     if (takes_product(job)) {
-        int slot = product_slot_for(plant, job);
-        return slot >= 0 && stock_full(plant, slot) &&
-               (plant_def((PlantType)plant->type)->harvest != PLANT_HARVEST_RESETS ||
-                plant->growth >= 1.0f);
+        return ripe_for_product(plant, job);
     }
     return plant->growth >= 1.0f;
 }
@@ -1552,6 +1559,12 @@ bool gather_plant_harvestable(const Map *map, int x, int y, int z)
 {
     GatherJob job = gather_plant_harvest_job(map, x, y, z);
     return job != GATHER_JOB_NONE && plant_yield(map, x, y, z, job) > 0;
+}
+
+bool gather_plant_ripe(const Map *map, int x, int y, int z)
+{
+    GatherJob job = gather_plant_harvest_job(map, x, y, z);
+    return job != GATHER_JOB_NONE && ripe_for_product(&map->plants[map_index(map, x, y, z)], job);
 }
 
 bool gather_harvest_plant(Map *map, Items *items, int x, int y, int z, double level, Rng *rng)

@@ -388,14 +388,15 @@ static void test_count_stored(void)
     stockpile_create(&s, &map, 10, 10, 10, 10, 0); /* Accepts everything. */
     items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WOOD, 3));
     items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_WOOD, 2));
-    items_add(&items, 3, 3, 0, item_stack_pristine(ITEM_COBBLE, 4)); /* Not accepted. */
-    items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 7));   /* Outside. */
+    items_add(&items, 3, 3, 0,
+              item_stack_pristine(ITEM_COBBLE, 4));                /* Not accepted, still stock. */
+    items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 7)); /* Outside. */
     items_add(&items, 10, 10, 0, item_stack_pristine(ITEM_COBBLE, 1));
     long stored[ITEM_TYPE_COUNT] = {0};
     stored[ITEM_FLINT] = 1; /* Added to, not reset. */
     stockpiles_count_stored(&s, &items, stored);
     CHECK_EQ_INT((int)stored[ITEM_WOOD], 5);
-    CHECK_EQ_INT((int)stored[ITEM_COBBLE], 1);
+    CHECK_EQ_INT((int)stored[ITEM_COBBLE], 5); /* The zone's 4 it does not accept, and 1. */
     CHECK_EQ_INT((int)stored[ITEM_FLINT], 1);
     items_free(&items);
     free_world(&map, &s);

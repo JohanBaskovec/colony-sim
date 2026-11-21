@@ -59,6 +59,7 @@ void new_game_default_params(NewGameParams *params)
 {
     game_default_params(params);
     params->wildlife = GAME_WILDLIFE_DENSITY;
+    params->free_radius = GAME_START_FREE_RADIUS;
     params->world.river.width = NEW_GAME_RIVER_USUAL;
 }
 

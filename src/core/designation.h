@@ -56,6 +56,9 @@ typedef enum DesignationType {
     DESIGNATION_HARVEST,
     /* Pull a plant up (not a tree): what it bears is harvested first. */
     DESIGNATION_UPROOT,
+    /* Harvest, but only once the plant is fully ripe (gather_plant_ripe(): its stock full):
+     * the order waits on the plant until then (designation_waits_to_ripen()). */
+    DESIGNATION_HARVEST_RIPE,
     DESIGNATION_COUNT
 } DesignationType;
 
@@ -134,6 +137,17 @@ bool designation_lets_water_in(const Map *map, DesignationType type, int x, int 
  * carrying it out now would leave a ceiling around without support. */
 bool designation_waits_for_support(const Designations *designations, const Map *map, int x, int y,
                                    int z);
+
+/* Drops the orders on plants (fell, harvest, uproot) whose plant is gone, or has nothing left to
+ * harvest, as when a settler comes to work on them: a builder who cleared the plant for a
+ * building site, a tree fallen, fruit taken by a zone. Without it such an order stays on its
+ * tile until someone happens to look at it. Returns how many were dropped. */
+int designations_drop_void(Designations *designations, const Map *map);
+
+/* Whether the order on the tile is a harvest that waits for the plant to ripen
+ * (DESIGNATION_HARVEST_RIPE on a plant not fully ripe yet): nobody works on it meanwhile. */
+bool designation_waits_to_ripen(const Designations *designations, const Map *map, int x, int y,
+                                int z);
 
 /* Whether the order on the tile touches something the player forbade (see
  * map_forbidden()): the structure or roof to take apart, the tree to fell,

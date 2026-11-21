@@ -557,6 +557,53 @@ static void test_harvest_and_uproot_orders(void)
     free_world(&map, &d);
 }
 
+/* Harvest when ripe: it can be set on a plant that bears too little now, and waits there until
+ * every fruit is ripe, then harvests like the plain order. */
+static void test_harvest_when_ripe_waits_for_the_ripening(void)
+{
+    Map map;
+    Designations d;
+    Items items;
+    REQUIRE(init_world(&map, &d));
+    REQUIRE(items_init(&items, 16, 16, 1));
+    int autumn = SEASON_DAY(SEASON_AUTUMN, 4);
+    Plant *bramble = &map.plants[map_index(&map, 8, 8, 0)];
+    *bramble = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
+    plant_settle(bramble, autumn);
+    int full = plant_stock_available(bramble, 0);
+    REQUIRE(full > 1);
+    CHECK(gather_plant_ripe(&map, 8, 8, 0));
+    CHECK(!gather_plant_ripe(&map, 3, 3, 0));   /* A tree. */
+    CHECK(!gather_plant_ripe(&map, 12, 12, 0)); /* Nothing. */
+    CHECK(!designation_can_apply(&map, 3, 3, 0, DESIGNATION_HARVEST_RIPE));
+    CHECK(!designation_can_apply(&map, 12, 12, 0, DESIGNATION_HARVEST_RIPE));
+    CHECK_EQ_INT(designation_def(DESIGNATION_HARVEST_RIPE)->work_type, WORK_GATHERING);
+
+    /* Some berries picked: not ripe, yet the order can be given, and waits. */
+    plant_take_stock(bramble, 0, 1);
+    CHECK(!gather_plant_ripe(&map, 8, 8, 0));
+    CHECK(gather_plant_harvestable(&map, 8, 8, 0)); /* The plain order would take them now. */
+    REQUIRE(designation_set(&d, &map, 8, 8, 0, DESIGNATION_HARVEST_RIPE));
+    CHECK(designation_waits_to_ripen(&d, &map, 8, 8, 0));
+    CHECK(!designation_waits_for_support(&d, &map, 8, 8, 0));
+    CHECK_NEAR(designation_min_level_at(&map, 8, 8, 0, DESIGNATION_HARVEST_RIPE),
+               KNOWLEDGE_MASTERY_LEVEL, 1e-6);
+
+    /* Ripe again: the order is workable, and carried out like a harvest. */
+    plant_regrow_stocks(bramble, 24 * 30);
+    REQUIRE(gather_plant_ripe(&map, 8, 8, 0));
+    CHECK(!designation_waits_to_ripen(&d, &map, 8, 8, 0));
+    CHECK(designation_work_needed(&d, &map, 8, 8, 0) > 0.0f);
+    CHECK(designation_add_work(&d, &map, &items, 8, 8, 0, 1e6f, 60.0, NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_BLACKBERRIES], full);
+    CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE);
+    CHECK_EQ_INT(designation_get(&d, 8, 8, 0), DESIGNATION_NONE);
+    /* Other orders never wait to ripen. */
+    CHECK(!designation_waits_to_ripen(&d, &map, 8, 8, 0));
+    items_free(&items);
+    free_world(&map, &d);
+}
+
 /* The warning before digging into water goes by the block each order digs
  * out: the tile itself, the block under it for a hole dug down. */
 static void test_orders_that_let_water_in(void)
@@ -587,6 +634,7 @@ static void test_orders_that_let_water_in(void)
 int main(void)
 {
     RUN_TEST(test_harvest_and_uproot_orders);
+    RUN_TEST(test_harvest_when_ripe_waits_for_the_ripening);
     RUN_TEST(test_init_rejects_invalid_sizes);
     RUN_TEST(test_orders_need_a_valid_target);
     RUN_TEST(test_rectangle_only_marks_valid_tiles);

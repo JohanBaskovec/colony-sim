@@ -780,6 +780,9 @@ static void build_tile_panel(App *app, Panel *panel)
         if (designation_waits_for_support(&app->game.designations, map, x, y, z)) {
             panel_add_text(panel, tr("hud.tile.needs_support"));
         }
+        if (designation_waits_to_ripen(&app->game.designations, map, x, y, z)) {
+            panel_add_text(panel, tr("hud.tile.waits_to_ripen"));
+        }
     }
 
     int dirt = dirt_at(game_view_dirt(&app->game), x, y, z);

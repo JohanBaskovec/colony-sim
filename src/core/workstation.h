@@ -1,6 +1,6 @@
 /*
- * Workstations: places where settlers make things (crafting spot, knapping
- * spot, open hearth), and the bills the player gives them. A hearth also
+ * Workstations: places where settlers make things (crafting spot, open
+ * hearth), and the bills the player gives them. A hearth also
  * holds a fire: its fuel, whether it burns, what the player wants of it (see
  * core/hearth.h); it is worked from a neighboring tile.
  *
@@ -29,6 +29,7 @@
 #include "core/pool.h"
 #include "core/recipe.h"
 #include "core/rng.h"
+#include "core/stockpile.h"
 #include "core/structure.h"
 #include "core/work.h"
 
@@ -37,7 +38,6 @@
 
 typedef enum WorkstationType {
     WORKSTATION_CRAFTING_SPOT,
-    WORKSTATION_KNAPPING_SPOT,
     WORKSTATION_OPEN_HEARTH,
     WORKSTATION_TYPE_COUNT
 } WorkstationType;
@@ -194,6 +194,22 @@ int workstation_at(const Workstations *workstations, int x, int y, int z);
 /* NULL for an unused or invalid index. */
 Workstation *workstation_get(Workstations *workstations, int index);
 const Workstation *workstation_get_const(const Workstations *workstations, int index);
+
+/*
+ * The work zone of a station: its tile and the eight around it, on its level.
+ * Settlers at the station use the tools and ingredients lying there without
+ * walking, and what lies there counts in the colony's stock (as in a stockpile
+ * that takes nothing: nothing is stored there on purpose, so that a bill
+ * "until N in stock" stops once its products lie by the station).
+ */
+#define WORKSTATION_ZONE_REACH 1
+bool workstation_zone_contains(const Workstation *station, int x, int y, int z);
+
+/* Adds to `stored` (per item type) the items lying in the work zones of the
+ * stations, apart from the tiles of a stockpile (counted with it:
+ * stockpiles_count_stored()); a tile in two zones counts once. */
+void workstations_count_stored(const Workstations *workstations, const Stockpiles *stockpiles,
+                               const Items *items, long stored[ITEM_TYPE_COUNT]);
 
 /* Whether a station may be placed here: passable, buildable ground (not a
  * slope, see map_is_buildable()), no tree (grass and bushes are cleared by

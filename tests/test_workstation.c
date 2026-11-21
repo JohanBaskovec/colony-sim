@@ -45,10 +45,13 @@ static void test_definitions(void)
     }
     CHECK(workstation_def(WORKSTATION_TYPE_COUNT) == NULL);
     CHECK(!workstation_needs_construction(WORKSTATION_TYPE_COUNT));
-    /* Anyone can set up a crafting spot, with nothing: the chain can start. */
+    /* Anyone can set up a crafting spot, with nothing (knapping and woodwork both
+     * are done there): the chain can start. */
     CHECK(!workstation_needs_construction(WORKSTATION_CRAFTING_SPOT));
     CHECK_EQ_INT(workstation_def(WORKSTATION_CRAFTING_SPOT)->knowledge, KNOWLEDGE_NONE);
-    CHECK_EQ_INT(workstation_def(WORKSTATION_KNAPPING_SPOT)->materials[0].type, ITEM_COBBLE);
+    CHECK_EQ_INT(workstation_def(WORKSTATION_CRAFTING_SPOT)->materials[0].type, ITEM_NONE);
+    CHECK(recipe_def(RECIPE_FLAKES)->stations & WORKSTATION_BIT(WORKSTATION_CRAFTING_SPOT));
+    CHECK(recipe_def(RECIPE_THROWING_SPEAR)->stations & WORKSTATION_BIT(WORKSTATION_CRAFTING_SPOT));
     /* A hearth is a pit ringed with six stones, built by a settler, and
      * holds a fire. */
     CHECK(workstation_needs_construction(WORKSTATION_OPEN_HEARTH));
@@ -73,7 +76,7 @@ static void test_placing_and_removing(void)
     map.plants[map_index(&map, 9, 8, 0)] = (Plant){.type = PLANT_BRAMBLE, .growth = 1.0f};
     CHECK(!workstation_can_place(&stations, &map, 8, 8, 0));
     CHECK(workstation_can_place(&stations, &map, 9, 8, 0));
-    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+    int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     REQUIRE(index != WORKSTATION_NONE);
     CHECK_EQ_INT(workstation_at(&stations, 3, 4, 0), index);
     CHECK_EQ_INT(workstation_at(&stations, 4, 4, 0), WORKSTATION_NONE);
@@ -84,7 +87,7 @@ static void test_placing_and_removing(void)
     REQUIRE(station != NULL);
     CHECK_EQ_INT(stations.used_count, 1);
 
-    /* The anvil stone is part of the station: nothing comes back. */
+    /* A spot is made of nothing: nothing comes back. */
     ItemStack returned[1];
     int number = station->number;
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
@@ -106,12 +109,14 @@ static void test_bills(void)
     Workstations stations;
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
-    int knapping = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
-    int crafting = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 8, 8, 0);
-    /* Recipes go to their own stations. */
-    CHECK_EQ_INT(workstation_add_bill(&stations, crafting, RECIPE_FLAKES), -1);
-    CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_THROWING_SPEAR), -1);
-    CHECK_EQ_INT(workstation_add_bill(&stations, crafting, RECIPE_THROWING_SPEAR), 0);
+    int knapping = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
+    int hearth = workstations_place(&stations, &map, WORKSTATION_OPEN_HEARTH, 8, 8, 0);
+    /* Recipes go to their own stations: knapping and woodwork to the crafting spot, the
+     * fire's to the hearth. */
+    CHECK_EQ_INT(workstation_add_bill(&stations, hearth, RECIPE_FLAKES), -1);
+    CHECK_EQ_INT(workstation_add_bill(&stations, hearth, RECIPE_THROWING_SPEAR), -1);
+    CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_ROAST_CARROTS), -1);
+    CHECK_EQ_INT(workstation_add_bill(&stations, hearth, RECIPE_ROAST_CARROTS), 0);
     CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_COUNT), -1);
 
     int bill = workstation_add_bill(&stations, knapping, RECIPE_FLAKES);
@@ -272,7 +277,7 @@ static void test_bill_drafts(void)
     CHECK_EQ_UINT(bill->inputs, ITEM_TYPE_BIT(ITEM_BRANCHES));
     CHECK_EQ_INT(bill->worker, BILL_WORKER_ANYONE);
     /* Another kind of station's recipe is refused. */
-    REQUIRE(bill_init(&draft, RECIPE_FLAKES));
+    REQUIRE(bill_init(&draft, RECIPE_ROAST_CARROTS));
     CHECK_EQ_INT(workstation_add_bill_from(&stations, crafting, &draft), -1);
     free_world(&map, &stations, &items);
 }
@@ -283,7 +288,7 @@ static void test_crafting(void)
     Workstations stations;
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
-    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+    int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
     ItemStack flint = item_stack_make(ITEM_FLINT, 1, TEST_QUALITY_FINE, 0);
 
@@ -321,7 +326,7 @@ static void test_crafting_with_a_load(void)
     Workstations stations;
     Items items;
     REQUIRE(init_world(&map, &stations, &items));
-    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+    int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
 
     /* A settler's load put down: the station holds its item until used up. */
@@ -391,10 +396,47 @@ static void test_bill_inputs_after_tools(void)
     CHECK(!bill_has_input(&bill, totals, none));
 }
 
+/* The work zone is the station's tile and the eight around it, on its level. */
+static void test_work_zones(void)
+{
+    Map map;
+    Workstations stations;
+    Items items;
+    REQUIRE(init_world(&map, &stations, &items));
+    int a = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
+    REQUIRE(a != WORKSTATION_NONE);
+    const Workstation *station = workstation_get_const(&stations, a);
+    CHECK(workstation_zone_contains(station, 3, 4, 0));
+    CHECK(workstation_zone_contains(station, 2, 3, 0));
+    CHECK(workstation_zone_contains(station, 4, 5, 0));
+    CHECK(!workstation_zone_contains(station, 5, 4, 0));
+    CHECK(!workstation_zone_contains(station, 3, 6, 0));
+    CHECK(!workstation_zone_contains(station, 3, 4, 1)); /* Another level. */
+
+    /* What lies in the zones counts once, stockpile tiles apart (they count with their own). */
+    int b = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 5, 3, 0);
+    REQUIRE(b != WORKSTATION_NONE);
+    Stockpiles piles;
+    REQUIRE(stockpiles_init(&piles, 16, 16, 1));
+    REQUIRE(stockpile_create(&piles, &map, 2, 5, 2, 5, 0) != STOCKPILE_NONE);
+    items_add(&items, 3, 4, 0, item_stack_pristine(ITEM_FLAKE, 1));  /* On the station. */
+    items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_FLAKE, 2));  /* In both zones. */
+    items_add(&items, 2, 5, 0, item_stack_pristine(ITEM_FLAKE, 4));  /* On a stockpile tile. */
+    items_add(&items, 6, 2, 0, item_stack_pristine(ITEM_FLAKE, 8));  /* In the second zone. */
+    items_add(&items, 9, 9, 0, item_stack_pristine(ITEM_FLAKE, 16)); /* Out of both. */
+    long stored[ITEM_TYPE_COUNT] = {0};
+    stored[ITEM_FLAKE] = 100; /* Added to. */
+    workstations_count_stored(&stations, &piles, &items, stored);
+    CHECK_EQ_INT((int)stored[ITEM_FLAKE], 100 + 1 + 2 + 8);
+    stockpiles_free(&piles);
+    free_world(&map, &stations, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
     RUN_TEST(test_placing_and_removing);
+    RUN_TEST(test_work_zones);
     RUN_TEST(test_bills);
     RUN_TEST(test_bill_drafts);
     RUN_TEST(test_crafting);

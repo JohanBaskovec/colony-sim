@@ -93,7 +93,7 @@ static void test_instant_build(void)
             CONSTRUCTION_NONE);
     REQUIRE(game_place_structure(&game, STRUCTURE_GRASS_BED, 10, 14, 0, DIRECTION_EAST) !=
             CONSTRUCTION_NONE);
-    REQUIRE(game_place_workstation(&game, WORKSTATION_KNAPPING_SPOT, 14, 10, 0));
+    REQUIRE(game_place_workstation(&game, WORKSTATION_OPEN_HEARTH, 14, 10, 0));
     REQUIRE(construction_at(&game.constructions, 14, 10, 0) != CONSTRUCTION_NONE);
     /* A roof planned over a wall's site, then left with nothing to rest on. */
     int wall = game_place_structure(&game, STRUCTURE_WALL, 31, 30, 0, DIRECTION_EAST);
@@ -177,7 +177,7 @@ static int knapping_without_flint(Game *game, Colonist **knapper)
     colonist_set_knowledge_level(*knapper, KNOWLEDGE_STONE_KNAPPING, 95.0);
     colonist_add_tool(*knapper, item_stack_pristine(ITEM_COBBLE, 1));
     int index =
-        workstations_place(&game->workstations, &game->map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
+        workstations_place(&game->workstations, &game->map, WORKSTATION_CRAFTING_SPOT, 14, 10, 0);
     workstation_add_bill(&game->workstations, index, RECIPE_HAND_AXE);
     return index;
 }
@@ -239,14 +239,14 @@ static void test_free_input_is_not_given_back(void)
     REQUIRE(workstations_init(&stations, 16, 16, 1));
     Map map;
     REQUIRE(map_init(&map, 16, 16, 1));
-    int index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 2, 2, 0);
+    int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 2, 2, 0);
     REQUIRE(workstation_add_bill(&stations, index, RECIPE_HAND_AXE) == 0);
     REQUIRE(workstation_start_free_craft(&stations, index, 0));
     CHECK(stations.list[index].free_input);
     CHECK(!workstation_start_free_craft(&stations, index, 0)); /* Already one. */
     ItemStack returned[1];
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
-    index = workstations_place(&stations, &map, WORKSTATION_KNAPPING_SPOT, 2, 2, 0);
+    index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 2, 2, 0);
     workstation_add_bill(&stations, index, RECIPE_HAND_AXE);
     REQUIRE(workstation_start_craft(&stations, index, RECIPE_HAND_AXE,
                                     item_stack_pristine(ITEM_FLINT, 1)));
@@ -266,7 +266,7 @@ static void test_no_tools(void)
     REQUIRE(knapper != NULL);
     colonist_set_knowledge_level(knapper, KNOWLEDGE_STONE_KNAPPING, 95.0);
     int index =
-        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
+        workstations_place(&game.workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 14, 10, 0);
     workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     items_add(&game.items, 16, 10, 0, item_stack_pristine(ITEM_FLINT, 3));
     CHECK(game_recipe_missing_tools(&game, RECIPE_HAND_AXE) != 0);

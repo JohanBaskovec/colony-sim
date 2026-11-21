@@ -223,6 +223,7 @@ typedef enum RenderIcon {
     RENDER_ICON_CHOP,
     RENDER_ICON_DECONSTRUCT,
     RENDER_ICON_HARVEST,
+    RENDER_ICON_HARVEST_RIPE, /* The same, all its berries ripe, with a check mark. */
     RENDER_ICON_UPROOT,
     RENDER_ICON_FORBID, /* The "no entry" sign. */
     RENDER_ICON_ALLOW,

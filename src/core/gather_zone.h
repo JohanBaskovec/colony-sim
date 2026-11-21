@@ -513,6 +513,11 @@ GatherJob gather_plant_harvest_job(const Map *map, int x, int y, int z);
  * grown enough to cut: a stock to take). */
 bool gather_plant_harvestable(const Map *map, int x, int y, int z);
 
+/* Whether the plant on a tile is fully ripe for its harvest: a full stock (every fruit ripe,
+ * every armful grown), and a plant taken whole fully grown. The Harvest-when-ripe order
+ * waits for it. False where there is nothing to harvest. */
+bool gather_plant_ripe(const Map *map, int x, int y, int z);
+
 /* Takes what the plant gives (gather_plant_harvest_job()) and drops it on
  * the tile with quality from the worker's `level`; `rng` may be NULL. False
  * when there is nothing to harvest. */

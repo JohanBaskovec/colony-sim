@@ -168,9 +168,10 @@ static const char *mode_label(char *out, size_t size, const Bill *bill)
     return out;
 }
 
-/* Mode button, -/+ for the target, and how far the bill has got. */
+/* Mode button, -/+ for the target, and how far the bill has got (not for the draft of a bill
+ * to add, which has done nothing yet), `indent` from the left. */
 static void bill_mode_row(UiLayout *layout, const Game *game, const Bill *bill, int index,
-                          Action *action)
+                          float indent, Action *action)
 {
     Ui *ui = layout->ui;
     char mode[TEXT_SIZE], progress[TEXT_SIZE] = "", number[16];
@@ -179,7 +180,9 @@ static void bill_mode_row(UiLayout *layout, const Game *game, const Bill *bill, 
     const char *minus = "−", *plus = "+";
     float small = SDL_max(ui_button_width(ui, minus), ui_button_width(ui, plus));
     bool has_target = bill->mode != BILL_FOREVER;
-    if (bill->mode == BILL_DO_TIMES) {
+    if (index == DRAFT_BILL) {
+        /* Nothing done yet. */
+    } else if (bill->mode == BILL_DO_TIMES) {
         tr_integer(number, sizeof(number), bill->done);
         TR_FORMAT(progress, sizeof(progress), tr("bill.progress.done"), number);
     } else if (bill->mode == BILL_UNTIL_STOCK) {
@@ -187,8 +190,8 @@ static void bill_mode_row(UiLayout *layout, const Game *game, const Bill *bill, 
         tr_integer(number, sizeof(number), game->stock[def->product]);
         TR_FORMAT(progress, sizeof(progress), tr("bill.progress.in_stock"), number);
     }
-    float x = layout->x + INDENT;
-    float width = INDENT + ui_button_width(ui, mode) + GAP;
+    float x = layout->x + indent;
+    float width = indent + ui_button_width(ui, mode) + GAP;
     if (has_target) {
         width += 2.0f * small + 2.0f + GAP;
     }
@@ -853,7 +856,7 @@ static void bills_rows_of(UiLayout *layout, StationRows *rows, const Workstation
             }
         }
         bill_header_row(layout, game, station, bill, i, action);
-        bill_mode_row(layout, game, bill, i, action);
+        bill_mode_row(layout, game, bill, i, INDENT, action);
         /* After the buttons, which take the clicks that are theirs. */
         if (layout->draw && ui_take_click(ui, block) == SDL_BUTTON_LEFT) {
             *action = (Action){.type = ACTION_PICK_BILL, .bill = i};
@@ -871,6 +874,9 @@ static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workst
                                const Bill *bill, int index)
 {
     const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    item_info_heading(layout, "bill.heading.goal");
+    bill_mode_row(layout, rows->game, bill, index, 0.0f, &rows->action);
+    layout->y += GAP;
     item_info_heading(layout, "station.recipe.ingredients");
     bill_ingredients_row(layout, rows->game, bill);
     layout->y += GAP;
@@ -1427,6 +1433,10 @@ static void edit_draft(App *app, const Action *action)
     case ACTION_SET_QUALITY: bill_set_quality_range(draft, action->value, action->value2); break;
     case ACTION_SET_WOODS: bill_set_woods(draft, (WoodMask)action->value); break;
     case ACTION_SET_RADIUS: bill_set_input_radius(draft, action->value); break;
+    case ACTION_CYCLE_MODE:
+        bill_set_mode(draft, (BillMode)((draft->mode + 1) % BILL_MODE_COUNT));
+        break;
+    case ACTION_ADD_TARGET: bill_set_target(draft, draft->target + action->value); break;
     default: break;
     }
 }

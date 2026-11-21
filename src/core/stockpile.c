@@ -5,10 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Groups of a tile counted as stored (a stockpile tile holds one, more only
- * when items were dropped there). */
-#define STOCKPILE_GROUPS_COUNTED 8
-
 bool stockpiles_init(Stockpiles *stockpiles, int width, int height, int depth)
 {
     memset(stockpiles, 0, sizeof(*stockpiles));
@@ -524,9 +520,7 @@ void stockpiles_count_stored(const Stockpiles *stockpiles, const Items *items,
                     ItemStack groups[STOCKPILE_GROUPS_COUNTED];
                     int count = items_groups(items, x, y, z, groups, STOCKPILE_GROUPS_COUNTED);
                     for (int i = 0; i < count; i++) {
-                        if (stockpile_accepts(stockpile, groups[i])) {
-                            stored[groups[i].type] += groups[i].count;
-                        }
+                        stored[groups[i].type] += groups[i].count;
                     }
                 }
             }

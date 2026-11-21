@@ -127,8 +127,15 @@ typedef struct GameDebug {
     bool instant_fell_and_mine;
 } GameDebug;
 
+/* Ticks between looks for orders on plants that are gone (designations_drop_void()). */
+#define GAME_ORDER_CHECK_INTERVAL 30
+
 /* The density of wild animals in a game as played (NewGameParams.wildlife). */
 #define GAME_WILDLIFE_DENSITY 1.0f
+
+/* Tiles around the arrival point where the items lie allowed at the start of a game as played
+ * (NewGameParams.free_radius). */
+#define GAME_START_FREE_RADIUS 10
 
 typedef struct NewGameParams {
     WorldGenParams world;
@@ -138,6 +145,11 @@ typedef struct NewGameParams {
      * played). 0, the default: none, as for tests and benchmarks that are
      * not about them. */
     float wildlife;
+    /* Items start forbidden (nobody fetches them) beyond this many tiles of the arrival point,
+     * so that settlers do not walk across the map for materials; those within it start
+     * allowed. 0, the default: none forbidden (tests and benchmarks). GAME_START_FREE_RADIUS
+     * in a game as played. */
+    int free_radius;
 } NewGameParams;
 
 typedef struct Game {
@@ -150,7 +162,7 @@ typedef struct Game {
     Crowns crowns;               /* What hangs in the trees: fruit, dead wood (Map.crowns). */
     Corpses corpses;             /* Records of the settlers who died (bodies point at them). */
     Stockpiles stockpiles;       /* Storage zones drawn by the player. */
-    Workstations workstations;   /* Crafting spots, knapping spots... and their bills. */
+    Workstations workstations;   /* Crafting spots, hearths and their bills. */
     Constructions constructions; /* Blueprints of beds, walls, doors... being built. */
     Beds beds;                   /* Who owns which bed. */
     Reservations reservations;   /* Who is busy with which job or food. */
@@ -233,10 +245,11 @@ typedef struct Game {
      * sight while they do (MAP_DOOR_PASSING), not part of game_hash(). */
     uint32_t passing_doors[OCCUPANCY_BEINGS];
     int passing_door_count;
-    /* Items in stock per type: what lies in a stockpile that accepts them (what
-     * "until N in stock" bills, gathering zones that gather until N and the food
-     * alert count; the resources list shows it too). Items on a workstation, carried
-     * or on the ground are not in stock. Refreshed by game_update_stock() at
+    /* Items in stock per type: what lies on a stockpile tile (accepted there or not) or
+     * in the work zone of a station (its tile and the eight around: what "until N in
+     * stock" bills, gathering zones that gather until N and the food alert count; the
+     * resources list shows it too). Items carried or on the ground elsewhere are not in
+     * stock. Refreshed by game_update_stock() at
      * the start of each tick while some bill counts it, every GAME_STOCK_INTERVAL
      * ticks otherwise; not part of game_hash(). */
     long stock[ITEM_TYPE_COUNT];
@@ -961,7 +974,8 @@ bool game_structure_buildable(const Game *game, StructureType type);
 int game_build_level(const Game *game, int x, int y, int shown, bool roof);
 
 /* Whether a structure may be planned with its head at (x, y), facing
- * `direction`: every tile it would take is off stockpiles and workstations,
+ * `direction`: every tile it would take is off workstations (a stockpile or
+ * a gathering zone does not stop it: placed, it takes its tiles out of them),
  * and passes construction_can_replace_structure() (sites in the way do not
  * count, but the very same plan already there does), roofs on the open tile
  * over the walls. */

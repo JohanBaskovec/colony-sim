@@ -2118,6 +2118,7 @@ static bool is_open_job(const WorkSearch *search, int x, int y, int z)
             !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
             !colonist_can_do_at(search->worker, search->map, x, y, z, type) ||
             designation_waits_for_support(search->designations, search->map, x, y, z) ||
+            designation_waits_to_ripen(search->designations, search->map, x, y, z) ||
             designation_forbidden(search->designations, search->map, x, y, z)) {
             return false;
         }
@@ -3096,6 +3097,10 @@ static void work(Colonist *colonist, const ColonistContext *context)
         set_idle(colonist, context, 0); /* A support went: the order waits. */
         return;
     }
+    if (designation_waits_to_ripen(designations, context->map, target.x, target.y, target.z)) {
+        set_idle(colonist, context, 0); /* Not ripe (any more): the order waits. */
+        return;
+    }
     if (!designation_can_apply(context->map, target.x, target.y, target.z, type) ||
         !designation_ground_free(context->constructions, context->workstations, context->stockpiles,
                                  type, target.x, target.y, target.z)) {
@@ -3527,6 +3532,7 @@ static ToolUse job_tool_use(const Colonist *colonist, const Map *map, bool *fetc
     if (colonist->gathering) {
         job = (GatherJob)colonist->work_type;
     } else if (colonist->work_type == DESIGNATION_HARVEST ||
+               colonist->work_type == DESIGNATION_HARVEST_RIPE ||
                colonist->work_type == DESIGNATION_UPROOT) {
         /* A gatherer's work on a single plant: as a zone's. */
         job = gather_plant_harvest_job(map, colonist->target.x, colonist->target.y,
@@ -3625,6 +3631,128 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
     }
 }
 
+static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TilePos tile, bool tool,
+                       ItemTypeMask only);
+
+/* Whether the colonist stands where the station is worked from: on its tile, beside a hearth. */
+static bool at_station_spot(const Colonist *colonist, const Workstation *station)
+{
+    TilePos tile = station_tile(station);
+    return hearth_is(station)
+               ? next_to(colonist->x, colonist->y, colonist->z, tile)
+               : colonist->x == tile.x && colonist->y == tile.y && colonist->z == tile.z;
+}
+
+/* Whether the craft still lacks a tool (not with the cheat no_tools) or its input, which
+ * only a station with no craft under way asks for (nor with the cheat free_crafts). */
+static bool craft_lacks(const Colonist *colonist, const ColonistContext *context,
+                        const Workstation *station, const RecipeDef *def)
+{
+    for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
+        if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
+            return true;
+        }
+    }
+    return station->work_input.count == 0 && !context->free_crafts &&
+           colonist->carried.count < def->input_count;
+}
+
+/* Whether the work zone of the station has this tile free to take from. */
+static bool zone_tile_open(const ColonistContext *context, const Items *items, int x, int y, int z)
+{
+    return !items_forbidden(items, x, y, z) &&
+           !reservations_taken_by_other(context->reservations, RESERVATION_HAUL_SOURCE,
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        context->worker_id);
+}
+
+/*
+ * What the work zone of the station (its tile and the eight around, core/workstation.h) holds
+ * for the craft of the colonist, taken without walking: the tools it lacks, a better tool
+ * than the one in hand, then the input. With `take` false nothing is touched (on the known
+ * items: the colonist is not there yet) and the answer is whether there is something to take.
+ */
+static bool zone_take(Colonist *colonist, const ColonistContext *context,
+                      const Workstation *station, bool take)
+{
+    const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
+    const Bill *bill = &station->bills[colonist->bill];
+    const Items *items = take ? context->items : context->plan_items;
+    bool found = false;
+    for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
+        if (def->tools[slot] == 0) {
+            continue;
+        }
+        bool lacking = colonist_tool_index(colonist, def->tools[slot]) < 0;
+        /* Lacking: any tool of the kind will do; else only a better one, and not while a
+         * craft is under way. */
+        int index = lacking ? -1 : working_tool(colonist, def->tool_use, def->tools[slot], true);
+        if (!lacking && (index < 0 || station->work_input.count > 0)) {
+            continue;
+        }
+        float better = index >= 0 ? tool_speed_factor(def->tool_use, colonist->tools[index]) : 0.0f;
+        ItemStack best = {.type = ITEM_NONE};
+        TilePos at = {0, 0, station->z};
+        for (int dy = -WORKSTATION_ZONE_REACH; dy <= WORKSTATION_ZONE_REACH; dy++) {
+            for (int dx = -WORKSTATION_ZONE_REACH; dx <= WORKSTATION_ZONE_REACH; dx++) {
+                int x = station->x + dx, y = station->y + dy;
+                if (x < 0 || y < 0 || x >= items->width || y >= items->height ||
+                    !zone_tile_open(context, items, x, y, station->z)) {
+                    continue;
+                }
+                ItemStack stack = best_tool_at(items, x, y, station->z, def->tool_use);
+                if (stack.type != ITEM_NONE && (def->tools[slot] & ITEM_TYPE_BIT(stack.type)) &&
+                    tool_speed_factor(def->tool_use, stack) > better) {
+                    best = stack;
+                    better = tool_speed_factor(def->tool_use, stack);
+                    at = (TilePos){(int16_t)x, (int16_t)y, station->z};
+                }
+            }
+        }
+        if (best.type == ITEM_NONE) {
+            continue;
+        }
+        if (!take) {
+            return true;
+        }
+        found |= pick_up_at(colonist, context, at, true, ITEM_TYPE_BIT(best.type));
+    }
+    if (station->work_input.count > 0 || context->free_crafts ||
+        colonist->carried.count >= def->input_count) {
+        return found;
+    }
+    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        ItemType type = def->inputs[i];
+        if (type == ITEM_NONE || !(bill->inputs & ITEM_TYPE_BIT(type)) || bill->input_radius == 0) {
+            continue;
+        }
+        ItemChoice choice = bill_choice(bill, type);
+        int need = def->input_count - (int)colonist->carried.count;
+        for (int dy = -WORKSTATION_ZONE_REACH; dy <= WORKSTATION_ZONE_REACH; dy++) {
+            for (int dx = -WORKSTATION_ZONE_REACH; dx <= WORKSTATION_ZONE_REACH; dx++) {
+                int x = station->x + dx, y = station->y + dy;
+                if (x < 0 || y < 0 || x >= items->width || y >= items->height ||
+                    !zone_tile_open(context, items, x, y, station->z) ||
+                    items_count_chosen(items, x, y, station->z, type, choice) < need) {
+                    continue;
+                }
+                ItemStack stack = items_get_allowed_of_woods(items, x, y, station->z,
+                                                             ITEM_TYPE_BIT(type), bill->woods);
+                if (stack.type != type ||
+                    (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
+                    continue;
+                }
+                if (!take) {
+                    return true;
+                }
+                TilePos at = {(int16_t)x, (int16_t)y, station->z};
+                return pick_up_at(colonist, context, at, false, ITEM_TYPE_BIT(type)) || found;
+            }
+        }
+    }
+    return found;
+}
+
 /* Chooses the next step of a craft: fetch what is still missing (tools
  * first, then the input), else go to the station. Returns false when
  * something is missing and cannot be found. */
@@ -3636,6 +3764,12 @@ static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
     }
     const Bill *bill = &station->bills[colonist->bill];
     const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
+    if (at_station_spot(colonist, station)) {
+        /* What lies around the station is used where one stands. */
+        zone_take(colonist, context, station, true);
+    } else if (zone_take(colonist, context, station, false)) {
+        return go_to_station(colonist, context, station); /* To take it there first. */
+    }
     for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
         if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
             FetchSearch search = fetch_search(context, def->tools[slot]);
@@ -3726,8 +3860,11 @@ static ItemTypeMask recipe_tools(const RecipeDef *def)
     return tools;
 }
 
-/* At the stack being fetched: takes a tool, or the input of the craft. */
-static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
+/* From the stack on a tile (where the colonist stands, or in the work zone of the
+ * station): takes a tool (`tool`), or the input of the craft, of the types in `only`
+ * (all the recipe has: 0). */
+static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TilePos tile, bool tool,
+                       ItemTypeMask only)
 {
     const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
     if (def == NULL) {
@@ -3735,7 +3872,7 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
     }
     const Workstation *station = job_station(colonist, context);
     ItemTypeMask wanted_types = 0;
-    if (colonist->fetch_tool) {
+    if (tool) {
         for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
             wanted_types |= def->tools[slot];
         }
@@ -3751,12 +3888,14 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
             }
         }
     }
-    ItemStack stack =
-        items_get_allowed_of(context->items, colonist->x, colonist->y, colonist->z, wanted_types);
+    if (only != 0) {
+        wanted_types &= only;
+    }
+    ItemStack stack = items_get_allowed_of(context->items, tile.x, tile.y, tile.z, wanted_types);
     if (stack.type == ITEM_NONE) {
         return false;
     }
-    if (colonist->fetch_tool) {
+    if (tool) {
         ItemTypeMask tools = wanted_types;
         int carried = colonist_tool_index(colonist, ITEM_TYPE_BIT(stack.type));
         ToolUse use = def != NULL ? def->tool_use : TOOL_USE_NONE;
@@ -3767,10 +3906,9 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
             !colonist_swap_tool(colonist, stack, &replaced)) {
             return false;
         }
-        items_take_group(context->items, colonist->x, colonist->y, colonist->z, stack, 1);
+        items_take_group(context->items, tile.x, tile.y, tile.z, stack, 1);
         if (replaced.count > 0) {
-            items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z,
-                       replaced);
+            items_drop(context->items, context->map, tile.x, tile.y, tile.z, replaced);
         }
         colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, recipe_tools(def));
         return true;
@@ -3788,9 +3926,15 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
     ItemChoice choice = station != NULL && colonist->bill < station->bill_count
                             ? bill_choice(&station->bills[colonist->bill], (ItemType)stack.type)
                             : ITEM_CHOICE_ANY;
-    return items_pick_up_chosen(context->items, colonist->x, colonist->y, colonist->z,
-                                (ItemType)stack.type, stack.count < wanted ? stack.count : wanted,
-                                choice, &colonist->carried) > 0;
+    return items_pick_up_chosen(context->items, tile.x, tile.y, tile.z, (ItemType)stack.type,
+                                stack.count < wanted ? stack.count : wanted, choice,
+                                &colonist->carried) > 0;
+}
+
+/* At the stack being fetched: takes a tool, or the input of the craft. */
+static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
+{
+    return pick_up_at(colonist, context, current_tile(colonist), colonist->fetch_tool, 0);
 }
 
 /* Arrived at the station: puts the input down, then starts working. */
@@ -3798,6 +3942,12 @@ static bool arrive_at_station(Colonist *colonist, const ColonistContext *context
 {
     Workstations *workstations = context->workstations;
     Workstation *station = job_station(colonist, context);
+    /* What lies around the station is taken where one stands; what is still missing is
+     * fetched from farther. */
+    zone_take(colonist, context, station, true);
+    if (craft_lacks(colonist, context, station, recipe_def((RecipeType)colonist->recipe))) {
+        return plan_station_job(colonist, context);
+    }
     if (station->work_input.count == 0) {
         if (context->free_crafts &&
             colonist->carried.count < recipe_def((RecipeType)colonist->recipe)->input_count) {

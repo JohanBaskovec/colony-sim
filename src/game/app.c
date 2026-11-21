@@ -889,6 +889,7 @@ bool app_init(App *app, const CliOptions *options)
                           ? GAME_WILDLIFE_DENSITY * (float)options->wildlife / 100.0f
                           : GAME_WILDLIFE_DENSITY;
     params.world.river.width = options->river;
+    params.free_radius = GAME_START_FREE_RADIUS;
     if (!game_init(&app->game, &params)) {
         LOG_ERROR("World generation failed");
         return false;

@@ -7,7 +7,8 @@
 #include <string.h>
 
 static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
-    /* A place to sit and work: nothing to bring, so it is ready at once. */
+    /* A place to sit and work (knapping stone, whittling wood): nothing to bring, so it is
+     * ready at once. */
     [WORKSTATION_CRAFTING_SPOT] = {"crafting_spot",
                                    N_("workstation.crafting_spot"),
                                    N_("workstation.crafting_spot.description"),
@@ -15,14 +16,6 @@ static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
                                    0.0f,
                                    KNOWLEDGE_NONE,
                                    0.0f},
-    /* An anvil stone to knap on. */
-    [WORKSTATION_KNAPPING_SPOT] = {"knapping_spot",
-                                   N_("workstation.knapping_spot"),
-                                   N_("workstation.knapping_spot.description"),
-                                   {{ITEM_COBBLE, 1}, {ITEM_NONE, 0}},
-                                   250.0f,
-                                   KNOWLEDGE_BASIC_SHELTERS,
-                                   50.0f},
     /* A shallow pit ringed with six stones, dug and built by a settler. */
     [WORKSTATION_OPEN_HEARTH] = {"open_hearth",
                                  N_("workstation.open_hearth"),
@@ -100,6 +93,44 @@ bool workstation_can_place(const Workstations *workstations, const Map *map, int
     return in_bounds(workstations, x, y, z) && map_is_passable(map, x, y, z) &&
            map_is_buildable(map, x, y, z) && !map_plant_blocks_building(map, x, y, z) &&
            workstation_at(workstations, x, y, z) == WORKSTATION_NONE;
+}
+
+bool workstation_zone_contains(const Workstation *station, int x, int y, int z)
+{
+    return station->used && z == station->z && abs(x - station->x) <= WORKSTATION_ZONE_REACH &&
+           abs(y - station->y) <= WORKSTATION_ZONE_REACH;
+}
+
+void workstations_count_stored(const Workstations *workstations, const Stockpiles *stockpiles,
+                               const Items *items, long stored[ITEM_TYPE_COUNT])
+{
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = &workstations->list[index];
+        if (!station->used) {
+            continue;
+        }
+        for (int dy = -WORKSTATION_ZONE_REACH; dy <= WORKSTATION_ZONE_REACH; dy++) {
+            for (int dx = -WORKSTATION_ZONE_REACH; dx <= WORKSTATION_ZONE_REACH; dx++) {
+                int x = station->x + dx, y = station->y + dy, z = station->z;
+                if (!in_bounds(workstations, x, y, z) ||
+                    stockpile_at(stockpiles, x, y, z) != STOCKPILE_NONE) {
+                    continue;
+                }
+                bool counted = false; /* By a station before this one. */
+                for (int before = 0; before < index && !counted; before++) {
+                    counted = workstation_zone_contains(&workstations->list[before], x, y, z);
+                }
+                if (counted) {
+                    continue;
+                }
+                ItemStack groups[STOCKPILE_GROUPS_COUNTED];
+                int count = items_groups(items, x, y, z, groups, STOCKPILE_GROUPS_COUNTED);
+                for (int i = 0; i < count; i++) {
+                    stored[groups[i].type] += groups[i].count;
+                }
+            }
+        }
+    }
 }
 
 bool workstation_needs_construction(WorkstationType type)

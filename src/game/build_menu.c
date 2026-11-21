@@ -40,6 +40,8 @@ static const MenuTool TOOLS[] = {
      N_("designation.chop"), N_("tool.chop.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_HARVEST, RENDER_ICON_HARVEST,
      N_("designation.harvest"), N_("tool.harvest.description"), SDL_SCANCODE_UNKNOWN},
+    {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_HARVEST_RIPE, RENDER_ICON_HARVEST_RIPE,
+     N_("designation.harvest_ripe"), N_("tool.harvest_ripe.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_UPROOT, RENDER_ICON_UPROOT,
      N_("designation.uproot"), N_("tool.uproot.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ORDERS, APP_TOOL_DESIGNATE, DESIGNATION_DECONSTRUCT, RENDER_ICON_DECONSTRUCT,
@@ -229,7 +231,8 @@ static void tool_card(App *app, AppTool tool, int type, Card *card)
          * knowledge that do not exist yet. */
         DesignationType shown = type == DESIGNATION_MINE ? DESIGNATION_DIG : (DesignationType)type;
         const DesignationDef *order = designation_def(shown);
-        bool plant = shown == DESIGNATION_HARVEST || shown == DESIGNATION_UPROOT;
+        bool plant = shown == DESIGNATION_HARVEST || shown == DESIGNATION_HARVEST_RIPE ||
+                     shown == DESIGNATION_UPROOT;
         card_add_work(card, order->work_type, order->knowledge, order->min_level,
                       "menu.card.knowledge.unknown", plant);
     }

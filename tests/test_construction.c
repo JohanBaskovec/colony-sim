@@ -597,22 +597,22 @@ static void test_workstation_site(void)
         constructions_place_workstation(&constructions, &map, WORKSTATION_TYPE_COUNT, 3, 4, 0),
         CONSTRUCTION_NONE);
     CHECK_EQ_INT(
-        constructions_place_workstation(&constructions, &map, WORKSTATION_KNAPPING_SPOT, 5, 5, 0),
+        constructions_place_workstation(&constructions, &map, WORKSTATION_CRAFTING_SPOT, 5, 5, 0),
         CONSTRUCTION_NONE); /* Rock. */
     int index =
-        constructions_place_workstation(&constructions, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+        constructions_place_workstation(&constructions, &map, WORKSTATION_OPEN_HEARTH, 3, 4, 0);
     REQUIRE(index != CONSTRUCTION_NONE);
     const ConstructionSite *site = construction_get(&constructions, index);
-    CHECK_EQ_INT(construction_workstation(site), WORKSTATION_KNAPPING_SPOT);
+    CHECK_EQ_INT(construction_workstation(site), WORKSTATION_OPEN_HEARTH);
     CHECK_EQ_INT(site->type, STRUCTURE_NONE);
     CHECK_EQ_INT(construction_length(site), 1);
     CHECK_EQ_INT(construction_knowledge(site), KNOWLEDGE_BASIC_SHELTERS);
-    CHECK_STR_EQ(construction_name_key(site), "workstation.knapping_spot");
+    CHECK_STR_EQ(construction_name_key(site), "workstation.open_hearth");
     CHECK_EQ_INT(construction_material(site, 0), ITEM_COBBLE);
-    CHECK_EQ_INT(construction_material_count(site, 0), 1);
+    CHECK_EQ_INT(construction_material_count(site, 0), 6);
     CHECK_EQ_INT(construction_material(site, 1), ITEM_NONE);
-    CHECK_NEAR(construction_work_needed(site),
-               workstation_def(WORKSTATION_KNAPPING_SPOT)->build_work, 1e-6);
+    CHECK_NEAR(construction_work_needed(site), workstation_def(WORKSTATION_OPEN_HEARTH)->build_work,
+               1e-6);
     CHECK_EQ_INT(constructions.workstation_count, 1);
     CHECK_EQ_INT(constructions.workstation_tiles[map_index(&map, 3, 4, 0)], 1);
     CHECK(!construction_can_place(&constructions, &map, 3, 4, 0)); /* Taken. */
@@ -629,8 +629,8 @@ static void test_workstation_site(void)
     /* Built like a structure; once done, the station stands there. */
     CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, 1.0e6f, 60.0,
                                  NULL)); /* Materials first. */
-    CHECK_EQ_INT(construction_deliver(&constructions, index, item_stack_pristine(ITEM_COBBLE, 3)),
-                 1);
+    CHECK_EQ_INT(construction_deliver(&constructions, index, item_stack_pristine(ITEM_COBBLE, 8)),
+                 6);
     float work = construction_work_needed(site);
     CHECK(!construction_add_work(&constructions, &map, &items, &stations, index, work * 0.5f, 60.0,
                                  NULL));
@@ -647,12 +647,11 @@ static void test_workstation_site(void)
     const Workstation *station =
         workstation_get_const(&stations, workstation_at(&stations, 3, 4, 0));
     REQUIRE(station != NULL);
-    CHECK_EQ_INT(station->type, WORKSTATION_KNAPPING_SPOT);
-    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 0); /* The anvil stone. */
+    CHECK_EQ_INT(station->type, WORKSTATION_OPEN_HEARTH);
+    CHECK_EQ_INT((int)items.totals[ITEM_COBBLE], 0); /* The ring of stones. */
 
     /* Removing a site gives its materials back and frees its tile. */
-    index =
-        constructions_place_workstation(&constructions, &map, WORKSTATION_KNAPPING_SPOT, 9, 4, 0);
+    index = constructions_place_workstation(&constructions, &map, WORKSTATION_OPEN_HEARTH, 9, 4, 0);
     construction_deliver(&constructions, index, item_stack_pristine(ITEM_COBBLE, 1));
     ItemStack returned[STRUCTURE_MATERIAL_SLOTS];
     CHECK_EQ_INT(constructions_remove(&constructions, index, returned), 1);
@@ -679,7 +678,7 @@ static void test_the_builder_clears_the_items(void)
     Items items;
     REQUIRE(init_world(&map, &constructions, &items));
     int station =
-        constructions_place_workstation(&constructions, &map, WORKSTATION_KNAPPING_SPOT, 3, 4, 0);
+        constructions_place_workstation(&constructions, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     int wall =
         constructions_place(&constructions, &map, STRUCTURE_WALL, 10, 10, 0, DIRECTION_SOUTH);
     int bed =

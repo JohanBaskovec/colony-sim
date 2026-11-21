@@ -481,7 +481,7 @@ static void test_forbidden_station_is_not_used(void)
     REQUIRE(colonist != NULL);
     colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 0));
     int index =
-        workstations_place(&game.workstations, &game.map, WORKSTATION_KNAPPING_SPOT, 14, 10, 0);
+        workstations_place(&game.workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 14, 10, 0);
     REQUIRE(index != WORKSTATION_NONE);
     items_add(&game.items, 15, 10, 0, item_stack_make(ITEM_FLINT, 2, ITEM_QUALITY_STANDARD, 0));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
@@ -703,6 +703,54 @@ static void test_forbid_rect_plans_and_zones(void)
     game_shutdown(&game);
 }
 
+/* A game as played starts with the items beyond FREE_RADIUS tiles of the arrival point
+ * forbidden, so that nobody walks across the map for materials; the others lie allowed. */
+static void test_items_start_forbidden_far_from_the_arrival(void)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 11;
+    params.world.width = 96;
+    params.world.height = 96;
+    params.colonist_count = 3;
+    params.free_radius = 10;
+    Game game;
+    REQUIRE(game_init(&game, &params));
+    REQUIRE(game.has_arrival);
+    int near_allowed = 0, far_forbidden = 0, wrong = 0;
+    for (int z = 0; z < game.map.depth; z++) {
+        for (int y = 0; y < game.map.height; y++) {
+            for (int x = 0; x < game.map.width; x++) {
+                if (items_get(&game.items, x, y, z).count == 0) {
+                    continue;
+                }
+                int dx = x - game.arrival.x, dy = y - game.arrival.y;
+                bool near = dx * dx + dy * dy <= 10 * 10;
+                bool forbidden = items_forbidden(&game.items, x, y, z);
+                near_allowed += near && !forbidden;
+                far_forbidden += !near && forbidden;
+                wrong += near == forbidden;
+            }
+        }
+    }
+    CHECK_EQ_INT(wrong, 0);
+    CHECK(near_allowed > 0); /* The flint near the arrival, at least. */
+    CHECK(far_forbidden > 0);
+    game_shutdown(&game);
+
+    /* The default (tests, benchmarks): nothing forbidden. */
+    params.free_radius = 0;
+    REQUIRE(game_init(&game, &params));
+    for (int z = 0; z < game.map.depth; z++) {
+        for (int y = 0; y < game.map.height; y++) {
+            for (int x = 0; x < game.map.width; x++) {
+                CHECK(!items_forbidden(&game.items, x, y, z));
+            }
+        }
+    }
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_map_forbid_bits);
@@ -723,5 +771,6 @@ int main(void)
     RUN_TEST(test_forbidden_site);
     RUN_TEST(test_settlers_leave_a_forbidden_site);
     RUN_TEST(test_forbid_rect_plans_and_zones);
+    RUN_TEST(test_items_start_forbidden_far_from_the_arrival);
     return test_summary();
 }

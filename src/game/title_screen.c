@@ -145,6 +145,10 @@ void title_screen_update(App *app, double dt)
 
 /* ---- The seed typed -------------------------------------------------------- */
 
+/* The menu of a right click on the field. */
+#define SEED_MENU_ID 1
+enum { SEED_MENU_COPY, SEED_MENU_PASTE, SEED_MENU_COUNT };
+
 static void seed_append(App *app, const char *text)
 {
     size_t length = strlen(app->new_game_seed);
@@ -172,6 +176,8 @@ static void seed_erase(App *app)
     app->new_game_seed[length] = '\0';
 }
 
+/* Replaces the seed by the first line of the clipboard (the field has no selection: a seed
+ * pasted over another is meant to take its place). */
 static void seed_paste(App *app)
 {
     char *text = SDL_GetClipboardText();
@@ -179,8 +185,21 @@ static void seed_paste(App *app)
         return;
     }
     text[strcspn(text, "\r\n")] = '\0'; /* The first line. */
+    char before[sizeof(app->new_game_seed)];
+    memcpy(before, app->new_game_seed, sizeof(before));
+    app->new_game_seed[0] = '\0';
     seed_append(app, text);
+    if (text[0] != '\0' && app->new_game_seed[0] == '\0') {
+        memcpy(app->new_game_seed, before, sizeof(before)); /* Refused: too long, or not text. */
+    }
     SDL_free(text);
+}
+
+static void seed_copy(const App *app)
+{
+    if (app->new_game_seed[0] != '\0') {
+        SDL_SetClipboardText(app->new_game_seed);
+    }
 }
 
 static void ask_start(App *app)
@@ -221,6 +240,11 @@ static void handle_key_down(App *app, const SDL_KeyboardEvent *key)
     case SDL_SCANCODE_V:
         if (app->new_game_open && (key->mod & SDL_KMOD_CTRL) != 0) {
             seed_paste(app);
+        }
+        break;
+    case SDL_SCANCODE_C:
+        if (app->new_game_open && (key->mod & SDL_KMOD_CTRL) != 0) {
+            seed_copy(app);
         }
         break;
     default: break;
@@ -600,7 +624,15 @@ static void draw_seed_field(App *app, SDL_FRect rect)
     if ((SDL_GetTicks() / 530) % 2 == 0) {
         ui_fill(ui, (SDL_FRect){caret_x + 1.0f, text_y, SDL_max(1.0f, ui->theme.scale), line}, ICE);
     }
-    ui_take_click(ui, rect); /* Typing goes there anyway. */
+    /* A right click opens the menu: copy the seed, or paste another over it. */
+    bool menu = ui_take_click(ui, rect) == SDL_BUTTON_RIGHT;
+    const char *options[SEED_MENU_COUNT] = {tr("new_game.seed.copy"), tr("new_game.seed.paste")};
+    int picked = ui_popup_list(ui, SEED_MENU_ID, rect, menu, false, options, SEED_MENU_COUNT, -1);
+    if (picked == SEED_MENU_COPY) {
+        seed_copy(app);
+    } else if (picked == SEED_MENU_PASTE) {
+        seed_paste(app);
+    }
 }
 
 /* The row that shows or hides the advanced options of a column: a small

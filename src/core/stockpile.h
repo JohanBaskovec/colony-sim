@@ -21,6 +21,10 @@
 #define STOCKPILE_MAX 64
 #define STOCKPILE_NONE (-1)
 
+/* Groups of a tile counted as stored (a stockpile tile holds one, more only
+ * when items were dropped there). */
+#define STOCKPILE_GROUPS_COUNTED 8
+
 /* 1 is the highest priority, like work priorities. */
 #define STOCKPILE_PRIORITY_HIGHEST 1
 #define STOCKPILE_PRIORITY_LOWEST 10
@@ -179,8 +183,9 @@ bool stockpile_forbidden_at(const Stockpiles *stockpiles, int x, int y, int z);
  * (not stored). */
 int stockpile_storage_priority(const Stockpiles *stockpiles, int x, int y, int z, ItemStack stack);
 
-/* Adds to `stored` (per item type) the items lying in stockpiles that accept
- * them. */
+/* Adds to `stored` (per item type) the items lying in stockpiles, whether the
+ * zone accepts them or not: what lies on a stockpile tile belongs to the
+ * colony's stock. */
 void stockpiles_count_stored(const Stockpiles *stockpiles, const Items *items,
                              long stored[ITEM_TYPE_COUNT]);
 
