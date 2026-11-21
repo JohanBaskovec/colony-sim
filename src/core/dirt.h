@@ -10,6 +10,8 @@
 #ifndef COLONY_CORE_DIRT_H
 #define COLONY_CORE_DIRT_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 
 #include <stdbool.h>
@@ -53,5 +55,9 @@ void dirt_spread(Dirt *dirt, const Map *map, int x, int y, int z, int amount);
 int dirt_clean(Dirt *dirt, int x, int y, int z, int amount);
 
 uint64_t dirt_hash(const Dirt *dirt, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the dirt, already allocated at the size of
+ * the map. */
+void dirt_serialize(Serializer *s, Dirt *dirt);
 
 #endif /* COLONY_CORE_DIRT_H */

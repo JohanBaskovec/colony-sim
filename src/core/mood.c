@@ -525,3 +525,26 @@ uint64_t mood_hash(const Mood *mood, uint64_t hash)
                          mood->break_ticks, mood->went_off,  mood->break_cooldown};
     return hash_fnv1a64(hash, fields, sizeof(fields));
 }
+
+void mood_serialize(Serializer *s, Mood *mood)
+{
+    ser_float(s, &mood->value);
+    ser_float(s, &mood->outlook);
+    ser_float(s, &mood->sensitivity);
+    ser_u64(s, &mood->states);
+    ser_u64(s, &mood->news);
+    ser_floats(s, mood->weight, THOUGHT_COUNT);
+    ser_floats(s, mood->peak, THOUGHT_COUNT);
+    for (int i = 0; i < THOUGHT_COUNT; i++) {
+        ser_i32(s, &mood->age[i]);
+    }
+    ser_u8s(s, mood->meals, MOOD_MEALS);
+    ser_u8_below(s, &mood->meal_count, MOOD_MEALS + 1);
+    ser_u8_below(s, &mood->meal_next, MOOD_MEALS);
+    ser_u8_below(s, &mood->break_type, MOOD_BREAK_COUNT);
+    ser_i32(s, &mood->break_ticks);
+    ser_float(s, &mood->binge_left);
+    ser_bool(s, &mood->went_off);
+    ser_bool(s, &mood->break_started);
+    ser_i32(s, &mood->break_cooldown);
+}

@@ -41,6 +41,8 @@
 #ifndef COLONY_CORE_GATHER_ZONE_H
 #define COLONY_CORE_GATHER_ZONE_H
 
+#include "core/serialize.h"
+
 #include "core/item.h"
 #include "core/knowledge.h"
 #include "core/map.h"
@@ -524,5 +526,9 @@ bool gather_plant_uprootable(const Map *map, int x, int y, int z);
 float gather_uproot_work(const Map *map, int x, int y, int z);
 
 uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the zones, already allocated at the size of
+ * the map. */
+void gather_zones_serialize(Serializer *s, GatherZones *zones);
 
 #endif /* COLONY_CORE_GATHER_ZONE_H */

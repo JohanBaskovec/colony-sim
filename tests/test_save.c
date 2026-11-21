@@ -1,0 +1,359 @@
+#include "core/known.h"
+#include "core/save.h"
+#include "core/scenario.h"
+#include "core/util.h"
+#include "test_framework.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+/* A game of `size` tiles a side at seed 42 with `colonists` settlers. */
+static bool start_game(Game *game, int size, int colonists, float wildlife, Scenario scenario)
+{
+    NewGameParams params;
+    game_default_params(&params);
+    params.world.seed = 42;
+    params.world.width = size;
+    params.world.height = size;
+    params.colonist_count = colonists;
+    params.wildlife = wildlife;
+    if (!game_init(game, &params)) {
+        return false;
+    }
+    if (scenario != SCENARIO_NONE && !scenario_apply(game, scenario)) {
+        game_shutdown(game);
+        return false;
+    }
+    return true;
+}
+
+static void run_ticks(Game *game, long ticks)
+{
+    for (long i = 0; i < ticks; i++) {
+        game_tick(game);
+    }
+}
+
+/* Where two saves first differ: the section's tag and the offset in it
+ * (printed, for finding what was left out). True when they are the same. */
+static bool same_saves(const uint8_t *a, size_t a_size, const uint8_t *b, size_t b_size)
+{
+    size_t at = 8; /* After the header. */
+    size_t end = a_size < b_size ? a_size : b_size;
+    while (at + 8 <= end) {
+        uint32_t length = (uint32_t)a[at + 4] | (uint32_t)a[at + 5] << 8 |
+                          (uint32_t)a[at + 6] << 16 | (uint32_t)a[at + 7] << 24;
+        size_t section_end = at + 8 + length;
+        for (size_t i = at; i < section_end && i < end; i++) {
+            if (a[i] != b[i]) {
+                fprintf(stderr, "  saves differ in section %.4s at offset %zu (of %u)\n",
+                        (const char *)&a[at], i - at - 8, length);
+                return false;
+            }
+        }
+        at = section_end;
+        if (at + 8 >= a_size) {
+            break; /* The footer. */
+        }
+    }
+    if (a_size != b_size || memcmp(a, b, a_size) != 0) {
+        fprintf(stderr, "  saves differ (sizes %zu and %zu)\n", a_size, b_size);
+        return false;
+    }
+    return true;
+}
+
+/* Plays `before` ticks, saves; plays `after` more and saves again. Loads the
+ * first save, plays `after` ticks and saves: both last saves must be the
+ * same bytes, and the game hashes alike. */
+static void check_future_unchanged(Game *game, long before, long after)
+{
+    run_ticks(game, before);
+    size_t first_size = 0;
+    uint8_t *first = game_save(game, &first_size);
+    REQUIRE(first != NULL);
+
+    Game loaded;
+    REQUIRE(game_load(&loaded, first, first_size) == SAVE_OK);
+    size_t again_size = 0;
+    uint8_t *again = game_save(&loaded, &again_size);
+    REQUIRE(again != NULL);
+    CHECK(same_saves(first, first_size, again, again_size)); /* The round trip. */
+    CHECK_EQ_UINT(game_hash(&loaded), game_hash(game));
+
+    run_ticks(game, after);
+    run_ticks(&loaded, after);
+    size_t played_size = 0, replayed_size = 0;
+    uint8_t *played = game_save(game, &played_size);
+    uint8_t *replayed = game_save(&loaded, &replayed_size);
+    REQUIRE(played != NULL && replayed != NULL);
+    CHECK(same_saves(played, played_size, replayed, replayed_size));
+    CHECK_EQ_UINT(game_hash(&loaded), game_hash(game));
+    free(first);
+    free(again);
+    free(played);
+    free(replayed);
+    game_shutdown(&loaded);
+}
+
+static void test_a_new_game_comes_back(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 48, 3, 0.0f, SCENARIO_NONE));
+    check_future_unchanged(&game, 0, 200);
+    game_shutdown(&game);
+}
+
+static void test_settlers_gathering_play_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 6, 0.0f, SCENARIO_GATHERING));
+    check_future_unchanged(&game, TICKS_PER_HOUR * 6, TICKS_PER_HOUR * 3);
+    game_shutdown(&game);
+}
+
+static void test_building_plays_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 8, 0.0f, SCENARIO_CONSTRUCTION));
+    check_future_unchanged(&game, TICKS_PER_DAY, TICKS_PER_HOUR * 6);
+    game_shutdown(&game);
+}
+
+static void test_feuds_and_brawls_play_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 8, 0.0f, SCENARIO_FEUDS));
+    check_future_unchanged(&game, TICKS_PER_DAY, TICKS_PER_HOUR * 6);
+    game_shutdown(&game);
+}
+
+static void test_cooking_plays_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 6, 0.0f, SCENARIO_COOKING));
+    check_future_unchanged(&game, TICKS_PER_HOUR * 12, TICKS_PER_HOUR * 6);
+    game_shutdown(&game);
+}
+
+static void test_wild_animals_play_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 4, 3.0f, SCENARIO_GATHERING));
+    check_future_unchanged(&game, TICKS_PER_DAY, TICKS_PER_HOUR * 6);
+    game_shutdown(&game);
+}
+
+/* The fog of war: what the colony saw, the picture of the world it keeps. */
+static void test_the_fog_of_war_plays_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 5, 1.0f, SCENARIO_GATHERING));
+    REQUIRE(game_set_fog(&game, true));
+    check_future_unchanged(&game, TICKS_PER_HOUR * 8, TICKS_PER_HOUR * 4);
+    game_shutdown(&game);
+}
+
+/* Saved while water flows: the active blocks and their pipes. */
+static void test_flowing_water_plays_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 48, 2, 0.0f, SCENARIO_NONE));
+    run_ticks(&game, 100);
+    int x = 24, y = 24;
+    int z = map_ground_level(&game.map, x, y);
+    map_set_water(&game.map, x, y, z, WATER_CELL_FULL);
+    map_set_water(&game.map, x + 1, y, z, WATER_CELL_FULL);
+    run_ticks(&game, 30);
+    REQUIRE(game.water.active_count > 0);
+    check_future_unchanged(&game, 0, 400);
+    game_shutdown(&game);
+}
+
+/* A save cut short, changed, of another version or of nothing at all is
+ * refused, and the game left empty. */
+static void test_damaged_saves_are_refused(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 32, 2, 0.0f, SCENARIO_NONE));
+    size_t size = 0;
+    uint8_t *data = game_save(&game, &size);
+    REQUIRE(data != NULL);
+    CHECK_EQ_INT(save_version_of(data, size), SAVE_VERSION);
+    Game loaded;
+    CHECK_EQ_INT(game_load(&loaded, data, size / 2), SAVE_ERROR_DAMAGED);
+    CHECK(loaded.map.terrain == NULL);
+    data[size / 3] ^= 0x40;
+    CHECK_EQ_INT(game_load(&loaded, data, size), SAVE_ERROR_DAMAGED);
+    data[size / 3] ^= 0x40;
+    data[4] = SAVE_VERSION + 1;
+    CHECK_EQ_INT(game_load(&loaded, data, size), SAVE_ERROR_VERSION);
+    data[4] = SAVE_VERSION;
+    data[0] = 'X';
+    CHECK_EQ_INT(game_load(&loaded, data, size), SAVE_ERROR_NOT_A_SAVE);
+    CHECK_EQ_INT(save_version_of(data, size), -1);
+    CHECK_EQ_INT(game_load(&loaded, NULL, 0), SAVE_ERROR_NOT_A_SAVE);
+    data[0] = 'T';
+    CHECK_EQ_INT(game_load(&loaded, data, size), SAVE_OK);
+    game_shutdown(&loaded);
+    free(data);
+    game_shutdown(&game);
+}
+
+/* Bytes changed all over a save, its hash made right again (a save edited
+ * by hand): loading refuses it or takes it, never reads out of bounds
+ * (run under the sanitizers) nor leaks. */
+static void test_edited_saves_never_break_loading(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 32, 3, 1.0f, SCENARIO_GATHERING));
+    run_ticks(&game, TICKS_PER_HOUR);
+    size_t size = 0;
+    uint8_t *data = game_save(&game, &size);
+    REQUIRE(data != NULL);
+    uint8_t *edited = malloc(size);
+    REQUIRE(edited != NULL);
+    int refused = 0;
+    uint32_t state = 12345u;
+    for (int trial = 0; trial < 300; trial++) {
+        memcpy(edited, data, size);
+        state = state * 1664525u + 1013904223u;
+        size_t at = 8 + (size_t)(state % (uint32_t)(size - 16));
+        state = state * 1664525u + 1013904223u;
+        edited[at] ^= (uint8_t)(1u + state % 255u);
+        uint64_t hash = hash_fnv1a64(HASH_FNV1A64_INIT, edited, size - 8);
+        for (int i = 0; i < 8; i++) {
+            edited[size - 8 + (size_t)i] = (uint8_t)(hash >> (8 * i));
+        }
+        Game loaded;
+        SaveError error = game_load(&loaded, edited, size);
+        CHECK(error == SAVE_OK || error == SAVE_ERROR_DAMAGED);
+        refused += error != SAVE_OK;
+        game_shutdown(&loaded);
+    }
+    CHECK(refused > 0);
+    free(edited);
+    free(data);
+    game_shutdown(&game);
+}
+
+/*
+ * The size of every struct the save walks, field by field (on 64-bit Linux,
+ * where they were measured). A size that changed is a field added, removed
+ * or resized: serialize it in its module's _serialize() (or tell why it is
+ * not saved, docs/SAVE.md §3), raise SAVE_VERSION, then write the new size
+ * here.
+ */
+static void test_serialized_structs_keep_their_size(void)
+{
+#if defined(__x86_64__) && defined(__linux__)
+    static const struct {
+        const char *name;
+        size_t size;
+        size_t expected;
+    } SIZES[] = {
+        {"Game", sizeof(Game), 2716880},
+        {"Map", sizeof(Map), 1080},
+        {"Plant", sizeof(Plant), 20},
+        {"MapTopologyChange", sizeof(MapTopologyChange), 8},
+        {"MapTreeFall", sizeof(MapTreeFall), 10},
+        {"TilePos", sizeof(TilePos), 6},
+        {"TileBox", sizeof(TileBox), 24},
+        {"EntityId", sizeof(EntityId), 8},
+        {"Pool", sizeof(Pool), 48},
+        {"Rng", sizeof(Rng), 16},
+        {"Designations", sizeof(Designations), 104},
+        {"Dirt", sizeof(Dirt), 32},
+        {"GatherZones", sizeof(GatherZones), 6872},
+        {"GatherZone", sizeof(GatherZone), 212},
+        {"GatherOrder", sizeof(GatherOrder), 8},
+        {"GatherGroupOrder", sizeof(GatherGroupOrder), 6},
+        {"Items", sizeof(Items), 11088},
+        {"Item", sizeof(Item), 36},
+        {"ItemStack", sizeof(ItemStack), 28},
+        {"ItemId", sizeof(ItemId), 8},
+        {"ItemMaker", sizeof(ItemMaker), 40},
+        {"Crowns", sizeof(Crowns), 432},
+        {"CrownItem", sizeof(CrownItem), 16},
+        {"Corpses", sizeof(Corpses), 16},
+        {"Corpse", sizeof(Corpse), 7928},
+        {"Stockpiles", sizeof(Stockpiles), 4648},
+        {"Stockpile", sizeof(Stockpile), 72},
+        {"Workstations", sizeof(Workstations), 26664},
+        {"Workstation", sizeof(Workstation), 416},
+        {"Bill", sizeof(Bill), 40},
+        {"Constructions", sizeof(Constructions), 47152},
+        {"ConstructionSite", sizeof(ConstructionSite), 92},
+        {"Beds", sizeof(Beds), 1560},
+        {"Reservations", sizeof(Reservations), 4176},
+        {"Reservation", sizeof(Reservation), 8},
+        {"ItemMoves", sizeof(ItemMoves), 1288},
+        {"ItemMove", sizeof(ItemMove), 20},
+        {"Temperatures", sizeof(Temperatures), 672},
+        {"TemperatureSource", sizeof(TemperatureSource), 8},
+        {"Soil", sizeof(Soil), 72},
+        {"Water", sizeof(Water), 168},
+        {"WaterBlock", sizeof(WaterBlock), 2120},
+        {"TileLight", sizeof(TileLight), 3376},
+        {"TileLightSweep", sizeof(TileLightSweep), 40},
+        {"Vision", sizeof(Vision), 2696},
+        {"VisionViewer", sizeof(VisionViewer), 40},
+        {"KnownWorld", sizeof(KnownWorld), 20832},
+        {"KnownStation", sizeof(KnownStation), 4},
+        {"KnownAnimal", sizeof(KnownAnimal), 32},
+        {"Weather", sizeof(Weather), 48},
+        {"RoofWatch", sizeof(RoofWatch), 8},
+        {"Social", sizeof(Social), 411664},
+        {"SocialBond", sizeof(SocialBond), 100},
+        {"SocialMemory", sizeof(SocialMemory), 12},
+        {"SocialTale", sizeof(SocialTale), 8},
+        {"CombatQueue", sizeof(CombatQueue), 2308},
+        {"CombatStrike", sizeof(CombatStrike), 36},
+        {"Combatant", sizeof(Combatant), 12},
+        {"BloodStains", sizeof(BloodStains), 81928},
+        {"BloodStain", sizeof(BloodStain), 40},
+        {"Animals", sizeof(Animals), 1559608},
+        {"Animal", sizeof(Animal), 6088},
+        {"Occupancy", sizeof(Occupancy), 5168},
+        {"OccupancyBeing", sizeof(OccupancyBeing), 16},
+        {"Notices", sizeof(Notices), 9608},
+        {"Notice", sizeof(Notice), 48},
+        {"Colonist", sizeof(Colonist), 7912},
+        {"Path", sizeof(Path), 16},
+        {"Experiences", sizeof(Experiences), 324},
+        {"Experience", sizeof(Experience), 40},
+        {"Mood", sizeof(Mood), 488},
+        {"Attributes", sizeof(Attributes), 38},
+        {"Health", sizeof(Health), 260},
+        {"Injury", sizeof(Injury), 12},
+        {"HurtNote", sizeof(HurtNote), 3},
+        {"Journal", sizeof(Journal), 5640},
+        {"JournalEntry", sizeof(JournalEntry), 88},
+        {"ColonistAppearance", sizeof(ColonistAppearance), 5},
+        {"GameDebug", sizeof(GameDebug), 5},
+    };
+    for (size_t i = 0; i < sizeof(SIZES) / sizeof(SIZES[0]); i++) {
+        if (SIZES[i].size != SIZES[i].expected) {
+            fprintf(stderr, "  %s is now %zu bytes (was %zu): see this test's comment\n",
+                    SIZES[i].name, SIZES[i].size, SIZES[i].expected);
+        }
+        CHECK_EQ_UINT(SIZES[i].size, SIZES[i].expected);
+    }
+#endif
+}
+
+int main(void)
+{
+    RUN_TEST(test_a_new_game_comes_back);
+    RUN_TEST(test_settlers_gathering_play_on_alike);
+    RUN_TEST(test_building_plays_on_alike);
+    RUN_TEST(test_feuds_and_brawls_play_on_alike);
+    RUN_TEST(test_cooking_plays_on_alike);
+    RUN_TEST(test_wild_animals_play_on_alike);
+    RUN_TEST(test_the_fog_of_war_plays_on_alike);
+    RUN_TEST(test_flowing_water_plays_on_alike);
+    RUN_TEST(test_damaged_saves_are_refused);
+    RUN_TEST(test_edited_saves_never_break_loading);
+    RUN_TEST(test_serialized_structs_keep_their_size);
+    return test_summary();
+}

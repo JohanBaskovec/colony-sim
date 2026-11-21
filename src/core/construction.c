@@ -901,3 +901,39 @@ uint64_t constructions_hash(const Constructions *constructions, uint64_t hash)
     }
     return hash;
 }
+
+void constructions_serialize(Serializer *s, Constructions *constructions)
+{
+    size_t count =
+        (size_t)constructions->width * (size_t)constructions->height * (size_t)constructions->depth;
+    ser_layer_u16(s, constructions->at, count);
+    for (size_t i = 0; i < count && s->reading && ser_ok(s); i++) {
+        ser_check(s, constructions->at[i] <= CONSTRUCTION_MAX);
+    }
+    ser_layer_u8(s, constructions->workstation_tiles, count);
+    for (int i = 0; i < CONSTRUCTION_MAX; i++) {
+        ConstructionSite *site = &constructions->list[i];
+        ser_bool(s, &site->used);
+        ser_u8_below(s, &site->type, STRUCTURE_TYPE_COUNT);
+        ser_u8_below(s, &site->workstation, WORKSTATION_TYPE_COUNT + 1);
+        ser_i16(s, &site->x);
+        ser_i16(s, &site->y);
+        ser_i16(s, &site->z);
+        ser_u8_below(s, &site->direction, DIRECTION_COUNT);
+        ser_int(s, &site->number);
+        for (int m = 0; m < STRUCTURE_MATERIAL_SLOTS; m++) {
+            item_stack_serialize(s, &site->delivered[m]);
+        }
+        ser_u16s(s, site->promised, STRUCTURE_MATERIAL_SLOTS);
+        ser_float(s, &site->progress);
+        ser_float(s, &site->clear_progress);
+        ser_bool(s, &site->refresh);
+        ser_bool(s, &site->forbidden);
+        ser_u8(s, &site->priority);
+        ser_u16(s, &site->wood_choice);
+    }
+    ser_int_in(s, &constructions->used_count, 0, CONSTRUCTION_MAX);
+    ser_int(s, &constructions->workstation_count);
+    ser_int(s, &constructions->next_number);
+    ser_u32(s, &constructions->revision);
+}

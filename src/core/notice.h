@@ -7,6 +7,8 @@
 #ifndef COLONY_CORE_NOTICE_H
 #define COLONY_CORE_NOTICE_H
 
+#include "core/serialize.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -70,5 +72,8 @@ const Notice *notices_get(const Notices *notices, uint32_t number);
 /* Translation key of a notice's text: {0} is the knowledge (empty for a
  * notice about none), {1} the name. */
 const char *notice_text_key(NoticeType type);
+
+/* Saves or loads (docs/SAVE.md) the colony log. */
+void notices_serialize(Serializer *s, Notices *notices);
 
 #endif /* COLONY_CORE_NOTICE_H */

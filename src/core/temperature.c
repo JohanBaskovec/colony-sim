@@ -162,6 +162,23 @@ static void refresh_all(Temperatures *temperatures, const Map *map)
 
 bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor)
 {
+    if (!temperatures_init_empty(temperatures, map)) {
+        return false;
+    }
+    size_t count = map_tile_count(map);
+    temperatures->outdoor = outdoor;
+    for (size_t i = 0; i < count; i++) {
+        temperatures->celsius[i] = outdoor;
+        temperatures->soil[i] = outdoor;
+    }
+    refresh_all(temperatures, map);
+    temperatures->topology_revision = map->topology_revision;
+    temperatures->build_revision = map->build_revision;
+    return true;
+}
+
+bool temperatures_init_empty(Temperatures *temperatures, const Map *map)
+{
     memset(temperatures, 0, sizeof(*temperatures));
     size_t count = map_tile_count(map);
     if (count == 0) {
@@ -191,14 +208,6 @@ bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor
     temperatures->width = map->width;
     temperatures->height = map->height;
     temperatures->depth = map->depth;
-    temperatures->outdoor = outdoor;
-    for (size_t i = 0; i < count; i++) {
-        temperatures->celsius[i] = outdoor;
-        temperatures->soil[i] = outdoor;
-    }
-    refresh_all(temperatures, map);
-    temperatures->topology_revision = map->topology_revision;
-    temperatures->build_revision = map->build_revision;
     return true;
 }
 
@@ -587,4 +596,27 @@ uint64_t temperatures_hash(const Temperatures *temperatures, uint64_t hash)
                             (size_t)temperatures->source_count * sizeof(*temperatures->sources));
     }
     return hash;
+}
+
+void temperatures_serialize(Serializer *s, Temperatures *temperatures)
+{
+    Temperatures *t = temperatures;
+    size_t count = (size_t)t->width * (size_t)t->height * (size_t)t->depth;
+    ser_layer_float(s, t->celsius, count);
+    ser_layer_u8(s, t->kind, count);
+    ser_layer_float(s, t->edge_east, count);
+    ser_layer_float(s, t->edge_south, count);
+    ser_layer_float(s, t->pull, count);
+    ser_layer_float(s, t->ground_share, count);
+    ser_layer_u64(s, t->active, (count + 63) / 64);
+    ser_layer_float(s, t->soil, count);
+    ser_layer_u8(s, t->water, count);
+    ser_int_in(s, &t->source_count, 0, TEMPERATURE_SOURCES_MAX);
+    for (int i = 0; i < t->source_count; i++) {
+        ser_u32_upto(s, &t->sources[i].index, (uint32_t)count - 1);
+        ser_float(s, &t->sources[i].degrees);
+    }
+    ser_float(s, &t->outdoor);
+    ser_u32(s, &t->topology_revision);
+    ser_u32(s, &t->build_revision);
 }

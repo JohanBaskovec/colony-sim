@@ -8,6 +8,8 @@
 #ifndef COLONY_CORE_RNG_H
 #define COLONY_CORE_RNG_H
 
+#include "core/serialize.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -32,5 +34,8 @@ float rng_next_float(Rng *rng);
 
 /* Returns true with the given probability (clamped to [0, 1]). */
 bool rng_chance(Rng *rng, float probability);
+
+/* Saves or loads (docs/SAVE.md) the state of a stream. */
+void rng_serialize(Serializer *s, Rng *rng);
 
 #endif /* COLONY_CORE_RNG_H */

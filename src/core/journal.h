@@ -14,6 +14,8 @@
 #ifndef COLONY_CORE_JOURNAL_H
 #define COLONY_CORE_JOURNAL_H
 
+#include "core/serialize.h"
+
 #include "core/health.h"
 #include "core/knowledge.h"
 #include "core/mood.h"
@@ -217,5 +219,8 @@ typedef struct JournalSocial {
 /* A social event with `with` (JOURNAL_EXPLAINED to JOURNAL_RELATION). */
 void journal_note_social(Journal *journal, uint64_t tick, JournalEvent event, const char *with,
                          JournalSocial details);
+
+/* Saves or loads (docs/SAVE.md) a journal. */
+void journal_serialize(Serializer *s, Journal *journal);
 
 #endif /* COLONY_CORE_JOURNAL_H */

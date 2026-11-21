@@ -207,3 +207,22 @@ bool occupancy_stop_filter(const Map *map, int x, int y, int z, void *userdata)
     return may_stop(stopper->occupancy, stopper->being,
                     (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, false);
 }
+
+void occupancy_serialize(Serializer *s, Occupancy *occupancy)
+{
+    size_t tiles = (size_t)occupancy->width * (size_t)occupancy->height * (size_t)occupancy->depth;
+    ser_layer_u16(s, occupancy->claims, tiles);
+    for (size_t i = 0; i < tiles && s->reading && ser_ok(s); i++) {
+        ser_check(s, occupancy->claims[i] <= OCCUPANCY_BEINGS);
+    }
+    ser_layer_u8(s, occupancy->present, tiles);
+    for (int i = 0; i <= OCCUPANCY_BEINGS; i++) {
+        OccupancyBeing *being = &occupancy->beings[i];
+        tile_pos_serialize(s, &being->claim);
+        tile_pos_serialize(s, &being->at);
+        ser_bool(s, &being->claiming);
+        ser_bool(s, &being->placed);
+        ser_bool(s, &being->yielding);
+        ser_bool(s, &being->forced);
+    }
+}

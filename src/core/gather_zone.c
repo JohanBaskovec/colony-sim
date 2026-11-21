@@ -1623,3 +1623,43 @@ uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
     }
     return hash;
 }
+
+void gather_zones_serialize(Serializer *s, GatherZones *zones)
+{
+    size_t count = (size_t)zones->width * (size_t)zones->height * (size_t)zones->depth;
+    ser_layer_u8_below(s, zones->zone, count, GATHER_ZONE_MAX + 1);
+    tile_box_serialize(s, &zones->box);
+    ser_layer_u8_below(s, zones->job, count, GATHER_JOB_COUNT + 1);
+    ser_layer_float(s, zones->progress, count);
+    for (int i = 0; i < GATHER_ZONE_MAX; i++) {
+        GatherZone *zone = &zones->list[i];
+        ser_bool(s, &zone->used);
+        ser_int(s, &zone->number);
+        ser_int(s, &zone->cell_count);
+        ser_int(s, &zone->priority);
+        ser_bool(s, &zone->forbidden);
+        for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
+            GatherOrder *order = &zone->orders[r];
+            ser_bool(s, &order->enabled);
+            ser_bool(s, &order->ripe_only);
+            ser_u8_below(s, &order->mode, GATHER_MODE_COUNT);
+            ser_u8_below(s, &order->unit, GATHER_UNIT_COUNT);
+            ser_u16(s, &order->target);
+            ser_u16(s, &order->done);
+        }
+        for (int g = 0; g < GATHER_GROUP_COUNT; g++) {
+            GatherGroupOrder *order = &zone->groups[g];
+            ser_u8_below(s, &order->mode, GATHER_MODE_COUNT);
+            ser_u8_below(s, &order->unit, GATHER_UNIT_COUNT);
+            ser_u16(s, &order->target);
+            ser_u16(s, &order->done);
+        }
+        ser_u32(s, &zone->wanted);
+        ser_bool(s, &zone->climb);
+    }
+    ser_int_in(s, &zones->used_count, 0, GATHER_ZONE_MAX);
+    ser_int(s, &zones->next_number);
+    ser_int(s, &zones->wanting_cells);
+    ser_u32(s, &zones->revision);
+    ser_u32(s, &zones->harmful_tree_falls);
+}

@@ -236,7 +236,9 @@ theme and migration plan).
 
 ## M7: Persistence and polish
 
-- [ ] Save/load (versioned), autosave
+- [ ] Save/load (versioned), autosave (docs/SAVE.md)
+  - [x] S1, the core: `game_save()` / `game_load()` (`core/save.h`) into memory, every module serializing itself through one function for writing and reading (`core/serialize.h`: fixed sizes, little-endian, map layers run-length encoded, values that index tables checked), sections and a hash; a game loaded plays on byte for byte as it would have (tested on gathering, building, feuds and brawls, cooking, wild animals, the fog of war, flowing water), damaged and hand-edited saves refused without harm, the size of every struct saved guarded; 256 × 256 × 30: 6.5 MB, saved in 90 ms, loaded in 155 ms (`bench_simulation` prints it)
+  - [ ] S2, the frontend: Save and Load in the game menu, Load game on the title screen, files in the user's data folder, quick save, autosave, errors told to the player
 - [ ] Settings menu (language, resolution, volume, key bindings) persisted in the user preferences folder
 - [x] Title screen (Thawmoor, a world drifting behind it): New game, Settings, Quit; the game menu's Main menu goes back to it (after asking); any game option on the command line skips it
 - [x] New game options: the seed (typed, any word), the size, the landscape scale, water, hills, slope, bare rock, depth, flat world, trees, settlers, wild animals (`core/new_game.h`)

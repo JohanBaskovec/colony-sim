@@ -35,6 +35,8 @@
 #ifndef COLONY_CORE_CONSTRUCTION_H
 #define COLONY_CORE_CONSTRUCTION_H
 
+#include "core/serialize.h"
+
 #include "core/item.h"
 #include "core/map.h"
 #include "core/rng.h"
@@ -316,5 +318,9 @@ int constructions_wear_day(Constructions *constructions, Map *map, Items *items)
 float construction_work_fraction(const ConstructionSite *site);
 
 uint64_t constructions_hash(const Constructions *constructions, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the sites, already allocated at the size of
+ * the map. */
+void constructions_serialize(Serializer *s, Constructions *constructions);
 
 #endif /* COLONY_CORE_CONSTRUCTION_H */

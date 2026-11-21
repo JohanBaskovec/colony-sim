@@ -92,6 +92,8 @@ simulation:
 | `vision`     | Who sees what: sight in 3D through the map's volume (rock, walls and floors block it, no range limit), fields of view per settler, how many see each tile (see *Vision*) |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain, rainfall in mm, the air's dew point and relative humidity |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |
+| `serialize`  | The `Serializer`: one function per module walks its fields to write them into a growing buffer or read them back, fixed sizes and little-endian whatever the platform, map layers run-length encoded, sections, every value read checked (see *Saves*) |
+| `save`       | Saving and loading a game (`game_save()`, `game_load()`): a header, a section per module, a hash; a game loaded plays on exactly as it would have (docs/SAVE.md) |
 | `game_clock` | Ticks, speed, pause, calendar (`GameDate`), daylight curve and the sun (day length by season)                |
 | `sun`        | Where the sun stands: elevation, azimuth and direction (map axes, metres) from the day, the hour and the latitude; its declination gives the clock's day lengths at the default latitude; its rays (`sun_lit()`): how much direct sun reaches a point of the volume, through rock, walls, doors, floors and roofs (nothing) and foliage (its share by the length crossed) (see `docs/SHADOWS.md`) |
 | `sky`        | The light of the sky: how much of the sky a surface sees (`sky_open()`, 16 rays over the dome through blocks, floors and foliage), and a field of it per column for the screen, worked out again where the map changed (see *Light and shade*) |
@@ -324,6 +326,27 @@ class changes itself, and wakes the block only when it sets the water moving
 before): water asleep beside lower ground stays held. The weather draws each
 storm's rain and now and then a downpour (`weather_storm_rain()`,
 `weather_downpour()`).
+
+**Saves** (`core/save.h`, `core/serialize.h`, docs/SAVE.md): `game_save()`
+writes a game into memory, `game_load()` makes a new game from it; the
+frontend reads and writes the files. Each module saves itself next to its
+code (`xxx_serialize(Serializer *s, Xxx *x)`), one function walking its
+fields for writing and for reading, so that the two cannot drift apart: fixed
+sizes on the file (`int` 32 bits, `long` and `size_t` 64), little-endian,
+no padding, so that the same state always gives the same bytes. The map's
+layers are run-length encoded, the plants, item summaries and pictures of
+stations kept sparse. Loading reads the GAME section (the size of the map),
+allocates the map and reads it, then allocates every other module around
+it without working anything out (`game_prepare_load()`, the `_init_empty()`
+of the light, temperatures and soil) and reads them; the pointers between
+modules are set again and the regions rebuilt. Everything the simulation
+reads later is saved, caches included (the temperatures' rates, the light's
+tops and sweeps, occupancy, `Game.stock`), except scratch memory, what only
+the screen shows (the last blows, the chat counts) and the clock's speed (a
+game loaded is paused). `tests/test_save.c` plays games N ticks, saves, plays
+M more, loads and plays the same M: both saves must be the same bytes; it
+also guards the size of every struct saved, so that a field added to one
+fails until it is serialized and `SAVE_VERSION` raised.
 
 **Relief** (`core/worldgen.h`): the elevation noise decides each column's
 ground level. The plains lie on `Map.surface_level` (`underground_levels`,

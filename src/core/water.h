@@ -33,6 +33,8 @@
 #ifndef COLONY_CORE_WATER_H
 #define COLONY_CORE_WATER_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 
 #include <stdbool.h>
@@ -161,5 +163,10 @@ bool water_step(Water *water, Map *map);
 uint64_t water_total(const Water *water, const Map *map);
 
 uint64_t water_hash(const Water *water, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the flow: the fractions of millimetres, the
+ * active blocks and their pipes, the blocks woken, the logs read; when
+ * reading, into a flow initialized for the map saved. */
+void water_serialize(Serializer *s, Water *water);
 
 #endif /* COLONY_CORE_WATER_H */

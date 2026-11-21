@@ -6,6 +6,8 @@
 #ifndef COLONY_CORE_APPEARANCE_H
 #define COLONY_CORE_APPEARANCE_H
 
+#include "core/serialize.h"
+
 #include "core/rng.h"
 
 #include <stdbool.h>
@@ -46,5 +48,8 @@ ColonistAppearance appearance_roll(Rng *rng, int age);
 
 /* Whether every field is in range. */
 bool appearance_is_valid(ColonistAppearance appearance);
+
+/* Saves or loads (docs/SAVE.md) an appearance. */
+void appearance_serialize(Serializer *s, ColonistAppearance *appearance);
 
 #endif /* COLONY_CORE_APPEARANCE_H */

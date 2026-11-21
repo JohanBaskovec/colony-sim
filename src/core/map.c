@@ -2391,6 +2391,152 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->doors[index] = src->doors[index];
 }
 
+void tile_pos_serialize(Serializer *s, TilePos *pos)
+{
+    ser_i16(s, &pos->x);
+    ser_i16(s, &pos->y);
+    ser_i16(s, &pos->z);
+}
+
+static bool plant_is_empty(const Plant *plant)
+{
+    for (int i = 0; i < PLANT_PRODUCTS_MAX; i++) {
+        if (plant->stock[i] != 0) {
+            return false;
+        }
+    }
+    return plant->type == 0 && plant->size == 0 && plant->damage == 0 && plant->growth == 0.0f &&
+           plant->warmth == 0.0f && plant->climate == 0 && plant->hardening == 0 &&
+           plant->state == 0;
+}
+
+static void plant_serialize(Serializer *s, Plant *plant)
+{
+    ser_u8_below(s, &plant->type, PLANT_COUNT);
+    ser_u8(s, &plant->size);
+    ser_u16s(s, plant->stock, PLANT_PRODUCTS_MAX);
+    ser_u16(s, &plant->damage);
+    ser_float(s, &plant->growth);
+    ser_float(s, &plant->warmth);
+    ser_i16(s, &plant->climate);
+    ser_u8(s, &plant->hardening);
+    ser_u8(s, &plant->state);
+}
+
+/* The plants: those that are not empty, each after the gap since the last. */
+static void plants_serialize(Serializer *s, Map *map, size_t count)
+{
+    uint64_t listed = 0;
+    if (!s->reading) {
+        for (size_t i = 0; i < count; i++) {
+            listed += !plant_is_empty(&map->plants[i]);
+        }
+    }
+    ser_varint(s, &listed);
+    if (!ser_check(s, listed <= count)) {
+        return;
+    }
+    if (s->reading) {
+        memset(map->plants, 0, count * sizeof(*map->plants));
+    }
+    size_t at = 0;
+    for (uint64_t n = 0; n < listed && ser_ok(s); n++) {
+        uint64_t gap = 0;
+        if (!s->reading) {
+            while (plant_is_empty(&map->plants[at])) {
+                at++;
+                gap++;
+            }
+        }
+        ser_varint(s, &gap);
+        if (s->reading) {
+            if (!ser_check(s, gap < count - at)) {
+                return;
+            }
+            at += (size_t)gap;
+        }
+        plant_serialize(s, &map->plants[at]);
+        at++;
+    }
+}
+
+void map_serialize(Serializer *s, Map *map)
+{
+    int width = map->width, height = map->height, depth = map->depth;
+    ser_int(s, &width);
+    ser_int(s, &height);
+    ser_int(s, &depth);
+    if (!ser_check(s, width == map->width && height == map->height && depth == map->depth)) {
+        return;
+    }
+    size_t count = map_tile_count(map);
+    ser_int_in(s, &map->surface_level, 0, depth - 1);
+    ser_int_in(s, &map->top_ground_level, 0, depth - 1);
+    ser_layer_u8_below(s, map->terrain, count, TERRAIN_COUNT);
+    ser_layer_u8_below(s, map->rock, count, ROCK_COUNT);
+    ser_layer_u8(s, map->slope, count);
+    ser_layer_u16(s, map->water, count);
+    ser_int(s, &map->slope_count);
+    plants_serialize(s, map, count);
+    ser_layer_u8(s, map->cobbles, count);
+    ser_layer_u8(s, map->flint, count);
+    ser_layer_u8(s, map->branches, count);
+    ser_layer_u8(s, map->twigs, count);
+    ser_layer_u8(s, map->nuts, count);
+    ser_layer_u8_below(s, map->tree_species, count, PLANT_COUNT);
+    ser_layer_u8_below(s, map->structure, count, STRUCTURE_TYPE_COUNT);
+    ser_layer_u8(s, map->structure_part, count);
+    ser_layer_u8_below(s, map->structure_quality, count, ITEM_QUALITY_BEST + 1);
+    ser_layer_u16(s, map->structure_hit_points, count);
+    ser_layer_u16(s, map->structure_woods, count);
+    ser_ints(s, map->structure_counts, STRUCTURE_TYPE_COUNT);
+    ser_layer_u8_below(s, map->roof_quality, count, ITEM_QUALITY_BEST + 1);
+    ser_layer_u16(s, map->roof_woods, count);
+    ser_int(s, &map->roof_count);
+    ser_layer_u8(s, map->doors, count);
+    ser_int(s, &map->doors_kept_open);
+    ser_layer_u8(s, map->forbidden, count);
+    ser_int(s, &map->forbidden_count);
+    ser_u32(s, &map->build_revision);
+    for (int i = 0; i < MAP_BUILD_LOG_SIZE; i++) {
+        ser_i16(s, &map->build_log[i].x);
+        ser_i16(s, &map->build_log[i].y);
+        ser_i16(s, &map->build_log[i].z);
+    }
+    ser_u32(s, &map->topology_revision);
+    ser_u32(s, &map->light_revision);
+    size_t blocks = (size_t)((map->width + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK) *
+                    (size_t)((map->height + MAP_LIGHT_BLOCK - 1) / MAP_LIGHT_BLOCK);
+    ser_u32s(s, map->light_stamps, blocks);
+    ser_u32s(s, map->light_solid_stamps, blocks);
+    ser_u32(s, &map->light_solid_revision);
+    ser_u32(s, &map->water_revision);
+    ser_u8(s, &map->bare);
+    for (int i = 0; i < MAP_TOPOLOGY_LOG_SIZE; i++) {
+        MapTopologyChange *change = &map->topology_log[i];
+        ser_i16(s, &change->x);
+        ser_i16(s, &change->y);
+        ser_i16(s, &change->z);
+        ser_bool(s, &change->opened);
+        ser_bool(s, &change->anywhere);
+    }
+    ser_u32(s, &map->water_log_revision);
+    for (int i = 0; i < MAP_WATER_LOG_SIZE; i++) {
+        tile_pos_serialize(s, &map->water_log[i]);
+    }
+    ser_u32(s, &map->tree_fall_revision);
+    for (int i = 0; i < MAP_TREE_FALL_LOG_SIZE; i++) {
+        MapTreeFall *fall = &map->tree_fall_log[i];
+        ser_i16(s, &fall->x);
+        ser_i16(s, &fall->y);
+        ser_i16(s, &fall->z);
+        ser_u8(s, &fall->size);
+        ser_u8(s, &fall->direction);
+        ser_u8(s, &fall->length);
+        ser_u8(s, &fall->trunk);
+    }
+}
+
 uint64_t map_hash(const Map *map)
 {
     uint64_t hash = HASH_FNV1A64_INIT;

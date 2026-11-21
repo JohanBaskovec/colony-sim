@@ -798,3 +798,51 @@ bool vision_viewer_sees(const Vision *vision, int slot, int x, int y, int z)
         ((size_t)z * (size_t)vision->height + (size_t)y) * (size_t)vision->width + (size_t)x;
     return (vision->viewers[slot].field[index >> 6] >> (index & 63) & 1u) != 0;
 }
+
+void vision_serialize(Serializer *s, Vision *vision)
+{
+    size_t columns = (size_t)vision->width * (size_t)vision->height;
+    size_t tiles = columns * (size_t)vision->depth;
+    size_t words = vision->words;
+    ser_layer_u8(s, vision->column_top, columns);
+    ser_int(s, &vision->top_level);
+    ser_layer_u16(s, vision->seen, tiles);
+    ser_layer_u64(s, vision->seen_bits, words);
+    ser_layer_u64(s, vision->explored, words);
+    ser_layer_u64(s, vision->snapshot, words);
+    ser_size(s, &vision->explored_count);
+    ser_bool(s, &vision->snapshot_pending);
+    ser_bool(s, &vision->limited);
+    ser_int(s, &vision->near_budget);
+    ser_int(s, &vision->far_budget);
+    for (int i = 0; i < VISION_MAX_VIEWERS && ser_ok(s); i++) {
+        VisionViewer *viewer = &vision->viewers[i];
+        ser_bool(s, &viewer->active);
+        ser_bool(s, &viewer->asleep);
+        ser_i16(s, &viewer->limit);
+        ser_i16(s, &viewer->x);
+        ser_i16(s, &viewer->y);
+        ser_i16(s, &viewer->z);
+        ser_i16(s, &viewer->far_x);
+        ser_i16(s, &viewer->far_y);
+        ser_i16(s, &viewer->far_z);
+        ser_u64(s, &viewer->far_tick);
+        ser_bool(s, &viewer->near_dirty);
+        bool has_field = viewer->field != NULL;
+        ser_bool(s, &has_field);
+        if (s->reading && has_field && viewer->field == NULL) {
+            viewer->field = calloc(words, sizeof(*viewer->field));
+            if (!ser_check(s, viewer->field != NULL)) {
+                return;
+            }
+        }
+        if (has_field) {
+            ser_layer_u64(s, viewer->field, words);
+        }
+    }
+    ser_u32(s, &vision->topology_revision);
+    ser_u32(s, &vision->build_revision);
+    ser_int_in(s, &vision->sweep_column, 0, (int)columns);
+    ser_u64(s, &vision->rays);
+    ser_u64(s, &vision->steps);
+}

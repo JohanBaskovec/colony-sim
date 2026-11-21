@@ -884,3 +884,83 @@ uint64_t water_hash(const Water *water, uint64_t hash)
     }
     return hash;
 }
+
+static void water_block_serialize(Serializer *s, WaterBlock *block)
+{
+    for (int i = 0; i < WATER_BLOCK_TILES; i++) {
+        ser_i32(s, &block->east[i]);
+    }
+    for (int i = 0; i < WATER_BLOCK_TILES; i++) {
+        ser_i32(s, &block->south[i]);
+    }
+    ser_u64s(s, block->passable, WATER_BLOCK_TILES / 64);
+    ser_u64s(s, block->open_water, WATER_BLOCK_TILES / 64);
+    ser_u16(s, &block->quiet);
+    ser_bool(s, &block->moved);
+}
+
+/* The blocks of a list (active or woken), their contents after their
+ * numbers; when reading, each given an entry of the pool. */
+static void block_list_serialize(Serializer *s, Water *water, uint32_t *list, uint32_t *count)
+{
+    ser_u32_upto(s, count, water->block_count);
+    ser_u32s(s, list, *count);
+    for (uint32_t i = 0; i < *count && ser_ok(s); i++) {
+        uint32_t number = list[i];
+        if (s->reading) {
+            if (!ser_check(s, number < water->block_count && water->slot[number] == 0)) {
+                return;
+            }
+            if (water->pool_used == water->pool_capacity) {
+                uint32_t capacity = water->pool_capacity > 0 ? water->pool_capacity * 2 : 16;
+                capacity = capacity < water->block_count ? capacity : water->block_count;
+                WaterBlock *pool = realloc(water->pool, (size_t)capacity * sizeof(*pool));
+                if (!ser_check(s, pool != NULL)) {
+                    return;
+                }
+                water->pool = pool;
+                water->pool_capacity = capacity;
+            }
+            uint32_t entry = water->pool_used++;
+            memset(&water->pool[entry], 0, sizeof(water->pool[entry]));
+            water->pool[entry].number = number;
+            water->slot[number] = entry + 1;
+        }
+        water_block_serialize(s, &water->pool[water->slot[number] - 1]);
+    }
+}
+
+void water_serialize(Serializer *s, Water *water)
+{
+    size_t tiles = (size_t)water->width * (size_t)water->height * (size_t)water->depth;
+    if (s->reading) { /* As after water_init(): every block asleep. */
+        memset(water->slot, 0, (size_t)water->block_count * sizeof(*water->slot));
+        water->pool_used = water->free_count = 0;
+        water->active_count = water->woken_count = 0;
+        water->overfull_count = 0;
+    }
+    ser_bool(s, &water->fine_used);
+    ser_layer_u8(s, water->fine, tiles);
+    block_list_serialize(s, water, water->active, &water->active_count);
+    block_list_serialize(s, water, water->woken, &water->woken_count);
+    uint32_t overfull = water->overfull_count;
+    ser_u32_upto(s, &overfull, (uint32_t)(tiles < UINT32_MAX ? tiles : UINT32_MAX));
+    if (s->reading && overfull > 0) {
+        if (!ser_alloc(s, (void **)&water->overfull, overfull, sizeof(*water->overfull), tiles)) {
+            return;
+        }
+        water->overfull_capacity = overfull;
+    }
+    for (uint32_t i = 0; i < overfull && ser_ok(s); i++) {
+        ser_size(s, &water->overfull[i]);
+        ser_check(s, water->overfull[i] < tiles);
+    }
+    water->overfull_count = ser_ok(s) ? overfull : 0;
+    ser_u32(s, &water->topology_seen);
+    ser_u32(s, &water->build_seen);
+    ser_u32(s, &water->water_seen);
+    ser_u64(s, &water->steps);
+    ser_u64(s, &water->wakes);
+    ser_u64(s, &water->wake_alls);
+    ser_u64(s, &water->moved_last_step);
+}

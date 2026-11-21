@@ -16,6 +16,8 @@
 #ifndef COLONY_CORE_PATHFINDING_H
 #define COLONY_CORE_PATHFINDING_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 #include "core/tile_box.h"
 
@@ -140,5 +142,9 @@ size_t pathfinder_reachable_count(Pathfinder *finder, const Map *map, TilePos st
  * level. */
 size_t pathfinder_reachable_on_level(Pathfinder *finder, const Map *map, TilePos start,
                                      float max_cost, int z, uint8_t *mask);
+
+/* Saves or loads (docs/SAVE.md) a path: its steps, room made for them when
+ * reading. */
+void path_serialize(Serializer *s, Path *path);
 
 #endif /* COLONY_CORE_PATHFINDING_H */

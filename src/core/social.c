@@ -858,3 +858,33 @@ uint64_t social_hash(const Social *social, const Pool *pool, uint64_t hash)
     }
     return hash_fnv1a64(hash, &social->rng.state, sizeof(social->rng.state));
 }
+
+void social_serialize(Serializer *s, Social *social)
+{
+    for (int a = 0; a < COLONIST_MAX; a++) {
+        for (int b = 0; b < COLONIST_MAX; b++) {
+            SocialBond *bond = &social->bonds[a][b];
+            ser_u8(s, &bond->family);
+            ser_u8(s, &bond->level);
+            ser_u8_below(s, &bond->memory_count, SOCIAL_MEMORY_MAX + 1);
+            ser_u8(s, &bond->unused);
+            for (int m = 0; m < SOCIAL_MEMORY_MAX; m++) {
+                SocialMemory *memory = &bond->memories[m];
+                ser_u8(s, &memory->type);
+                ser_u8(s, &memory->count);
+                ser_u16(s, &memory->unused);
+                ser_float(s, &memory->value);
+                ser_u32(s, &memory->hour);
+            }
+        }
+        for (int t = 0; t < SOCIAL_TALE_MAX; t++) {
+            SocialTale *tale = &social->tales[a][t];
+            ser_i8(s, &tale->teller);
+            ser_i8(s, &tale->subject);
+            ser_u8(s, &tale->well);
+            ser_u8(s, &tale->unused);
+            ser_u32(s, &tale->hour);
+        }
+    }
+    rng_serialize(s, &social->rng);
+}

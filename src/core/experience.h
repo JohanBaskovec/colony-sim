@@ -9,6 +9,8 @@
 #ifndef COLONY_CORE_EXPERIENCE_H
 #define COLONY_CORE_EXPERIENCE_H
 
+#include "core/serialize.h"
+
 #include "core/rng.h"
 
 #include <stdbool.h>
@@ -70,5 +72,8 @@ const Experience *experiences_pick(const Experiences *experiences, uint32_t hour
 bool experience_is_feat(ExperienceType type);
 
 uint64_t experiences_hash(const Experiences *experiences, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the experiences. */
+void experiences_serialize(Serializer *s, Experiences *experiences);
 
 #endif /* COLONY_CORE_EXPERIENCE_H */

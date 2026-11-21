@@ -132,3 +132,14 @@ uint64_t item_moves_hash(const ItemMoves *moves, uint64_t hash)
     }
     return hash;
 }
+
+void item_moves_serialize(Serializer *s, ItemMoves *moves)
+{
+    for (int i = 0; i < ITEM_MOVE_MAX; i++) {
+        tile_pos_serialize(s, &moves->orders[i].source);
+        tile_pos_serialize(s, &moves->orders[i].destination);
+        item_id_serialize(s, &moves->orders[i].item);
+    }
+    ser_int_in(s, &moves->count, 0, ITEM_MOVE_MAX);
+    ser_u32(s, &moves->revision);
+}

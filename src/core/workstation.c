@@ -627,3 +627,56 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
     }
     return hash;
 }
+
+static void bill_serialize(Serializer *s, Bill *bill)
+{
+    ser_u8_below(s, &bill->recipe, RECIPE_COUNT);
+    ser_u8_below(s, &bill->mode, BILL_MODE_COUNT);
+    ser_u16(s, &bill->target);
+    ser_u16(s, &bill->done);
+    ser_u64(s, &bill->inputs);
+    ser_u8_below(s, &bill->worker, BILL_WORKER_COUNT);
+    ser_u8(s, &bill->min_level);
+    ser_u8(s, &bill->max_level);
+    entity_id_serialize(s, &bill->colonist);
+    ser_bool(s, &bill->paused);
+    ser_u16(s, &bill->input_radius);
+    ser_u8(s, &bill->min_quality);
+    ser_u8(s, &bill->max_quality);
+    ser_u16(s, &bill->woods);
+}
+
+void workstations_serialize(Serializer *s, Workstations *stations)
+{
+    size_t count = (size_t)stations->width * (size_t)stations->height * (size_t)stations->depth;
+    ser_layer_u8_below(s, stations->at, count, WORKSTATION_MAX + 1);
+    for (int i = 0; i < WORKSTATION_MAX; i++) {
+        Workstation *station = &stations->list[i];
+        ser_bool(s, &station->used);
+        ser_u8_below(s, &station->type, WORKSTATION_TYPE_COUNT);
+        ser_i16(s, &station->x);
+        ser_i16(s, &station->y);
+        ser_i16(s, &station->z);
+        ser_int(s, &station->number);
+        for (int b = 0; b < WORKSTATION_BILL_MAX; b++) {
+            bill_serialize(s, &station->bills[b]);
+        }
+        ser_int_in(s, &station->bill_count, 0, WORKSTATION_BILL_MAX);
+        ser_u8(s, &station->work_recipe);
+        item_stack_serialize(s, &station->work_input);
+        ser_float(s, &station->work_progress);
+        ser_bool(s, &station->free_input);
+        ser_float(s, &station->fuel);
+        ser_bool(s, &station->burning);
+        ser_bool(s, &station->keep_burning);
+        ser_u64(s, &station->fuel_types);
+        ser_float(s, &station->fuel_promised);
+        ser_float(s, &station->soaked);
+        ser_u8(s, &station->laid);
+        ser_bool(s, &station->forbidden);
+        ser_u8(s, &station->priority);
+    }
+    ser_int_in(s, &stations->used_count, 0, WORKSTATION_MAX);
+    ser_int(s, &stations->next_number);
+    ser_u32(s, &stations->revision);
+}

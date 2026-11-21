@@ -14,6 +14,8 @@
 #ifndef COLONY_CORE_ATTRIBUTES_H
 #define COLONY_CORE_ATTRIBUTES_H
 
+#include "core/serialize.h"
+
 #include "core/rng.h"
 
 #include <stdbool.h>
@@ -148,5 +150,8 @@ const char *attribute_description_key(AttributeType type);
 const char *attribute_word_key(AttributeType type, int position);
 
 uint64_t attributes_hash(const Attributes *attributes, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the attributes. */
+void attributes_serialize(Serializer *s, Attributes *attributes);
 
 #endif /* COLONY_CORE_ATTRIBUTES_H */

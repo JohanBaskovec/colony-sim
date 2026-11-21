@@ -99,3 +99,11 @@ uint64_t dirt_hash(const Dirt *dirt, uint64_t hash)
     return hash_fnv1a64(hash, dirt->level,
                         (size_t)dirt->width * (size_t)dirt->height * (size_t)dirt->depth);
 }
+
+void dirt_serialize(Serializer *s, Dirt *dirt)
+{
+    size_t count = (size_t)dirt->width * (size_t)dirt->height * (size_t)dirt->depth;
+    ser_layer_u8(s, dirt->level, count);
+    ser_int(s, &dirt->dirty_count);
+    ser_u32(s, &dirt->revision);
+}

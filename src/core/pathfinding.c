@@ -513,3 +513,19 @@ size_t pathfinder_reachable_on_level(Pathfinder *finder, const Map *map, TilePos
     }
     return count;
 }
+
+void path_serialize(Serializer *s, Path *path)
+{
+    int count = path->count;
+    ser_int_in(s, &count, 0, MAP_MAX_SIZE * MAP_MAX_SIZE * 4);
+    if (s->reading) {
+        path->count = 0;
+        if (!ser_ok(s) || !ser_check(s, path_reserve(path, count))) {
+            return;
+        }
+        path->count = count;
+    }
+    for (int i = 0; i < count; i++) {
+        tile_pos_serialize(s, &path->steps[i]);
+    }
+}

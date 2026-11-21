@@ -125,3 +125,21 @@ uint64_t reservations_hash(const Reservations *reservations, uint64_t hash)
     }
     return hash;
 }
+
+void reservations_serialize(Serializer *s, Reservations *reservations)
+{
+    for (int i = 0; i < RESERVATION_MAX; i++) {
+        Reservation *entry = &reservations->entries[i];
+        ser_u8_below(s, &entry->kind, RESERVATION_KIND_COUNT);
+        ser_u8(s, &entry->owner);
+        tile_pos_serialize(s, &entry->tile);
+    }
+    ser_int_in(s, &reservations->count, 0, RESERVATION_MAX);
+    ser_ints(s, reservations->count_by_kind, RESERVATION_KIND_COUNT);
+    ser_u32(s, &reservations->releases);
+    ser_u32s(s, reservations->releases_by_kind, RESERVATION_KIND_COUNT);
+    ser_u16s(s, reservations->index, RESERVATION_INDEX_SIZE);
+    for (int i = 0; i < RESERVATION_INDEX_SIZE && s->reading; i++) {
+        ser_check(s, reservations->index[i] <= RESERVATION_MAX);
+    }
+}

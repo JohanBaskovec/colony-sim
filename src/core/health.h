@@ -15,6 +15,8 @@
 #ifndef COLONY_CORE_HEALTH_H
 #define COLONY_CORE_HEALTH_H
 
+#include "core/serialize.h"
+
 #include "core/rng.h"
 
 #include <stdbool.h>
@@ -397,5 +399,8 @@ float health_injury_bleeding(const Health *health, const Injury *injury);
 /* The state enters the hash only when hurt or dead: hashes of games where
  * nobody is hurt stay as they were. */
 uint64_t health_hash(const Health *health, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) a being's health. */
+void health_serialize(Serializer *s, Health *health);
 
 #endif /* COLONY_CORE_HEALTH_H */

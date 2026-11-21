@@ -16,6 +16,8 @@
 #ifndef COLONY_CORE_OCCUPANCY_H
 #define COLONY_CORE_OCCUPANCY_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 
 #include <stdbool.h>
@@ -114,5 +116,9 @@ typedef struct OccupancyStopper {
 } OccupancyStopper;
 
 bool occupancy_stop_filter(const Map *map, int x, int y, int z, void *userdata);
+
+/* Saves or loads (docs/SAVE.md) who stops where, already allocated at the
+ * size of the map. */
+void occupancy_serialize(Serializer *s, Occupancy *occupancy);
 
 #endif /* COLONY_CORE_OCCUPANCY_H */

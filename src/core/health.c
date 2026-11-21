@@ -820,3 +820,35 @@ uint64_t health_hash(const Health *health, uint64_t hash)
     }
     return hash;
 }
+
+void health_serialize(Serializer *s, Health *health)
+{
+    ser_u8_below(s, &health->plan, BODY_PLAN_COUNT);
+    unsigned parts = (unsigned)body_part_count((BodyPlan)health->plan);
+    ser_u8_below(s, &health->death, DEATH_CAUSE_COUNT);
+    ser_u8(s, &health->death_part);
+    ser_u8_below(s, &health->injury_count, HEALTH_MAX_INJURIES + 1);
+    ser_u8_below(s, &health->posture, POSTURE_COUNT);
+    ser_float(s, &health->size);
+    ser_float(s, &health->damage_factor);
+    ser_float(s, &health->pain_factor);
+    ser_float(s, &health->blood);
+    ser_floats(s, health->deprivation, DEPRIVATION_COUNT);
+    for (int i = 0; i < HEALTH_MAX_INJURIES; i++) {
+        Injury *injury = &health->injuries[i];
+        ser_u8(s, &injury->part);
+        ser_u8_below(s, &injury->type, INJURY_TYPE_COUNT);
+        ser_float(s, &injury->damage);
+        ser_float(s, &injury->hours);
+        if (i < health->injury_count) {
+            ser_check(s, injury->part < parts);
+        }
+    }
+    ser_u8_below(s, &health->hurt_cause, HURT_CAUSE_COUNT);
+    ser_u8_below(s, &health->note_count, HEALTH_NOTES_MAX + 1);
+    for (int i = 0; i < HEALTH_NOTES_MAX; i++) {
+        ser_u8(s, &health->notes[i].part);
+        ser_u8_below(s, &health->notes[i].type, INJURY_TYPE_COUNT);
+        ser_u8_below(s, &health->notes[i].cause, HURT_CAUSE_COUNT);
+    }
+}

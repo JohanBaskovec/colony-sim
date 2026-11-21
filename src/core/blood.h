@@ -11,6 +11,8 @@
 #ifndef COLONY_CORE_BLOOD_H
 #define COLONY_CORE_BLOOD_H
 
+#include "core/serialize.h"
+
 #include "core/game_clock.h"
 #include "core/health.h"
 #include "core/map.h"
@@ -92,5 +94,8 @@ typedef struct BloodLook {
 } BloodLook;
 
 bool blood_look(const BloodStain *stain, uint64_t now, BloodLook *look);
+
+/* Saves or loads (docs/SAVE.md) the stains. */
+void blood_serialize(Serializer *s, BloodStains *stains);
 
 #endif /* COLONY_CORE_BLOOD_H */

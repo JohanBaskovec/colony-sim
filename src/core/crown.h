@@ -16,6 +16,8 @@
 #ifndef COLONY_CORE_CROWN_H
 #define COLONY_CORE_CROWN_H
 
+#include "core/serialize.h"
+
 #include "core/item.h"
 #include "core/map.h"
 
@@ -142,5 +144,9 @@ uint64_t crowns_hash(const Crowns *crowns, uint64_t hash);
 
 /* Whether the lists, totals and count agree (tests, debug). */
 bool crowns_check(const Crowns *crowns);
+
+/* Saves or loads (docs/SAVE.md) what hangs in the crowns, already allocated
+ * at the size of the map. */
+void crowns_serialize(Serializer *s, Crowns *crowns);
 
 #endif /* COLONY_CORE_CROWN_H */

@@ -29,6 +29,8 @@
 #ifndef COLONY_CORE_DESIGNATION_H
 #define COLONY_CORE_DESIGNATION_H
 
+#include "core/serialize.h"
+
 #include "core/construction.h"
 #include "core/knowledge.h"
 #include "core/map.h"
@@ -178,5 +180,9 @@ ItemType designation_yield(const Designations *designations, const Map *map, int
                            int *count);
 
 uint64_t designations_hash(const Designations *designations, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the designations, already allocated at the
+ * size of the map. */
+void designations_serialize(Serializer *s, Designations *designations);
 
 #endif /* COLONY_CORE_DESIGNATION_H */

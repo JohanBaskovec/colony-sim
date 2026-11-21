@@ -10,6 +10,8 @@
 #ifndef COLONY_CORE_STOCKPILE_H
 #define COLONY_CORE_STOCKPILE_H
 
+#include "core/serialize.h"
+
 #include "core/item.h"
 #include "core/map.h"
 
@@ -183,5 +185,9 @@ void stockpiles_count_stored(const Stockpiles *stockpiles, const Items *items,
                              long stored[ITEM_TYPE_COUNT]);
 
 uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the stockpiles, already allocated at the
+ * size of the map. */
+void stockpiles_serialize(Serializer *s, Stockpiles *stockpiles);
 
 #endif /* COLONY_CORE_STOCKPILE_H */

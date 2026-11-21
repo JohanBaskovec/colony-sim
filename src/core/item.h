@@ -40,6 +40,8 @@
 #ifndef COLONY_CORE_ITEM_H
 #define COLONY_CORE_ITEM_H
 
+#include "core/serialize.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -917,5 +919,15 @@ typedef struct ItemHeaps {
 } ItemHeaps;
 
 ItemHeaps items_heaps(const Items *items);
+
+/* Saves or loads (docs/SAVE.md) a stack and an item handle. */
+void item_stack_serialize(Serializer *s, ItemStack *stack);
+void item_id_serialize(Serializer *s, ItemId *id);
+
+/* Saves or loads (docs/SAVE.md) the items: their pool, the summaries and
+ * stamps of the tiles, the counts and the makers; when reading, into items
+ * already allocated at the size saved. Not the mirror nor the drop filter
+ * (the caller's). */
+void items_serialize(Serializer *s, Items *items);
 
 #endif /* COLONY_CORE_ITEM_H */

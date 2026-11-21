@@ -194,3 +194,60 @@ const KnownAnimal *known_animal_ghost_at(const KnownWorld *known, const Map *map
     }
     return best;
 }
+
+void known_serialize(Serializer *s, KnownWorld *known)
+{
+    map_serialize(s, &known->map);
+    items_serialize(s, &known->items);
+    dirt_serialize(s, &known->dirt);
+    crowns_serialize(s, &known->crowns);
+    size_t tiles = map_tile_count(&known->map);
+    uint64_t listed = 0;
+    if (!s->reading) {
+        for (size_t i = 0; i < tiles; i++) {
+            listed += known->stations[i].type_plus_one != 0;
+        }
+    }
+    ser_varint(s, &listed);
+    if (!ser_check(s, listed <= tiles)) {
+        return;
+    }
+    if (s->reading) {
+        memset(known->stations, 0, tiles * sizeof(*known->stations));
+    }
+    size_t at = 0;
+    for (uint64_t n = 0; n < listed && ser_ok(s); n++) {
+        uint64_t gap = 0;
+        if (!s->reading) {
+            while (known->stations[at].type_plus_one == 0) {
+                at++;
+                gap++;
+            }
+        }
+        ser_varint(s, &gap);
+        if (s->reading && !ser_check(s, gap < tiles - at)) {
+            return;
+        }
+        at += s->reading ? (size_t)gap : 0;
+        KnownStation *station = &known->stations[at];
+        ser_u8_below(s, &station->type_plus_one, WORKSTATION_TYPE_COUNT + 1);
+        ser_check(s, station->type_plus_one != 0);
+        ser_bool(s, &station->burning);
+        ser_u8(s, &station->fuel);
+        ser_u8(s, &station->input);
+        at++;
+    }
+    for (int i = 0; i < ANIMAL_MAX; i++) {
+        KnownAnimal *animal = &known->animals[i];
+        entity_id_serialize(s, &animal->id);
+        ser_float(s, &animal->x);
+        ser_float(s, &animal->y);
+        ser_i16(s, &animal->z);
+        ser_u8(s, &animal->state);
+        ser_u8_below(s, &animal->species, ANIMAL_SPECIES_COUNT);
+        ser_u8(s, &animal->sex);
+        ser_u8(s, &animal->task);
+        ser_u8(s, &animal->heading);
+        ser_u64(s, &animal->tick);
+    }
+}

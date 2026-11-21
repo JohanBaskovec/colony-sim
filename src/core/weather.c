@@ -357,3 +357,15 @@ uint64_t weather_hash(const Weather *weather, uint64_t hash)
     }
     return hash;
 }
+
+void weather_serialize(Serializer *s, Weather *weather)
+{
+    ser_u64(s, &weather->seed);
+    ser_u8_below(s, &weather->type, WEATHER_TYPE_COUNT);
+    ser_u64(s, &weather->period);
+    ser_u32(s, &weather->day);
+    ser_float(s, &weather->spell);
+    ser_float(s, &weather->snow);
+    ser_float(s, &weather->recent_rain);
+    ser_float(s, &weather->debug_offset);
+}

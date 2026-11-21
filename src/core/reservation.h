@@ -10,6 +10,8 @@
 #ifndef COLONY_CORE_RESERVATION_H
 #define COLONY_CORE_RESERVATION_H
 
+#include "core/serialize.h"
+
 #include "core/pathfinding.h"
 
 #include <stdbool.h>
@@ -76,5 +78,8 @@ void reservations_release_all(Reservations *reservations, uint8_t owner);
 void reservations_release_kind(Reservations *reservations, ReservationKind kind, uint8_t owner);
 
 uint64_t reservations_hash(const Reservations *reservations, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) every reservation and its index. */
+void reservations_serialize(Serializer *s, Reservations *reservations);
 
 #endif /* COLONY_CORE_RESERVATION_H */

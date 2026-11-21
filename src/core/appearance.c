@@ -46,3 +46,12 @@ bool appearance_is_valid(ColonistAppearance appearance)
            appearance.hair_style < APPEARANCE_HAIR_STYLE_COUNT &&
            appearance.hair_color < HAIR_COLOR_COUNT && appearance.beard < APPEARANCE_BEARD_COUNT;
 }
+
+void appearance_serialize(Serializer *s, ColonistAppearance *appearance)
+{
+    ser_u8_below(s, &appearance->skin, APPEARANCE_SKIN_COUNT);
+    ser_u8_below(s, &appearance->body, APPEARANCE_BODY_COUNT);
+    ser_u8_below(s, &appearance->hair_style, APPEARANCE_HAIR_STYLE_COUNT);
+    ser_u8_below(s, &appearance->hair_color, HAIR_COLOR_COUNT);
+    ser_u8_below(s, &appearance->beard, APPEARANCE_BEARD_COUNT);
+}

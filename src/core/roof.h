@@ -21,6 +21,8 @@
 #ifndef COLONY_CORE_ROOF_H
 #define COLONY_CORE_ROOF_H
 
+#include "core/serialize.h"
+
 #include "core/designation.h"
 #include "core/item.h"
 #include "core/map.h"
@@ -53,5 +55,8 @@ void roof_watch_init(RoofWatch *watch, const Map *map);
  * NULL; `cave_ins` is reset first). Returns how many roofs fell in. */
 int roofs_collapse(RoofWatch *watch, Map *map, Items *items, Designations *designations,
                    CaveIns *cave_ins);
+
+/* Saves or loads (docs/SAVE.md) the revisions last checked. */
+void roof_watch_serialize(Serializer *s, RoofWatch *watch);
 
 #endif /* COLONY_CORE_ROOF_H */

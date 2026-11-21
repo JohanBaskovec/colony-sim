@@ -33,6 +33,8 @@
 #ifndef COLONY_CORE_ANIMAL_H
 #define COLONY_CORE_ANIMAL_H
 
+#include "core/serialize.h"
+
 #include "core/attributes.h"
 #include "core/combat.h"
 #include "core/game_clock.h"
@@ -489,5 +491,9 @@ Heading animal_heading(const Animal *animal);
 void animal_position(const Animal *animal, float *x, float *y);
 
 uint64_t animals_hash(const Animals *animals, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) an animal, and every animal with their pool. */
+void animal_serialize(Serializer *s, Animal *animal);
+void animals_serialize(Serializer *s, Animals *animals);
 
 #endif /* COLONY_CORE_ANIMAL_H */

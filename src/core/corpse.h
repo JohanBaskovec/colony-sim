@@ -10,6 +10,8 @@
 #ifndef COLONY_CORE_CORPSE_H
 #define COLONY_CORE_CORPSE_H
 
+#include "core/serialize.h"
+
 #include "core/animal.h"
 #include "core/colonist.h"
 
@@ -58,5 +60,8 @@ uint16_t corpses_add_animal(Corpses *corpses, const Animal *dead, uint64_t tick)
 
 /* The record with this id, NULL for 0 and for an unknown id. */
 const Corpse *corpses_get(const Corpses *corpses, uint16_t id);
+
+/* Saves or loads (docs/SAVE.md) the records of the dead. */
+void corpses_serialize(Serializer *s, Corpses *corpses);
 
 #endif /* COLONY_CORE_CORPSE_H */

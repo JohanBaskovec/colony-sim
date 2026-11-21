@@ -74,3 +74,27 @@ const Corpse *corpses_get(const Corpses *corpses, uint16_t id)
     }
     return &corpses->list[id - 1];
 }
+
+void corpses_serialize(Serializer *s, Corpses *corpses)
+{
+    int count = corpses->count;
+    ser_int_in(s, &count, 0, (int)CORPSES_MAX);
+    if (s->reading) {
+        if (!ser_alloc(s, (void **)&corpses->list, (size_t)count, sizeof(*corpses->list),
+                       CORPSES_MAX)) {
+            return;
+        }
+        corpses->count = corpses->capacity = count;
+    }
+    for (int i = 0; i < count && ser_ok(s); i++) {
+        Corpse *corpse = &corpses->list[i];
+        ser_u16(s, &corpse->id);
+        ser_u8_below(s, &corpse->kind, CORPSE_ANIMAL + 1);
+        ser_u64(s, &corpse->died);
+        if (corpse->kind == CORPSE_SETTLER) {
+            colonist_serialize(s, &corpse->colonist);
+        } else {
+            animal_serialize(s, &corpse->animal);
+        }
+    }
+}

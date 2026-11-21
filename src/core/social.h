@@ -19,6 +19,8 @@
 #ifndef COLONY_CORE_SOCIAL_H
 #define COLONY_CORE_SOCIAL_H
 
+#include "core/serialize.h"
+
 #include "core/colonist.h"
 #include "core/pool.h"
 #include "core/rng.h"
@@ -285,5 +287,8 @@ const char *family_tie_key(FamilyTie tie);
 const char *relation_level_key(RelationLevel level);
 
 uint64_t social_hash(const Social *social, const Pool *pool, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) every bond, tale and the stream. */
+void social_serialize(Serializer *s, Social *social);
 
 #endif /* COLONY_CORE_SOCIAL_H */

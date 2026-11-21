@@ -175,3 +175,9 @@ int roofs_collapse(RoofWatch *watch, Map *map, Items *items, Designations *desig
     roof_watch_init(watch, map);
     return fallen;
 }
+
+void roof_watch_serialize(Serializer *s, RoofWatch *watch)
+{
+    ser_u32(s, &watch->topology_revision);
+    ser_u32(s, &watch->build_revision);
+}

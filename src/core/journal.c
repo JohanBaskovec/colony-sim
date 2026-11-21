@@ -238,3 +238,30 @@ void journal_note_hurts(Journal *journal, Health *health, uint64_t tick)
         journal_note_hurt(journal, tick, notes[i].cause, health, notes[i].part, notes[i].type);
     }
 }
+
+void journal_serialize(Serializer *s, Journal *journal)
+{
+    for (int i = 0; i < JOURNAL_MAX; i++) {
+        JournalEntry *entry = &journal->list[i];
+        ser_u64(s, &entry->tick);
+        ser_u8_below(s, &entry->event, JOURNAL_EVENT_COUNT);
+        ser_u8(s, &entry->plan);
+        ser_u8(s, &entry->part);
+        ser_u8(s, &entry->injury);
+        ser_u16(s, &entry->what);
+        ser_u8(s, &entry->species);
+        ser_u8(s, &entry->sex);
+        ser_u8(s, &entry->outcome);
+        ser_u8(s, &entry->repeats);
+        ser_u8(s, &entry->topic);
+        ser_u8(s, &entry->animal);
+        ser_u8(s, &entry->animal_sex);
+        ser_bool(s, &entry->heard);
+        ser_bytes(s, entry->other, JOURNAL_NAME_SIZE);
+        ser_bytes(s, entry->subject, JOURNAL_NAME_SIZE);
+        entry->other[JOURNAL_NAME_SIZE - 1] = 0;
+        entry->subject[JOURNAL_NAME_SIZE - 1] = 0;
+    }
+    ser_int_in(s, &journal->next, 0, JOURNAL_MAX - 1);
+    ser_int_in(s, &journal->count, 0, JOURNAL_MAX);
+}

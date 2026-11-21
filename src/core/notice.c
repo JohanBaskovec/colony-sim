@@ -51,3 +51,16 @@ const char *notice_text_key(NoticeType type)
     };
     return (unsigned)type < NOTICE_TYPE_COUNT ? KEYS[type] : KEYS[NOTICE_KNOWLEDGE_LOST];
 }
+
+void notices_serialize(Serializer *s, Notices *notices)
+{
+    ser_u32_upto(s, &notices->count, NOTICE_MAX);
+    for (uint32_t i = 0; i < notices->count; i++) {
+        Notice *notice = &notices->list[i];
+        ser_u8_below(s, &notice->type, NOTICE_TYPE_COUNT);
+        ser_u8(s, &notice->knowledge);
+        ser_bytes(s, notice->name, NOTICE_NAME_SIZE);
+        notice->name[NOTICE_NAME_SIZE - 1] = 0;
+        ser_u64(s, &notice->tick);
+    }
+}

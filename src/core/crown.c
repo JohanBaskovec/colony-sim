@@ -397,3 +397,38 @@ bool crowns_check(const Crowns *crowns)
     }
     return count == crowns->count && memcmp(totals, crowns->totals, sizeof(totals)) == 0;
 }
+
+void crowns_serialize(Serializer *s, Crowns *crowns)
+{
+    size_t tiles = (size_t)crowns->width * (size_t)crowns->height * (size_t)crowns->depth;
+    ser_layer_u32(s, crowns->heads, tiles);
+    uint32_t used = crowns->pool_used;
+    ser_u32(s, &used);
+    if (s->reading) {
+        uint32_t capacity = used > POOL_INITIAL ? used : POOL_INITIAL;
+        if (!ser_alloc(s, (void **)&crowns->pool, capacity, sizeof(*crowns->pool),
+                       UINT32_MAX / 4)) {
+            return;
+        }
+        crowns->pool_capacity = capacity;
+        crowns->pool_used = used;
+    }
+    for (size_t i = 0; i < tiles && s->reading && ser_ok(s); i++) {
+        ser_check(s, crowns->heads[i] <= used);
+    }
+    for (uint32_t i = 0; i < used && ser_ok(s); i++) {
+        CrownItem *item = &crowns->pool[i];
+        ser_u8_below(s, &item->type, ITEM_TYPE_COUNT);
+        ser_u8(s, &item->quality);
+        ser_u16(s, &item->hit_points);
+        ser_u16(s, &item->woods);
+        ser_u16(s, &item->day);
+        ser_u32_upto(s, &item->next, used);
+        ser_u32(s, &item->tile);
+    }
+    ser_u32_upto(s, &crowns->free_head, used);
+    ser_long(s, &crowns->count);
+    ser_int(s, &crowns->day);
+    ser_longs(s, crowns->totals, ITEM_TYPE_COUNT);
+    ser_u32(s, &crowns->revision);
+}

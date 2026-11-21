@@ -61,3 +61,9 @@ bool rng_chance(Rng *rng, float probability)
     }
     return rng_next_float(rng) < probability;
 }
+
+void rng_serialize(Serializer *s, Rng *rng)
+{
+    ser_u64(s, &rng->state);
+    ser_u64(s, &rng->increment);
+}

@@ -113,3 +113,12 @@ uint64_t beds_hash(const Beds *beds, uint64_t hash)
     }
     return hash;
 }
+
+void beds_serialize(Serializer *s, Beds *beds)
+{
+    size_t count = (size_t)beds->width * (size_t)beds->height * (size_t)beds->depth;
+    ser_layer_u8(s, beds->owner, count);
+    for (int i = 0; i < BED_OWNER_COUNT; i++) {
+        tile_pos_serialize(s, &beds->owned[i]);
+    }
+}

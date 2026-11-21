@@ -72,3 +72,27 @@ EntityId pool_id_at(const Pool *pool, uint32_t index)
     }
     return (EntityId){index, pool->generations[index]};
 }
+
+void entity_id_serialize(Serializer *s, EntityId *id)
+{
+    ser_u32(s, &id->index);
+    ser_u32(s, &id->generation);
+}
+
+void pool_serialize(Serializer *s, Pool *pool)
+{
+    uint32_t capacity = pool->capacity;
+    ser_u32(s, &capacity);
+    if (!ser_check(s, capacity == pool->capacity)) {
+        return;
+    }
+    ser_u32_upto(s, &pool->count, capacity);
+    ser_u32_upto(s, &pool->high_water, capacity);
+    ser_u32s(s, pool->generations, capacity);
+    ser_bools(s, pool->alive, capacity);
+    ser_u32_upto(s, &pool->free_count, capacity);
+    ser_u32s(s, pool->free_list, pool->free_count);
+    for (uint32_t i = 0; i < pool->free_count && s->reading; i++) {
+        ser_check(s, pool->free_list[i] < pool->high_water);
+    }
+}

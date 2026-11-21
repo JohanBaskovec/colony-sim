@@ -19,12 +19,16 @@
  * checks them every in-game hour too (outside the times measured) and stops
  * at the first problem, with its tick.
  *
+ * At the end, the game is saved and loaded (core/save.h): the size of the
+ * save and the times, and whether the game loaded is the same.
+ *
  * Scenarios: see core/scenario.h (0 = none, 1 = gathering, 2 = unreachable
  * jobs, 3 = construction, 4 = feuds, 5 = cooking).
  */
 #define _POSIX_C_SOURCE 199309L /* clock_gettime(). */
 
 #include "core/game.h"
+#include "core/save.h"
 #include "core/scenario.h"
 
 #include <stdio.h>
@@ -186,6 +190,36 @@ static double cpu_seconds(void)
     return now_seconds();
 }
 
+/* Saves the game and loads it back: the size and the times (processor). */
+static void print_save(const Game *game)
+{
+    double start = cpu_seconds();
+    size_t size = 0;
+    uint8_t *data = game_save(game, &size);
+    double saved = cpu_seconds();
+    if (data == NULL) {
+        printf("  save: out of memory\n");
+        return;
+    }
+    Game *loaded = malloc(sizeof(*loaded));
+    if (loaded == NULL) {
+        free(data);
+        printf("  save: out of memory\n");
+        return;
+    }
+    double load_start = cpu_seconds();
+    SaveError error = game_load(loaded, data, size);
+    double load_end = cpu_seconds();
+    printf("  save: %.2f MB, saved in %.1f ms, loaded in %.1f ms%s\n", (double)size / 1e6,
+           (saved - start) * 1e3, (load_end - load_start) * 1e3,
+           error != SAVE_OK                       ? " (REFUSED)"
+           : game_hash(loaded) != game_hash(game) ? " (NOT THE SAME)"
+                                                  : "");
+    game_shutdown(loaded);
+    free(loaded);
+    free(data);
+}
+
 int main(int argc, char **argv)
 {
     int colonists = argc > 1 ? atoi(argv[1]) : 32;
@@ -335,6 +369,7 @@ int main(int argc, char **argv)
     }
     print_items(&game);
     printf("  state hash %016llx\n", (unsigned long long)game_hash(&game));
+    print_save(&game);
 
     game_shutdown(&game);
     return EXIT_SUCCESS;

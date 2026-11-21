@@ -8,6 +8,8 @@
 #ifndef COLONY_CORE_TILE_BOX_H
 #define COLONY_CORE_TILE_BOX_H
 
+#include "core/serialize.h"
+
 #include <stdbool.h>
 
 typedef struct TileBox {
@@ -43,6 +45,17 @@ static inline bool tile_box_contains(const TileBox *box, int x, int y, int z)
 {
     return x >= box->x0 && x <= box->x1 && y >= box->y0 && y <= box->y1 && z >= box->z0 &&
            z <= box->z1;
+}
+
+/* Saves or loads a box (docs/SAVE.md). */
+static inline void tile_box_serialize(Serializer *s, TileBox *box)
+{
+    ser_int(s, &box->x0);
+    ser_int(s, &box->y0);
+    ser_int(s, &box->z0);
+    ser_int(s, &box->x1);
+    ser_int(s, &box->y1);
+    ser_int(s, &box->z1);
 }
 
 #endif /* COLONY_CORE_TILE_BOX_H */

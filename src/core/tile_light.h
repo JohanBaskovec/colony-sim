@@ -37,6 +37,8 @@
 #ifndef COLONY_CORE_TILE_LIGHT_H
 #define COLONY_CORE_TILE_LIGHT_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 #include "core/sky.h"
 #include "core/sun.h"
@@ -128,6 +130,8 @@ typedef struct TileLight {
  * will make it (TILE_LIGHT_NOON_*); no sun hours yet. False when memory ran
  * out. */
 bool tile_light_init(TileLight *light, const Map *map, uint64_t tick);
+/* Allocated for the map, nothing worked out (for loading a save). */
+bool tile_light_init_empty(TileLight *light, const Map *map);
 void tile_light_free(TileLight *light);
 /* Works out now what is out of date (`open` where the map changed, `direct`
  * for the period of `tick`, `noon`), keeping the sun hours: after the map was
@@ -168,5 +172,9 @@ float tile_light_sun_lit(TileLight *light, const Map *map, SunPosition sun, floa
  * the light outright in it (the foliage may still be out of date). */
 bool tile_light_open_settled(const TileLight *light, const Map *map);
 bool tile_light_open_firm(const TileLight *light, const Map *map);
+
+/* Saves or loads (docs/SAVE.md) the light of every tile, the tops and the
+ * sweeps under way; when reading, into light initialized for the map saved. */
+void tile_light_serialize(Serializer *s, TileLight *light);
 
 #endif /* COLONY_CORE_TILE_LIGHT_H */

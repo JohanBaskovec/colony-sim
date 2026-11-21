@@ -30,6 +30,8 @@
 #ifndef COLONY_CORE_VISION_H
 #define COLONY_CORE_VISION_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 
 #include <stdbool.h>
@@ -185,5 +187,10 @@ uint64_t vision_explored_hash(const Vision *vision);
  * out of bounds. */
 bool vision_seen(const Vision *vision, int x, int y, int z);
 bool vision_viewer_sees(const Vision *vision, int slot, int x, int y, int z);
+
+/* Saves or loads (docs/SAVE.md) what is seen and explored, the viewers and
+ * the sweep under way; when reading, into a vision initialized for the map
+ * saved. */
+void vision_serialize(Serializer *s, Vision *vision);
 
 #endif /* COLONY_CORE_VISION_H */

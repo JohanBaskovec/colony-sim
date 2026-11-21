@@ -29,6 +29,8 @@
 #ifndef COLONY_CORE_MOOD_H
 #define COLONY_CORE_MOOD_H
 
+#include "core/serialize.h"
+
 #include "core/game_clock.h"
 #include "core/item.h"
 
@@ -270,5 +272,8 @@ const char *mood_break_key(MoodBreak kind);
 const char *mood_level_key(float value);
 
 uint64_t mood_hash(const Mood *mood, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) a mood. */
+void mood_serialize(Serializer *s, Mood *mood);
 
 #endif /* COLONY_CORE_MOOD_H */

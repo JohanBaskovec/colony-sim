@@ -307,3 +307,8 @@ uint64_t attributes_hash(const Attributes *attributes, uint64_t hash)
 {
     return hash_fnv1a64(hash, attributes->position, sizeof(attributes->position));
 }
+
+void attributes_serialize(Serializer *s, Attributes *attributes)
+{
+    ser_i16s(s, attributes->position, ATTRIBUTE_COUNT);
+}

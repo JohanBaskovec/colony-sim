@@ -24,6 +24,8 @@
 #ifndef COLONY_CORE_SOIL_H
 #define COLONY_CORE_SOIL_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 #include "core/tile_light.h"
 #include "core/water.h"
@@ -122,6 +124,8 @@ typedef struct Soil {
 /* Every tile of rooting ground at `share` of its useful water (0: wilting,
  * 1: field capacity), the banks at their target. */
 bool soil_init(Soil *soil, const Map *map, float share);
+/* Allocated for the map, nothing worked out (for loading a save). */
+bool soil_init_empty(Soil *soil, const Map *map);
 void soil_free(Soil *soil);
 
 /* The potential evapotranspiration of an open tile in an hour, in mm
@@ -173,5 +177,9 @@ float soil_bank_moisture(int distance);
 float soil_bank_target(const SoilDef *def, int distance);
 
 uint64_t soil_hash(const Soil *soil, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the water in the ground and what the last
+ * hour left; already allocated at the size of the map. */
+void soil_serialize(Serializer *s, Soil *soil);
 
 #endif /* COLONY_CORE_SOIL_H */

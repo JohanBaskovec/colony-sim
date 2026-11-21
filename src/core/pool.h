@@ -10,6 +10,8 @@
 #ifndef COLONY_CORE_POOL_H
 #define COLONY_CORE_POOL_H
 
+#include "core/serialize.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -53,5 +55,10 @@ bool pool_is_alive(const Pool *pool, EntityId id);
 
 /* Handle of a live slot (for iteration), or ENTITY_NONE if the slot is free. */
 EntityId pool_id_at(const Pool *pool, uint32_t index);
+
+/* Saves or loads (docs/SAVE.md) a pool already initialized at the capacity
+ * saved (refused otherwise), and handles. */
+void pool_serialize(Serializer *s, Pool *pool);
+void entity_id_serialize(Serializer *s, EntityId *id);
 
 #endif /* COLONY_CORE_POOL_H */

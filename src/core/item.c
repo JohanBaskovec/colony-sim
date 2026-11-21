@@ -2693,3 +2693,145 @@ uint64_t items_hash(const Items *items, uint64_t hash)
     }
     return hash;
 }
+
+void item_stack_serialize(Serializer *s, ItemStack *stack)
+{
+    ser_u8_below(s, &stack->type, ITEM_TYPE_COUNT);
+    ser_u8(s, &stack->quality);
+    ser_u16(s, &stack->count);
+    ser_u16(s, &stack->hit_points);
+    ser_u16(s, &stack->progress);
+    ser_u16(s, &stack->eaten);
+    ser_u16(s, &stack->corpse);
+    ser_u8(s, &stack->forbidden);
+    ser_u16(s, &stack->woods);
+    ser_u32(s, &stack->made);
+    ser_u16(s, &stack->maker);
+    ser_u16(s, &stack->moisture);
+    ser_u32(s, &stack->held);
+}
+
+void item_id_serialize(Serializer *s, ItemId *id)
+{
+    ser_u32(s, &id->slot);
+    ser_u16(s, &id->generation);
+}
+
+static bool stack_is_empty(const ItemStack *stack)
+{
+    return stack->type == 0 && stack->quality == 0 && stack->count == 0 && stack->hit_points == 0 &&
+           stack->progress == 0 && stack->eaten == 0 && stack->corpse == 0 &&
+           stack->forbidden == 0 && stack->woods == 0 && stack->made == 0 && stack->maker == 0 &&
+           stack->moisture == 0 && stack->held == 0;
+}
+
+/* The summaries of the tiles: those not empty, each after the gap since the
+ * last. */
+static void stacks_serialize(Serializer *s, Items *items, size_t tiles)
+{
+    uint64_t listed = 0;
+    if (!s->reading) {
+        for (size_t i = 0; i < tiles; i++) {
+            listed += !stack_is_empty(&items->stacks[i]);
+        }
+    }
+    ser_varint(s, &listed);
+    if (!ser_check(s, listed <= tiles)) {
+        return;
+    }
+    if (s->reading) {
+        memset(items->stacks, 0, tiles * sizeof(*items->stacks));
+    }
+    size_t at = 0;
+    for (uint64_t n = 0; n < listed && ser_ok(s); n++) {
+        uint64_t gap = 0;
+        if (!s->reading) {
+            while (stack_is_empty(&items->stacks[at])) {
+                at++;
+                gap++;
+            }
+        }
+        ser_varint(s, &gap);
+        if (s->reading && !ser_check(s, gap < tiles - at)) {
+            return;
+        }
+        at += s->reading ? (size_t)gap : 0;
+        item_stack_serialize(s, &items->stacks[at]);
+        at++;
+    }
+}
+
+static void item_serialize(Serializer *s, Item *item)
+{
+    ser_u8_below(s, &item->type, ITEM_TYPE_COUNT);
+    ser_u8(s, &item->quality);
+    ser_u8(s, &item->spot_x);
+    ser_u8(s, &item->spot_y);
+    ser_u16(s, &item->hit_points);
+    ser_u16(s, &item->progress);
+    ser_u16(s, &item->eaten);
+    ser_u16(s, &item->corpse);
+    ser_u16(s, &item->generation);
+    ser_u8(s, &item->angle);
+    ser_u8(s, &item->forbidden);
+    ser_u16(s, &item->woods);
+    ser_u16(s, &item->moisture);
+    ser_u32(s, &item->made);
+    ser_u16(s, &item->maker);
+    ser_u32(s, &item->next);
+    ser_u32(s, &item->tile);
+}
+
+void items_serialize(Serializer *s, Items *items)
+{
+    int width = items->width, height = items->height, depth = items->depth;
+    ser_int(s, &width);
+    ser_int(s, &height);
+    ser_int(s, &depth);
+    if (!ser_check(s, width == items->width && height == items->height && depth == items->depth)) {
+        return;
+    }
+    size_t tiles = (size_t)width * (size_t)height * (size_t)depth;
+    stacks_serialize(s, items, tiles);
+    ser_layer_u8(s, items->mixed, tiles);
+    ser_longs(s, items->totals, ITEM_TYPE_COUNT);
+    ser_u32s(s, items->level_stacks, (size_t)depth);
+    ser_u32(s, &items->additions);
+    ser_layer_u8(s, items->forbidden, tiles);
+    ser_int(s, &items->forbidden_count);
+    uint32_t used = items->pool_used;
+    ser_u32(s, &used);
+    if (s->reading) {
+        if (!ser_alloc(s, (void **)&items->pool, used, sizeof(*items->pool), UINT32_MAX / 4)) {
+            return;
+        }
+        items->pool_used = used;
+        items->pool_capacity = used;
+    }
+    for (uint32_t i = 0; i < used && ser_ok(s); i++) {
+        item_serialize(s, &items->pool[i]);
+        ser_check(s, items->pool[i].next <= used);
+    }
+    ser_u32_upto(s, &items->free_slots, used);
+    ser_long(s, &items->item_count);
+    ser_long(s, &items->held_count);
+    ser_layer_u32(s, items->heads, tiles);
+    for (size_t i = 0; i < tiles && s->reading && ser_ok(s); i++) {
+        ser_check(s, items->heads[i] <= used);
+    }
+    ser_layer_u32(s, items->stamps, tiles);
+    ser_u32(s, &items->stamp_clock);
+    ser_bool(s, &items->picture);
+    ser_longs(s, items->rotted, ITEM_TYPE_COUNT);
+    ser_u32(s, &items->now);
+    ser_int_in(s, &items->maker_count, 0, ITEM_MAKERS_MAX);
+    for (int i = 0; i < ITEM_MAKERS_MAX; i++) {
+        entity_id_serialize(s, &items->makers[i].id);
+        ser_bytes(s, items->makers[i].name, sizeof(items->makers[i].name));
+    }
+    if (s->reading) {
+        for (int i = 0; i < ITEM_MAKERS_MAX; i++) {
+            items->makers[i].name[sizeof(items->makers[i].name) - 1] = 0;
+        }
+    }
+}

@@ -600,11 +600,11 @@ static float noon_light(const Game *game, int x, int y, int z)
     return game_tile_light(game, x, y, z, shadow_direct_share(elevation, 1.0f), true);
 }
 
-bool game_init(Game *game, const NewGameParams *params)
+/* The modules around the map (allocated, empty), at its size: game_init()
+ * after world generation, game_prepare_load() once the map is read. */
+static bool init_modules(Game *game)
 {
-    memset(game, 0, sizeof(*game));
-    if (!worldgen_generate_lit(&game->map, &params->world, &game->light) ||
-        !designations_init(&game->designations, game->map.width, game->map.height,
+    if (!designations_init(&game->designations, game->map.width, game->map.height,
                            game->map.depth) ||
         !dirt_init(&game->dirt, game->map.width, game->map.height, game->map.depth) ||
         !gather_zones_init(&game->gather_zones, game->map.width, game->map.height,
@@ -621,20 +621,47 @@ bool game_init(Game *game, const NewGameParams *params)
         !regions_init(&game->regions, game->map.width, game->map.height, game->map.depth) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX) || !animals_init(&game->animals) ||
         !occupancy_init(&game->occupancy, game->map.width, game->map.height, game->map.depth)) {
-        game_shutdown(game);
         return false;
     }
-    game->seed = params->world.seed;
     /* Items dropped keep off storage they would mix up. */
     items_set_drop_filter(&game->items, haul_drop_filter, &game->stockpiles);
-    /* Stones, branches and twigs lie as ordinary items from now on. */
-    map_litter_to_items(&game->map, &game->items);
     /* Fruit and dead wood hang in the crowns from now on. */
     game->map.crowns = &game->crowns;
     corpses_init(&game->corpses);
     reservations_init(&game->reservations);
     item_moves_init(&game->item_moves);
     game_clock_init(&game->clock);
+    return true;
+}
+
+bool game_prepare_load(Game *game)
+{
+    if (!init_modules(game) || !tile_light_init_empty(&game->light, &game->map)) {
+        game_shutdown(game);
+        return false;
+    }
+    game->map.litter = &game->items; /* Its stones and branches are items already. */
+    social_init(&game->social, game->seed);
+    roof_watch_init(&game->roof_watch, &game->map);
+    weather_init(&game->weather, game->seed, 0);
+    if (!temperatures_init_empty(&game->temperatures, &game->map) ||
+        !soil_init_empty(&game->soil, &game->map) || !water_init(&game->water, &game->map)) {
+        game_shutdown(game);
+        return false;
+    }
+    return true;
+}
+
+bool game_init(Game *game, const NewGameParams *params)
+{
+    memset(game, 0, sizeof(*game));
+    if (!worldgen_generate_lit(&game->map, &params->world, &game->light) || !init_modules(game)) {
+        game_shutdown(game);
+        return false;
+    }
+    game->seed = params->world.seed;
+    /* Stones, branches and twigs lie as ordinary items from now on. */
+    map_litter_to_items(&game->map, &game->items);
     rng_seed(&game->rng, params->world.seed, 0x73696dULL /* "sim" */);
     rng_seed(&game->wildlife_rng, params->world.seed, 0x77696c64ULL /* "wild" */);
     rng_seed(&game->combat_rng, params->world.seed, 0x666967687455ULL /* "fight" */);

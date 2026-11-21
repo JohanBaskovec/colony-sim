@@ -534,6 +534,16 @@ static void work_everything(TileLight *light, const Map *map, uint64_t tick, boo
 
 bool tile_light_init(TileLight *light, const Map *map, uint64_t tick)
 {
+    if (!tile_light_init_empty(light, map)) {
+        return false;
+    }
+    light->start_tick = tick;
+    work_everything(light, map, tick, true);
+    return true;
+}
+
+bool tile_light_init_empty(TileLight *light, const Map *map)
+{
     memset(light, 0, sizeof(*light));
     light->width = map->width;
     light->height = map->height;
@@ -567,8 +577,6 @@ bool tile_light_init(TileLight *light, const Map *map, uint64_t tick)
         sky_ray_direction(ray, &east, &south, &up);
         light->sky_ahead_count[ray] = cells_ahead(east, south, SKY_REACH, light->sky_ahead[ray]);
     }
-    light->start_tick = tick;
-    work_everything(light, map, tick, true);
     return true;
 }
 
@@ -664,4 +672,47 @@ bool tile_light_knows_yesterday(const TileLight *light, uint64_t tick)
     /* The day after the first one, once each tile rolled over (in the first period). */
     uint64_t next_day = (light->start_tick / TICKS_PER_DAY + 1) * TICKS_PER_DAY;
     return tick >= next_day + PERIOD_TICKS;
+}
+
+static void sweep_serialize(Serializer *s, TileLightSweep *sweep, int blocks, size_t count)
+{
+    ser_bool(s, &sweep->solid);
+    ser_int(s, &sweep->budget);
+    ser_int_in(s, &sweep->block, 0, blocks);
+    ser_size(s, &sweep->cell);
+    ser_check(s, sweep->cell <= count); /* A tile of the block, on some level. */
+    ser_u32(s, &sweep->started);
+    ser_u32(s, &sweep->round_started);
+    ser_bool(s, &sweep->round_worked);
+    ser_u32(s, &sweep->clean);
+}
+
+void tile_light_serialize(Serializer *s, TileLight *light)
+{
+    size_t count = light->count;
+    ser_size(s, &count);
+    if (!ser_check(s, count == light->count)) {
+        return;
+    }
+    int blocks = light->blocks_x * light->blocks_y;
+    size_t cells = cells_of(light);
+    ser_layer_u8(s, light->open, count);
+    ser_layer_u8(s, light->direct, count);
+    ser_layer_u8(s, light->noon, count);
+    ser_layer_u8(s, light->sun_today, count);
+    ser_layer_u8(s, light->sun_yesterday, count);
+    ser_layer_u8(s, light->block_top, (size_t)blocks);
+    ser_layer_u8(s, light->cell_top, cells);
+    ser_layer_u8(s, light->sky_tops, cells * SKY_RAYS);
+    ser_layer_u8(s, light->sun_tops, cells);
+    ser_float(s, &light->sun_east);
+    ser_float(s, &light->sun_south);
+    ser_bool(s, &light->sun_ready);
+    ser_u32(s, &light->tops_revision);
+    ser_u32s(s, light->open_revisions, (size_t)blocks);
+    sweep_serialize(s, &light->fast, blocks, count);
+    sweep_serialize(s, &light->slow, blocks, count);
+    ser_u64(s, &light->first_period);
+    ser_u64(s, &light->start_tick);
+    ser_u64(s, &light->rays);
 }

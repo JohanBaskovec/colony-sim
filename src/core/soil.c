@@ -129,6 +129,27 @@ void soil_refresh_banks(Soil *soil, const Map *map)
 
 bool soil_init(Soil *soil, const Map *map, float share)
 {
+    if (!soil_init_empty(soil, map)) {
+        return false;
+    }
+    size_t count = map_tile_count(map);
+    memset(soil->wet, SOIL_WET_FAR, count);
+    soil->wet_revision = map->water_revision - 1; /* Not worked out yet. */
+    soil_refresh_banks(soil, map);
+    for (size_t i = 0; i < count; i++) {
+        const SoilDef *def = tile_def(map, i);
+        if (def != NULL) {
+            float water = def->wilting + share * (def->capacity - def->wilting);
+            soil->water[i] = fmaxf(water, soil_bank_target(def, soil->wet[i]));
+        }
+    }
+    soil_look_up(soil, map, 0, count);
+    memcpy(soil->sun, soil->canopy, count); /* Until the first hour. */
+    return true;
+}
+
+bool soil_init_empty(Soil *soil, const Map *map)
+{
     memset(soil, 0, sizeof(*soil));
     size_t count = map_tile_count(map);
     if (count == 0) {
@@ -144,21 +165,9 @@ bool soil_init(Soil *soil, const Map *map, float share)
         soil_free(soil);
         return false;
     }
-    memset(soil->wet, SOIL_WET_FAR, count);
     soil->width = map->width;
     soil->height = map->height;
     soil->depth = map->depth;
-    soil->wet_revision = map->water_revision - 1; /* Not worked out yet. */
-    soil_refresh_banks(soil, map);
-    for (size_t i = 0; i < count; i++) {
-        const SoilDef *def = tile_def(map, i);
-        if (def != NULL) {
-            float water = def->wilting + share * (def->capacity - def->wilting);
-            soil->water[i] = fmaxf(water, soil_bank_target(def, soil->wet[i]));
-        }
-    }
-    soil_look_up(soil, map, 0, count);
-    memcpy(soil->sun, soil->canopy, count); /* Until the first hour. */
     return true;
 }
 
@@ -502,4 +511,17 @@ uint64_t soil_hash(const Soil *soil, uint64_t hash)
         hash = hash_fnv1a64(hash, &soil->snowpack, sizeof(soil->snowpack));
     }
     return hash;
+}
+
+void soil_serialize(Serializer *s, Soil *soil)
+{
+    size_t count = (size_t)soil->width * (size_t)soil->height * (size_t)soil->depth;
+    ser_layer_float(s, soil->water, count);
+    ser_layer_u8(s, soil->evap, count);
+    ser_layer_u8(s, soil->canopy, count);
+    ser_layer_u8(s, soil->sun, count);
+    ser_layer_u8(s, soil->wet, count);
+    ser_float(s, &soil->snowpack);
+    ser_float(s, &soil->melt);
+    ser_u32(s, &soil->wet_revision);
 }

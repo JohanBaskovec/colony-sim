@@ -28,6 +28,7 @@
 
 #include "core/game_clock.h"
 #include "core/item.h"
+#include "core/serialize.h"
 #include "core/structure.h"
 
 #include <stdbool.h>
@@ -1093,6 +1094,13 @@ void map_copy_tile(Map *dst, const Map *src, size_t index);
 
 /* Content hash of all layers; equal maps give equal hashes. */
 uint64_t map_hash(const Map *map);
+
+/* Saves or loads (docs/SAVE.md) every layer, counter, revision and log of
+ * the map; when reading, into a map already allocated by map_init() at the
+ * size saved (refused otherwise). The pointers to other modules (`litter`,
+ * `crowns`) are the caller's. */
+void map_serialize(Serializer *s, Map *map);
+void tile_pos_serialize(Serializer *s, TilePos *pos);
 
 size_t map_count_plants(const Map *map, PlantType type);
 

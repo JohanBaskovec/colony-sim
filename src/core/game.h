@@ -250,6 +250,11 @@ void game_default_params(NewGameParams *params);
 /* Generates a new world. On failure the game is left empty (safe to shut down). */
 bool game_init(Game *game, const NewGameParams *params);
 
+/* For game_load() (core/save.h): allocates every module of a game whose map
+ * (read from the save) and seed are set, to be overwritten by what is read.
+ * On failure the game is shut down. */
+bool game_prepare_load(Game *game);
+
 /* Counts the stock (see Game.stock) into `stock` without touching the game: what the
  * frontend shows, up to date every frame, whatever the simulation last counted. */
 void game_count_stock(const Game *game, long stock[ITEM_TYPE_COUNT]);

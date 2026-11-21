@@ -510,3 +510,16 @@ uint64_t designations_hash(const Designations *designations, uint64_t hash)
     hash = hash_fnv1a64(hash, designations->progress, count * sizeof(*designations->progress));
     return hash;
 }
+
+void designations_serialize(Serializer *s, Designations *designations)
+{
+    size_t count =
+        (size_t)designations->width * (size_t)designations->height * (size_t)designations->depth;
+    ser_layer_u8_below(s, designations->type, count, DESIGNATION_COUNT);
+    ser_layer_float(s, designations->progress, count);
+    ser_int(s, &designations->count);
+    tile_box_serialize(s, &designations->box);
+    ser_ints(s, designations->count_by_work, WORK_TYPE_COUNT);
+    ser_u32(s, &designations->revision);
+    ser_u32(s, &designations->harmful_tree_falls);
+}

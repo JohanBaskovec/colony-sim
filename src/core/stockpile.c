@@ -565,3 +565,33 @@ uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
     }
     return hash;
 }
+
+void stockpiles_serialize(Serializer *s, Stockpiles *stockpiles)
+{
+    size_t count =
+        (size_t)stockpiles->width * (size_t)stockpiles->height * (size_t)stockpiles->depth;
+    ser_layer_u8_below(s, stockpiles->zone, count, STOCKPILE_MAX + 1);
+    for (int i = 0; i < STOCKPILE_MAX; i++) {
+        Stockpile *pile = &stockpiles->list[i];
+        ser_bool(s, &pile->used);
+        ser_int(s, &pile->number);
+        ser_u64(s, &pile->allowed);
+        ser_int(s, &pile->quality.min);
+        ser_int(s, &pile->quality.max);
+        ser_int(s, &pile->hit_points.min);
+        ser_int(s, &pile->hit_points.max);
+        ser_int(s, &pile->priority);
+        ser_int(s, &pile->radius);
+        ser_bool(s, &pile->forbidden);
+        ser_int(s, &pile->cell_count);
+        ser_int(s, &pile->min_x);
+        ser_int(s, &pile->min_y);
+        ser_int(s, &pile->min_z);
+        ser_int(s, &pile->max_x);
+        ser_int(s, &pile->max_y);
+        ser_int(s, &pile->max_z);
+    }
+    ser_int_in(s, &stockpiles->used_count, 0, STOCKPILE_MAX);
+    ser_int(s, &stockpiles->next_number);
+    ser_u32(s, &stockpiles->revision);
+}

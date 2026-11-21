@@ -99,6 +99,12 @@ Prefer the `headless` preset while working on the simulation core.
   compare a baseline and the change run one after the other on the same
   machine. A change that should not alter behavior must leave the state hash
   of `bench_simulation` unchanged.
+- **Saves** (docs/SAVE.md): every module saves itself (`xxx_serialize()`,
+  one function for writing and reading, `core/serialize.h`). A field added to
+  a struct that is saved must be serialized there (or left out with a reason
+  in docs/SAVE.md §3), with `SAVE_VERSION` raised: `test_save`'s size test
+  fails until then, and its tests check that a game loaded plays on byte for
+  byte as it would have.
 - Entities (colonists...) live in fixed arrays managed by a `Pool` and are
   referenced by generational `EntityId` handles, never by pointers kept across
   ticks. UI state (selection, camera) stays in the frontend (`App`).

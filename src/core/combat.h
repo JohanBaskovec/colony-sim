@@ -11,6 +11,8 @@
 #ifndef COLONY_CORE_COMBAT_H
 #define COLONY_CORE_COMBAT_H
 
+#include "core/serialize.h"
+
 #include "core/health.h"
 #include "core/map.h"
 #include "core/pool.h"
@@ -247,5 +249,10 @@ typedef struct CombatLog {
 void combat_log_push(CombatLog *log, CombatEvent event);
 /* The `index`-th most recent event (0: the last one), NULL past the count. */
 const CombatEvent *combat_log_recent(const CombatLog *log, int index);
+
+/* Saves or loads (docs/SAVE.md) a combatant, and the blows waiting for the
+ * end of the tick. */
+void combatant_serialize(Serializer *s, Combatant *combatant);
+void combat_queue_serialize(Serializer *s, CombatQueue *queue);
 
 #endif /* COLONY_CORE_COMBAT_H */

@@ -55,6 +55,8 @@ set(COLONY_UNIT_TESTS
     test_vision
     test_fog
     test_scenario
+    test_save
+    test_serialize
     test_settings
     test_shadow
     test_sky
@@ -88,6 +90,7 @@ set(COLONY_SPLIT_TESTS
     test_game
     test_health
     test_item_simulation
+    test_save
     test_tree
     test_vision
     test_worldgen)

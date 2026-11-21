@@ -16,6 +16,8 @@
 #ifndef COLONY_CORE_ITEM_MOVE_H
 #define COLONY_CORE_ITEM_MOVE_H
 
+#include "core/serialize.h"
+
 #include "core/item.h"
 #include "core/map.h"
 
@@ -73,5 +75,8 @@ int item_moves_prune(ItemMoves *moves, const Items *items, ItemMoveBusyFn busy,
 int item_move_room(const Items *items, TilePos destination, ItemStack stack);
 
 uint64_t item_moves_hash(const ItemMoves *moves, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the orders. */
+void item_moves_serialize(Serializer *s, ItemMoves *moves);
 
 #endif /* COLONY_CORE_ITEM_MOVE_H */

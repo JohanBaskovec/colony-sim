@@ -151,3 +151,22 @@ bool blood_look(const BloodStain *stain, uint64_t now, BloodLook *look)
     look->shine = age < BLOOD_SHINE_SHARE ? 1.0f - age / BLOOD_SHINE_SHARE : 0.0f;
     return true;
 }
+
+void blood_serialize(Serializer *s, BloodStains *stains)
+{
+    ser_int_in(s, &stains->count, 0, BLOOD_STAIN_MAX);
+    ser_int_in(s, &stains->next, 0, BLOOD_STAIN_MAX - 1);
+    for (int i = 0; i < stains->count; i++) {
+        BloodStain *stain = &stains->list[i];
+        ser_float(s, &stain->x);
+        ser_float(s, &stain->y);
+        ser_i16(s, &stain->z);
+        ser_u8(s, &stain->kind);
+        ser_u8(s, &stain->shape);
+        ser_float(s, &stain->size);
+        ser_float(s, &stain->smear);
+        ser_float(s, &stain->dir_x);
+        ser_float(s, &stain->dir_y);
+        ser_u64(s, &stain->tick);
+    }
+}

@@ -13,6 +13,8 @@
 #ifndef COLONY_CORE_BED_H
 #define COLONY_CORE_BED_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 #include "core/pathfinding.h"
 
@@ -55,5 +57,9 @@ void beds_release_bed(Beds *beds, int x, int y, int z);
 int beds_forget_missing(Beds *beds, const Map *map);
 
 uint64_t beds_hash(const Beds *beds, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) who owns which bed, already allocated at the
+ * size of the map. */
+void beds_serialize(Serializer *s, Beds *beds);
 
 #endif /* COLONY_CORE_BED_H */

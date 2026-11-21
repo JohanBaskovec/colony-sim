@@ -25,6 +25,8 @@
 #ifndef COLONY_CORE_WEATHER_H
 #define COLONY_CORE_WEATHER_H
 
+#include "core/serialize.h"
+
 #include "core/game_clock.h"
 
 #include <stdbool.h>
@@ -214,5 +216,8 @@ float air_relative_humidity(float dew_point, float celsius);
 float weather_outdoor_humidity(const Weather *weather, uint64_t tick);
 
 uint64_t weather_hash(const Weather *weather, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the weather. */
+void weather_serialize(Serializer *s, Weather *weather);
 
 #endif /* COLONY_CORE_WEATHER_H */

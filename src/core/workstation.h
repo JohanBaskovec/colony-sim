@@ -21,6 +21,8 @@
 #ifndef COLONY_CORE_WORKSTATION_H
 #define COLONY_CORE_WORKSTATION_H
 
+#include "core/serialize.h"
+
 #include "core/item.h"
 #include "core/knowledge.h"
 #include "core/map.h"
@@ -333,5 +335,9 @@ bool workstation_add_craft_work(Workstations *workstations, int index, int bill,
                                 const Map *map, float work, double level, Rng *rng, uint16_t maker);
 
 uint64_t workstations_hash(const Workstations *workstations, uint64_t hash);
+
+/* Saves or loads (docs/SAVE.md) the workstations and their bills, already
+ * allocated at the size of the map. */
+void workstations_serialize(Serializer *s, Workstations *stations);
 
 #endif /* COLONY_CORE_WORKSTATION_H */

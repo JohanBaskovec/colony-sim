@@ -2116,3 +2116,50 @@ uint64_t animals_hash(const Animals *animals, uint64_t hash)
     }
     return hash;
 }
+
+void animal_serialize(Serializer *s, Animal *animal)
+{
+    Animal *a = animal;
+    ser_u8_below(s, &a->species, ANIMAL_SPECIES_COUNT);
+    ser_u8(s, &a->sex);
+    ser_int(s, &a->x);
+    ser_int(s, &a->y);
+    ser_int(s, &a->z);
+    path_serialize(s, &a->path);
+    ser_int_in(s, &a->path_index, 0, a->path.count);
+    ser_float(s, &a->move_progress);
+    ser_u8(s, &a->stop_wait);
+    ser_u8(s, &a->surround_waits);
+    ser_u8_below(s, &a->task, ANIMAL_TASK_COUNT);
+    tile_pos_serialize(s, &a->target);
+    ser_int(s, &a->timer);
+    ser_floats(s, a->needs, ANIMAL_NEED_COUNT);
+    health_serialize(s, &a->health);
+    journal_serialize(s, &a->journal);
+    attributes_serialize(s, &a->attributes);
+    combatant_serialize(s, &a->enemy);
+    tile_pos_serialize(s, &a->enemy_pos);
+    ser_int(s, &a->attack_cooldown);
+    ser_float(s, &a->fatigue);
+    entity_id_serialize(s, &a->leader);
+    ser_bool(s, &a->alarmed);
+    ser_int(s, &a->alert_wait);
+    ser_int(s, &a->flee_cooldown);
+    ser_ints(s, a->search_cooldown, ANIMAL_SEARCH_COUNT);
+    ser_ints(s, a->search_failures, ANIMAL_SEARCH_COUNT);
+    ser_bool(s, &a->facing_left);
+}
+
+void animals_serialize(Serializer *s, Animals *animals)
+{
+    pool_serialize(s, &animals->pool);
+    uint32_t slots = animals->pool.high_water;
+    for (uint32_t i = 0; i < slots && ser_ok(s); i++) {
+        animal_serialize(s, &animals->list[i]);
+    }
+    ser_u32s(s, animals->predator_slots, ANIMAL_MAX);
+    ser_int_in(s, &animals->predator_count, 0, ANIMAL_MAX);
+    for (int i = 0; i < animals->predator_count && s->reading; i++) {
+        ser_check(s, animals->predator_slots[i] < slots);
+    }
+}

@@ -258,3 +258,22 @@ const CombatEvent *combat_log_recent(const CombatLog *log, int index)
     }
     return &log->list[(log->next - 1 - index + COMBAT_LOG_MAX) % COMBAT_LOG_MAX];
 }
+
+void combatant_serialize(Serializer *s, Combatant *combatant)
+{
+    ser_u8_below(s, &combatant->kind, COMBATANT_ANIMAL + 1);
+    entity_id_serialize(s, &combatant->id);
+}
+
+void combat_queue_serialize(Serializer *s, CombatQueue *queue)
+{
+    for (int i = 0; i < COMBAT_QUEUE_MAX; i++) {
+        CombatStrike *strike = &queue->list[i];
+        combatant_serialize(s, &strike->attacker);
+        combatant_serialize(s, &strike->target);
+        ser_u8_below(s, &strike->attack, ATTACK_TYPE_COUNT);
+        ser_float(s, &strike->skill);
+        ser_float(s, &strike->power);
+    }
+    ser_int_in(s, &queue->count, 0, COMBAT_QUEUE_MAX);
+}

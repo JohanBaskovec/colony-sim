@@ -15,6 +15,8 @@
 #ifndef COLONY_CORE_KNOWN_H
 #define COLONY_CORE_KNOWN_H
 
+#include "core/serialize.h"
+
 #include "core/animal.h"
 #include "core/crown.h"
 #include "core/dirt.h"
@@ -93,5 +95,9 @@ const KnownAnimal *known_animal_ghost(const KnownWorld *known, uint32_t slot);
  * level). */
 const KnownAnimal *known_animal_ghost_at(const KnownWorld *known, const Map *map, float world_x,
                                          float world_y, int z, float radius);
+
+/* Saves or loads (docs/SAVE.md) the picture of the world; when reading, into
+ * a known world initialized for the map saved. */
+void known_serialize(Serializer *s, KnownWorld *known);
 
 #endif /* COLONY_CORE_KNOWN_H */

@@ -53,6 +53,8 @@
 #ifndef COLONY_CORE_COLONIST_H
 #define COLONY_CORE_COLONIST_H
 
+#include "core/serialize.h"
+
 #include "core/animal.h"
 #include "core/appearance.h"
 #include "core/attributes.h"
@@ -1106,5 +1108,9 @@ const char *need_level_key(NeedType need, NeedLevel level);
 /* Built-in list of first names, picked from when colonists are created. */
 size_t colonist_name_count(void);
 const char *colonist_name_at(size_t index);
+
+/* Saves or loads (docs/SAVE.md) a settler, all of it (its path allocated
+ * when reading). */
+void colonist_serialize(Serializer *s, Colonist *colonist);
 
 #endif /* COLONY_CORE_COLONIST_H */

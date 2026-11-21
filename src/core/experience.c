@@ -107,3 +107,19 @@ uint64_t experiences_hash(const Experiences *experiences, uint64_t hash)
     }
     return hash;
 }
+
+void experiences_serialize(Serializer *s, Experiences *experiences)
+{
+    for (int i = 0; i < EXPERIENCE_MAX; i++) {
+        Experience *experience = &experiences->list[i];
+        ser_u8_below(s, &experience->type, EXPERIENCE_TYPE_COUNT);
+        ser_u8(s, &experience->species);
+        ser_u8(s, &experience->sex);
+        ser_u8(s, &experience->count);
+        ser_u32(s, &experience->hour);
+        ser_bytes(s, experience->name, EXPERIENCE_NAME_SIZE);
+        experience->name[EXPERIENCE_NAME_SIZE - 1] = 0;
+    }
+    ser_u8_below(s, &experiences->next, EXPERIENCE_MAX);
+    ser_u8_below(s, &experiences->count, EXPERIENCE_MAX + 1);
+}

@@ -27,6 +27,8 @@
 #ifndef COLONY_CORE_TEMPERATURE_H
 #define COLONY_CORE_TEMPERATURE_H
 
+#include "core/serialize.h"
+
 #include "core/map.h"
 
 #include <stdbool.h>
@@ -173,6 +175,8 @@ typedef struct Temperatures {
 
 /* Every tile at the `outdoor` temperature (rock at the ground's). */
 bool temperatures_init(Temperatures *temperatures, const Map *map, float outdoor);
+/* Allocated for the map, nothing worked out (for loading a save). */
+bool temperatures_init_empty(Temperatures *temperatures, const Map *map);
 void temperatures_free(Temperatures *temperatures);
 
 /* Outdoor air temperature at a tick, before the weather
@@ -253,5 +257,10 @@ TemperatureFeel temperature_feel(const TemperatureRanges *ranges, float celsius)
 
 /* Its translation key ("Pleasant"...). */
 const char *temperature_feel_key(TemperatureFeel feel);
+
+/* Saves or loads (docs/SAVE.md) the temperatures, the heat in the ground,
+ * the caches of the map and the heat waiting; already allocated at the size
+ * of the map. Not the surface (set every tick). */
+void temperatures_serialize(Serializer *s, Temperatures *temperatures);
 
 #endif /* COLONY_CORE_TEMPERATURE_H */
