@@ -2483,6 +2483,57 @@ def draw_earth_wall():
     return canvas.to_pixels()
 
 
+def draw_sand_wall():
+    """Packed sand cut flat: fine, dull ocher grain in faint wavy beds, a few
+    darker streaks of wet sand along them."""
+    rng = np.random.default_rng(6700)
+    ys = (np.arange(TILE, dtype=np.float32) + 0.5)[:, None] / TILE * math.tau
+    warp = 0.5 * periodic_noise(rng, 26.0, 8.0)
+    beds = np.sin(ys * 7 + warp) * 0.6 + np.sin(ys * 17 + 0.8 + warp * 2.0) * 0.4
+    grain = 0.07 * rng.standard_normal((TILE, TILE)).astype(np.float32)
+    field = 1.0 + 0.05 * beds + grain + 0.04 * periodic_noise(rng, 2.0)
+    color = tinted((82, 66, 44), field)
+    streaks = np.clip((np.sin(ys * 3 + warp * 1.5) - 0.82) / 0.18, 0, 1)
+    color = mix(color, rgb((58, 46, 32)), (0.5 * streaks * np.ones((1, TILE)))[..., None])
+    return WrapCanvas(np.clip(color, 0, 1)).to_pixels()
+
+
+def draw_gravel_wall():
+    """Rounded pebbles packed in dark sandy earth, cut flat: gray, brown and
+    rusty stones, each with a dark rim and no light."""
+    rng = np.random.default_rng(6800)
+    field = 1.0 + 0.05 * periodic_noise(rng, 8.0) + 0.06 * rng.standard_normal(
+        (TILE, TILE)).astype(np.float32)
+    canvas = WrapCanvas(tinted((44, 38, 32), field))
+    stones = [(78, 76, 74), (62, 58, 56), (86, 72, 58), (92, 68, 50), (70, 72, 78)]
+    for _ in range(170):
+        x, y = rng.random() * TILE, rng.random() * TILE
+        r, angle = 2.0 + rng.random() ** 1.5 * 5.5, rng.random() * math.pi
+        ry = r * (0.6 + 0.35 * rng.random())
+        canvas.ellipse(x, y, r + 0.5, ry + 0.5, rgb((22, 19, 16)), angle)
+        tone = rgb(stones[rng.integers(len(stones))]) * (0.8 + 0.3 * rng.random())
+        canvas.ellipse(x, y, r, ry, np.clip(tone, 0, 1), angle)
+    return canvas.to_pixels()
+
+
+def draw_clay_wall():
+    """Clay cut with a spade: smooth and dense, blue-gray marbled with ocher,
+    the spade's strokes faintly shining."""
+    rng = np.random.default_rng(6900)
+    marble = periodic_noise(rng, 24.0, 12.0) + 0.3 * periodic_noise(rng, 7.0)
+    veins = np.clip(1.0 - np.abs(marble) / 0.35, 0, 1)  # Thin ocher veins where it crosses 0.
+    base = mix(rgb((56, 60, 66)), rgb((66, 68, 72)), np.clip(0.5 + 0.3 * marble, 0, 1)[..., None])
+    color = mix(base, rgb((92, 74, 50)), (0.6 * veins)[..., None])
+    color *= (1.0 + 0.02 * rng.standard_normal((TILE, TILE)).astype(np.float32))[..., None]
+    canvas = WrapCanvas(np.clip(color, 0, 1))
+    for _ in range(6):  # Spade strokes: long faint sheens.
+        x, y = rng.random() * TILE, rng.random() * TILE
+        angle = math.pi / 2 + (rng.random() - 0.5) * 0.4
+        points = [(x + math.cos(angle) * t * 4.0, y + math.sin(angle) * t * 4.0) for t in range(7)]
+        canvas.stroke(points, 1.2, 0.6, rgb((104, 104, 104)), 0.18)
+    return canvas.to_pixels()
+
+
 # Grass over the ground, by growth: blade length and count, in tufts.
 GRASS_STAGES = [(3.0, 150), (5.0, 380), (8.0, 700), (11.0, 1050)]
 
@@ -2694,6 +2745,9 @@ GROUND_TEXTURES = {
     "wall_granite": draw_granite_wall,
     "wall_sandstone": draw_sandstone_wall,
     "wall_earth": draw_earth_wall,
+    "wall_sand": draw_sand_wall,
+    "wall_gravel": draw_gravel_wall,
+    "wall_clay": draw_clay_wall,
 }
 
 

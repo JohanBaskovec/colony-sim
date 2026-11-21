@@ -34,6 +34,9 @@ rock.granite = Granite
 rock.sandstone = Sandstone
 rock.earth = Earth
 rock.wood = Tree trunk
+rock.sand = Sand
+rock.gravel = Gravel
+rock.clay = Clay
 
 # Plants
 plant.grass = Grass
@@ -77,7 +80,7 @@ tool.stockpile_remove = Remove from stockpiles
 tool.zone_remove.description = Takes the area you drag out of the zones; the rest of each zone stays
 tool.gather_zone.description = Settlers gather the resources you pick in it: wood, wild food, branches, twigs, grass and other fibres, stones
 tool.stockpile.description = Settlers store the items you allow in it
-tool.mine.description = Settlers dig out the marked rock and bring back stone, or the marked earth (galleries into hills, dugouts), faster with a digging stick; a ceiling needs rock, a wall or a prop within 2 tiles
+tool.mine.description = Settlers dig out the marked rock and bring back stone, or the marked earth, sand, gravel or clay (galleries into hills, dugouts), faster with a digging stick; a ceiling needs rock, a wall or a prop within 2 tiles
 tool.dig_ramp.description = Mark a bank of earth one level high: settlers cut a ramp into it, to walk up to the ground behind
 tool.dig_down.description = Settlers dig the marked ground and the earth under it out: the hole slopes up to where its digger stood, the way into a cellar
 tool.chop.description = Settlers fell the marked trees, away from buildings, and the wood lies along the fallen trunk
@@ -522,6 +525,8 @@ hud.tile.terrain = Terrain: {0}
 hud.tile.water = Water: {0} cm ({1})
 hud.tile.slope = Slope: leads up to the level above
 hud.tile.rock = Rock wall: {0}
+# {0} = how wet a rock wall is (dry, damp, wet, soaked), {1} = how full its pores are, in percent
+hud.tile.ground_water = {0} ({1}%)
 # {0} = plant name, {1} = growth percentage
 hud.tile.plant = Plant: {0} ({1}% grown)
 hud.tile.tree_levels.one = Tree {0} level high
@@ -599,7 +604,7 @@ colonist.task.work = Working
 colonist.task.chop = Chopping a tree
 colonist.task.mine = Mining
 colonist.task.deconstruct = Taking apart
-colonist.task.dig_earth = Digging earth
+colonist.task.dig_earth = Digging
 colonist.task.dig_ramp = Cutting a ramp
 colonist.task.dig_down = Digging down
 colonist.task.harvest = Harvesting
@@ -1760,6 +1765,10 @@ soil.fairly_dry = fairly dry
 soil.moist = moist
 soil.wet = wet
 soil.soaked = soaked
+ground.dry = Dry
+ground.damp = Damp
+ground.wet = Wet
+ground.soaked = Soaked
 
 # Social life (docs/SOCIAL.md).
 attribute.group.social = Social

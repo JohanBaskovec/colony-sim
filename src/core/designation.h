@@ -47,9 +47,9 @@ typedef enum DesignationType {
     DESIGNATION_NONE = 0,
     DESIGNATION_MINE,        /* Dig out a rock wall, or earth (stored as DESIGNATION_DIG). */
     DESIGNATION_DECONSTRUCT, /* Take a built structure apart (core/structure.h), or a roof down. */
-    DESIGNATION_DIG,         /* Dig out earth (ROCK_EARTH): what "mine" gives on earth. */
-    DESIGNATION_DIG_RAMP,    /* Cut a ramp into a bank of earth one level high. */
-    DESIGNATION_DIG_DOWN,    /* Dig the ground and the earth under it out. */
+    DESIGNATION_DIG,         /* Dig out soft ground (rock_is_soft()): what "mine" gives on it. */
+    DESIGNATION_DIG_RAMP,    /* Cut a ramp into a bank of soft ground one level high. */
+    DESIGNATION_DIG_DOWN,    /* Dig the ground and the soft ground under it out. */
     DESIGNATION_CHOP,        /* Fell a tree (core/tree.h), or cut a sapling. */
     /* Take what a plant gives without uprooting it: its ripe food (roots dug
      * up), grass cut (gather_plant_harvest_job()). */

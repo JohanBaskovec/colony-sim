@@ -273,7 +273,21 @@ static void test_definitions_are_complete(void)
         /* Trunks are felled, not mined (core/tree.h). */
         CHECK(r == ROCK_WOOD || rock_def((RockType)r)->mine_work > 0.0f);
         CHECK(item_def(rock_def((RockType)r)->mined_item) != NULL);
+        /* Water in it (docs/WATER.md §5.1): pores hold more than they keep
+         * against gravity, and water goes through what has pores. */
+        const RockDef *rock = rock_def((RockType)r);
+        CHECK(rock->porosity >= 0.0f && rock->porosity < 1.0f);
+        CHECK(rock->field_capacity >= 0.0f && rock->field_capacity <= rock->porosity);
+        CHECK((rock->porosity > 0.0f) == (rock->conductivity > 0.0f));
+        CHECK(r == ROCK_WOOD || rock->porosity > 0.0f); /* Trunks hold no pore water. */
+        CHECK(rock_is_soft((RockType)r) == rock->soft);
+        CHECK(rock->floor != TERRAIN_OPEN && terrain_def(rock->floor)->move_cost > 0.0f);
     }
+    /* Soft ground is dug like earth; rock is mined, trunks are felled. */
+    CHECK(rock_is_soft(ROCK_EARTH) && rock_is_soft(ROCK_SAND) && rock_is_soft(ROCK_GRAVEL) &&
+          rock_is_soft(ROCK_CLAY));
+    CHECK(!rock_is_soft(ROCK_GRANITE) && !rock_is_soft(ROCK_SANDSTONE) &&
+          !rock_is_soft(ROCK_WOOD) && !rock_is_soft(ROCK_NONE) && !rock_is_soft(ROCK_COUNT));
     for (int p = PLANT_NONE + 1; p < PLANT_COUNT; p++) {
         const PlantDef *def = plant_def((PlantType)p);
         CHECK(i18n_is_valid_key(def->name_key));

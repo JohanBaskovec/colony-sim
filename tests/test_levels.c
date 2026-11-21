@@ -37,6 +37,7 @@ static bool init_raised_game(Game *game)
         int ground = x >= PLATEAU_X ? HIGH : LOW;
         map->terrain[i] = (uint8_t)(z <= ground ? TERRAIN_SOIL : TERRAIN_OPEN);
         map->rock[i] = (uint8_t)(z < ground ? ROCK_EARTH : ROCK_NONE);
+        map->pore[i] = (uint16_t)rock_pore_capacity((RockType)map->rock[i]); /* No table. */
         map->slope[i] = 0;
         map->water[i] = 0;
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
@@ -48,7 +49,11 @@ static bool init_raised_game(Game *game)
     map->slope_count = 1;
     map->surface_level = LOW;
     map->top_ground_level = HIGH;
-    map_topology_changed(map); /* The layers were written directly. */
+    map_topology_changed(map);       /* The layers were written directly. */
+    groundwater_free(&game->ground); /* No water table beyond the edges either. */
+    if (!groundwater_init(&game->ground, map)) {
+        return false;
+    }
     game->clock.tick = 12 * TICKS_PER_HOUR;
     return true;
 }

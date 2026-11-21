@@ -318,8 +318,8 @@ static void test_serialized_structs_keep_their_size(void)
         size_t size;
         size_t expected;
     } SIZES[] = {
-        {"Game", sizeof(Game), 2716952},
-        {"Map", sizeof(Map), 1080},
+        {"Game", sizeof(Game), 2717040},
+        {"Map", sizeof(Map), 1088},
         {"Plant", sizeof(Plant), 20},
         {"MapTopologyChange", sizeof(MapTopologyChange), 8},
         {"MapTreeFall", sizeof(MapTreeFall), 10},
@@ -361,11 +361,12 @@ static void test_serialized_structs_keep_their_size(void)
         {"Water", sizeof(Water), 208},
         {"WaterBlock", sizeof(WaterBlock), 3272},
         {"RiverFlow", sizeof(RiverFlow), 32},
+        {"GroundWater", sizeof(GroundWater), 72},
         {"TileLight", sizeof(TileLight), 3376},
         {"TileLightSweep", sizeof(TileLightSweep), 40},
         {"Vision", sizeof(Vision), 2696},
         {"VisionViewer", sizeof(VisionViewer), 40},
-        {"KnownWorld", sizeof(KnownWorld), 20832},
+        {"KnownWorld", sizeof(KnownWorld), 20840},
         {"KnownStation", sizeof(KnownStation), 4},
         {"KnownAnimal", sizeof(KnownAnimal), 32},
         {"Weather", sizeof(Weather), 48},

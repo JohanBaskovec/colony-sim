@@ -433,34 +433,55 @@ static void test_frozen_ground_takes_nothing(void)
     map_free(&map);
 }
 
-/* Rough stone drinks a storm's rain into its cracks; what a downpour brings
- * beyond lies on it, and the sun dries the puddle. Frozen, it takes nothing.
- * A roof sheds all its rain. */
+/* Rough stone drinks a storm's rain into its cracks, down into the pores of
+ * the rock under it as far as they have room (docs/WATER.md §5.2); what a
+ * downpour brings beyond lies on it, and the sun dries the puddle. Granite
+ * soon has no room left; stone with nothing followed under it (the bottom
+ * of the map) takes nothing. Frozen, it takes nothing. A roof sheds all its
+ * rain. */
 static void test_puddles_on_stone_dry_in_the_sun(void)
 {
     Map map;
-    flat_map(&map, 2);
-    map_set_terrain(&map, 8, 8, 0, TERRAIN_ROUGH_STONE);
+    flat_map(&map, 3);
+    /* Pillars of sandstone and granite one level up, rough stone on top. */
+    map.rock[map_index(&map, 8, 8, 0)] = ROCK_SANDSTONE;
+    map.rock[map_index(&map, 3, 8, 0)] = ROCK_GRANITE;
+    map.pore[map_index(&map, 8, 8, 0)] = (uint16_t)rock_pore_capacity(ROCK_SANDSTONE);
+    map.pore[map_index(&map, 3, 8, 0)] = (uint16_t)(rock_pore_room(ROCK_GRANITE) - MAP_PORE_FINE);
+    map.terrain[map_index(&map, 8, 8, 1)] = TERRAIN_ROUGH_STONE;
+    map.terrain[map_index(&map, 3, 8, 1)] = TERRAIN_ROUGH_STONE;
     map_set_terrain(&map, 4, 4, 0, TERRAIN_ROUGH_STONE);
     map_set_terrain(&map, 12, 12, 0, TERRAIN_GRASS_ROOF);
+    map_topology_changed(&map);
     Soil soil;
     REQUIRE(soil_init(&soil, &map, 0.5f));
     Water water;
     REQUIRE(water_init(&water, &map));
-    size_t i = map_index(&map, 8, 8, 0);
+    size_t i = map_index(&map, 8, 8, 1);
+    uint32_t before = map.pore[map_index(&map, 8, 8, 0)];
     SoilHour storm = {.rain = SOIL_CRACK_INTAKE};
     run_flow_hours(&soil, &map, &water, &storm, 3, NULL);
     CHECK_NEAR(water_mm_at(&water, &map, i), 0.0, 0.01);
+    /* Into the sandstone under it. */
+    CHECK_EQ_INT((int)(map.pore[map_index(&map, 8, 8, 0)] - before),
+                 (int)lroundf(3.0f * SOIL_CRACK_INTAKE * MAP_PORE_FINE));
     SoilHour downpour = {.rain = SOIL_CRACK_INTAKE + 2.0f};
     run_flow_hours(&soil, &map, &water, &downpour, 1, NULL);
     CHECK_NEAR(water_mm_at(&water, &map, i), 2.0, 0.01);
     CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 12, 12, 0)), 0.0, 0.01);
+    /* On the floor of the map, nothing under it: it all lies there. */
+    CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 4, 4, 0)), 4.0 * SOIL_CRACK_INTAKE + 2.0,
+               0.01);
+    /* Granite almost full (1 mm of room left): the rest of the rain lies. */
+    CHECK_EQ_INT(map.pore[map_index(&map, 3, 8, 0)], (int)rock_pore_room(ROCK_GRANITE));
+    CHECK_NEAR(water_mm_at(&water, &map, map_index(&map, 3, 8, 1)),
+               4.0 * SOIL_CRACK_INTAKE + 2.0 - 1.0, 0.01);
     SoilHour sun = {.pet = 0.1f};
     run_flow_hours(&soil, &map, &water, &sun, 1, NULL);
     /* The cracks take their share of the puddle, the sun some. */
     CHECK_NEAR(water_mm_at(&water, &map, i), 2.0 - SOIL_CRACK_INTAKE - 0.1, 0.01);
     run_flow_hours(&soil, &map, &water, &sun, 2, NULL);
-    CHECK_EQ_INT(map_water(&map, 8, 8, 0), 0);
+    CHECK_EQ_INT(map_water(&map, 8, 8, 1), 0);
     CHECK_NEAR(water_mm_at(&water, &map, i), 0.0, 0.01);
 
     /* Frozen stone: the rain lies on it, and only the sun dries it. */
@@ -469,7 +490,7 @@ static void test_puddles_on_stone_dry_in_the_sun(void)
     for (size_t t = 0; t < map_tile_count(&map); t++) {
         cold[t] = -5.0f;
     }
-    size_t frozen = map_index(&map, 4, 4, 0);
+    size_t frozen = map_index(&map, 8, 8, 1);
     SoilHour rain = {.rain = 1.0f};
     run_flow_hours(&soil, &map, &water, &rain, 2, cold);
     CHECK_NEAR(water_mm_at(&water, &map, frozen), 2.0, 0.01);
@@ -516,6 +537,86 @@ static void test_rain_on_lakes_and_ponds(void)
     map_free(&map);
 }
 
+/* A field on a plain: soil on level 1 over earth on level 0, the earth's
+ * pores laid at `share` of their drainable room over field capacity. */
+static void plain_over_earth(Map *map, float share)
+{
+    flat_map(map, 3);
+    uint32_t room = rock_pore_room(ROCK_EARTH), capacity = rock_pore_capacity(ROCK_EARTH);
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            size_t under = map_index(map, x, y, 0);
+            map->rock[under] = ROCK_EARTH;
+            map->pore[under] = (uint16_t)(capacity + (uint32_t)((float)(room - capacity) * share));
+            map->terrain[map_index(map, x, y, 1)] = TERRAIN_SOIL;
+        }
+    }
+    map_topology_changed(map);
+}
+
+/* Over porous ground, what drains out of the root zone goes into the block
+ * under it (docs/WATER.md §5.4): no water is lost, at most the block's
+ * conductivity an hour, and none over a soaked block. */
+static void test_the_root_zone_drains_into_the_ground(void)
+{
+    Map map;
+    plain_over_earth(&map, 0.0f);
+    Soil soil;
+    REQUIRE(soil_init(&soil, &map, 1.0f));
+    const SoilDef *loam = soil_def(TERRAIN_SOIL);
+    size_t field = map_index(&map, 5, 5, 1), under = map_index(&map, 5, 5, 0);
+    soil.water[field] = loam->saturation;
+    float before = soil.water[field] + (float)map.pore[under] / MAP_PORE_FINE;
+    SoilHour still = {0};
+    soil_update(&soil, &map, NULL, field, field + 1, &still, NULL);
+    float after = soil.water[field] + (float)map.pore[under] / MAP_PORE_FINE;
+    CHECK_NEAR(after, before, 0.02); /* Kept. */
+    CHECK(soil.water[field] < loam->saturation);
+    CHECK(soil.water[field] >= loam->saturation - rock_def(ROCK_EARTH)->conductivity - 0.01f);
+    /* Over a soaked block it stays soaked. */
+    map.pore[under] = (uint16_t)rock_pore_room(ROCK_EARTH);
+    soil.water[field] = loam->saturation;
+    soil_update(&soil, &map, NULL, field, field + 1, &still, NULL);
+    CHECK_NEAR(soil.water[field], loam->saturation, 0.01);
+    soil_free(&soil);
+    map_free(&map);
+}
+
+/* A water table close under the floor draws the root zone up (capillary
+ * rise): a meadow over a high table stays wet in a drought, one over a low
+ * table dries out. The banks do not count over porous ground. */
+static void test_a_high_water_table_keeps_the_ground_wet(void)
+{
+    for (int high = 0; high < 2; high++) {
+        Map map;
+        plain_over_earth(&map, high ? 0.9f : 0.2f);
+        Soil soil;
+        REQUIRE(soil_init(&soil, &map, 0.5f));
+        for (int y = 0; y < 16; y++) {
+            for (int x = 0; x < 16; x++) {
+                map.plants[map_index(&map, x, y, 1)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+            }
+        }
+        SoilHour drought = {.pet = 0.5f};
+        for (int h = 0; h < 24 * 3; h++) {
+            soil_update(&soil, &map, NULL, 0, map_tile_count(&map), &drought, NULL);
+        }
+        float moisture = soil_moisture(&soil, &map, 5, 5, 1);
+        if (high) {
+            CHECK(moisture > 1.2f);
+            /* Drawn from the ground under it. */
+            CHECK(map.pore[map_index(&map, 5, 5, 0)] <
+                  rock_pore_capacity(ROCK_EARTH) +
+                      (uint32_t)(0.9f * (float)(rock_pore_room(ROCK_EARTH) -
+                                                rock_pore_capacity(ROCK_EARTH))));
+        } else {
+            CHECK(moisture < 0.3f);
+        }
+        soil_free(&soil);
+        map_free(&map);
+    }
+}
+
 int main(void)
 {
     RUN_TEST(test_buckets_by_terrain);
@@ -534,5 +635,7 @@ int main(void)
     RUN_TEST(test_frozen_ground_takes_nothing);
     RUN_TEST(test_puddles_on_stone_dry_in_the_sun);
     RUN_TEST(test_rain_on_lakes_and_ponds);
+    RUN_TEST(test_the_root_zone_drains_into_the_ground);
+    RUN_TEST(test_a_high_water_table_keeps_the_ground_wet);
     return test_summary();
 }

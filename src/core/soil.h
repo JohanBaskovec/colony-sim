@@ -1,8 +1,9 @@
 /*
  * Soil: the water in the ground of every tile plants can live on, as a bucket
- * per tile filled by rain and snowmelt and by the water table near open water,
- * emptied by drainage and by what evaporates and what plants transpire
- * (docs/CLIMATE.md §3).
+ * per tile filled by rain and snowmelt and drawn up by the water table,
+ * emptied by drainage into the ground under it (core/groundwater.h) and by
+ * what evaporates and what plants transpire (docs/CLIMATE.md §3,
+ * docs/WATER.md §5.4).
  *
  * Each tile of rooting ground (sand, soil, rich soil, gravel, no rock) holds
  * `water` in mm in its root zone. Its terrain sets the bucket (SoilDef): the
@@ -61,11 +62,19 @@ float soil_water_for(const SoilDef *def, float moisture);
 #define SOIL_THROUGHFALL_DENSE 0.55f
 /* Snowmelt: mm of water an hour per degree above 0 °C. */
 #define SOIL_MELT_PER_DEGREE 0.12f
-/* Banks (docs/CLIMATE.md §3.5): the water table draws a tile's water up
+/* Banks (docs/CLIMATE.md §3.5), where no ground is followed under the floor
+ * (a flat world's single level): the water table draws a tile's water up
  * towards its target by SOIL_BANK_RATE of the gap an hour, up to
  * SOIL_WET_FAR tiles from open water; water does not drain below it. */
 #define SOIL_BANK_RATE 0.08f
 #define SOIL_WET_FAR 7
+/* Over porous rock (docs/WATER.md §5.4), the root zone drains into the block
+ * under it, and the water table in that block draws it up (capillary rise)
+ * once it stands within this share of the block's height from the floor:
+ * from field capacity up to saturation when it reaches the floor,
+ * SOIL_RISE_RATE of the gap an hour. */
+#define SOIL_RISE_FROM 0.5f
+#define SOIL_RISE_RATE 0.08f
 /* Plants close their pores below this moisture: what they transpire falls
  * in proportion below it. */
 #define SOIL_DRY_BELOW 0.5f
@@ -76,9 +85,10 @@ float soil_water_for(const SoilDef *def, float moisture);
 #define SOIL_COVERED_EVAPORATION 0.05f
 /* Dew condensing on an open tile colder than the dew point, mm an hour. */
 #define SOIL_DEW_MM 0.02f
-/* Rough stone drinks the rain into its cracks, down to deep ground (not
- * followed), up to this many mm an hour while not frozen: a storm soaks
- * away, a downpour runs off (docs/WATER.md §3.5). */
+/* Rough stone drinks the rain into its cracks, down into the pores of the
+ * rock under it as far as they have room (docs/WATER.md §5.2), up to this
+ * many mm an hour while not frozen: a storm soaks away, a downpour runs off
+ * (docs/WATER.md §3.5). */
 #define SOIL_CRACK_INTAKE 1.5f
 
 /* What the hour brings to the map (worked out once, soil_hour()). */

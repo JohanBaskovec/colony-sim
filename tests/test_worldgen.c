@@ -74,13 +74,76 @@ static void test_tiles_are_valid_and_consistent(void)
             CHECK(plant->growth <= 1.0f);
         }
         /* A floor under the rock, should it be dug out. */
-        if (map.rock[i] == ROCK_EARTH) {
-            CHECK_EQ_INT(map.terrain[i], TERRAIN_SOIL);
-        } else if (map.rock[i] != ROCK_NONE && map.rock[i] != ROCK_WOOD) {
-            CHECK_EQ_INT(map.terrain[i], TERRAIN_ROUGH_STONE);
+        if (map.rock[i] != ROCK_NONE && map.rock[i] != ROCK_WOOD) {
+            CHECK_EQ_INT(map.terrain[i], rock_def((RockType)map.rock[i])->floor);
         }
     }
     map_free(&map);
+}
+
+/* The inside of the ground in layers (docs/WATER.md §5.1): right under a
+ * floor, the ground's own soft layer (sand under sand, gravel under gravel,
+ * earth under soil) or rock under bare rock; lenses of clay under that top
+ * layer only; rock deeper down, but for beds of sand and gravel at one level
+ * under about a third of the land; never soft ground under rock. */
+static void test_ground_layers(void)
+{
+    long columns = 0, beds = 0, clay = 0, lens_columns = 0;
+    for (uint64_t seed = 1; seed <= 3; seed++) {
+        WorldGenParams params = params_for_seed(seed);
+        Map map;
+        REQUIRE(worldgen_generate(&map, &params));
+        int bed_level = map.surface_level - WORLDGEN_AQUIFER_DEPTH;
+        REQUIRE(bed_level >= 0);
+        for (int y = 0; y < map.height; y++) {
+            for (int x = 0; x < map.width; x++) {
+                int ground = map_ground_level(&map, x, y);
+                Terrain floor = (Terrain)map.terrain[map_index(&map, x, y, ground)];
+                bool soil = floor == TERRAIN_SOIL || floor == TERRAIN_RICH_SOIL;
+                bool rock_above = false;
+                for (int z = ground - 1; z >= 0; z--) {
+                    RockType rock = (RockType)map.rock[map_index(&map, x, y, z)];
+                    int depth = ground - z;
+                    REQUIRE(rock != ROCK_NONE && rock != ROCK_WOOD);
+                    bool bed =
+                        z == bed_level && depth > 1 && (rock == ROCK_SAND || rock == ROCK_GRAVEL);
+                    if (depth == 1) {
+                        if (floor == TERRAIN_SAND) {
+                            CHECK_EQ_INT(rock, ROCK_SAND);
+                        } else if (floor == TERRAIN_GRAVEL) {
+                            CHECK_EQ_INT(rock, ROCK_GRAVEL);
+                        } else if (floor == TERRAIN_ROUGH_STONE) {
+                            CHECK(!rock_is_soft(rock));
+                        } else if (soil) {
+                            CHECK_EQ_INT(rock, ROCK_EARTH);
+                        }
+                    }
+                    if (rock == ROCK_CLAY) {
+                        CHECK(depth == 2 && !bed);
+                        clay++;
+                    }
+                    if (depth > WORLDGEN_EARTH_LEVELS && !bed) {
+                        CHECK(!rock_is_soft(rock)); /* Rock deeper down. */
+                    }
+                    /* Soft ground lies on rock, not under it, but for the beds. */
+                    CHECK(!rock_above || !rock_is_soft(rock) || bed);
+                    rock_above = rock_above || !rock_is_soft(rock);
+                }
+                if (ground > bed_level + 1) {
+                    RockType at = (RockType)map.rock[map_index(&map, x, y, bed_level)];
+                    columns++;
+                    beds += at == ROCK_SAND || at == ROCK_GRAVEL;
+                }
+                /* Where a lens may lie: under soft ground but sand. */
+                lens_columns += floor != TERRAIN_ROUGH_STONE && floor != TERRAIN_GRAVEL &&
+                                floor != TERRAIN_SAND && ground >= 2;
+            }
+        }
+        map_free(&map);
+    }
+    REQUIRE(columns > 0 && lens_columns > 0);
+    CHECK(beds * 5 > columns && beds * 2 < columns);            /* About a third of the land. */
+    CHECK(clay * 20 > lens_columns && clay * 4 < lens_columns); /* About a fifth. */
 }
 
 /* Stones: none on sand or water, 0 to MAP_STONES_MAX on stony ground, with
@@ -730,6 +793,7 @@ int main(void)
     RUN_TEST(test_invalid_size_fails);
     RUN_TEST(test_tiles_are_valid_and_consistent);
     RUN_TEST(test_maps_are_mostly_usable_land);
+    RUN_TEST(test_ground_layers);
     RUN_TEST(test_stones);
     RUN_TEST(test_relief);
     RUN_TEST(test_hill_height);

@@ -85,6 +85,7 @@ simulation:
 | `tile_box`   | Box of tiles holding every tile of a sparse layer (designations, gathering zones, a region), so that scans skip the rest of the map |
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |
 | `wood`       | Wood species (`WoodMask`, a bit per tree species, on items, stacks, structures and roofs): their effects (weight, toughness, shafts, weathering, fuel; a mix takes the mean), species lists and item names, counts by species |
+| `groundwater`| Water in the ground (docs/WATER.md §5): the pore water of solid tiles soaking down, flowing from the higher water table to the lower, seeping out into open tiles and back, the table beyond the edges |
 | `river`      | The course of a river across the map (`RiverParams`: its width, the edges it comes in and leaves by and where along them, its discharge, from the seed until the world map sets them, docs/WORLD.md G0c), the distance of every column to the middle of its course for world generation's channel and valley, and its stage over time (`RiverFlow`: the seasons and the rain over its catchment through a quick and a slow store), which `game_tick()` sets on the water's edges every hour it moved by 2 cm |
 | `roof`       | Roofs falling in and galleries caving in when their last support goes, checked around what the map logged as changed |
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths, the microclimate under the sky (sun, shade, evaporation, heat stored in the ground) |
@@ -333,6 +334,25 @@ made on its edge tile (the same weather). `Water.edge_in` counts what came in
 less what went out. The tests' flat world seals its edges
 (`water_seal_edges()`); test scenarios retake them after flattening the
 ground (`water_settle()`).
+
+**Water in the ground** (`core/groundwater.h`, `Game.ground`, docs/WATER.md
+§5): every solid tile holds pore water (`Map.pore`, 1/64 mm, up to its rock's
+room: `RockDef.porosity`, `field_capacity`, `conductivity`, with integer
+copies for the hot loop), set through `map_set_rock()` (a dug tile releases
+what it held above its field capacity as free water, rock placed into water
+takes it into its pores) and `map_set_pore()`. Once an hour, in the slices of
+the soil, each porous tile drains down, trades with its east and south
+neighbours by the difference of their heads (Darcy), with the open tiles
+beside it and with the table beyond the edges (`GroundWater.edge_head`, from
+`groundwater_init()`); water is taken from the top of a column's table and
+given up a column, both limited by the vertical conductivity. Free water
+goes through `water_exchange()`, but what goes to the open water of a
+sleeping block is kept per block and spread at the end of the hour
+(`groundwater_end_hour()`), so ground water does not wake lakes. World
+generation lays the layers (earth, beds of sand and gravel, lenses of clay,
+stone) and a flat water table at the lakes' level (`lay_water_table()`).
+The soil's root zone drains into the block under its floor and is drawn up
+by it (`docs/CLIMATE.md` §3.5).
 
 **Rain and the flow** (docs/WATER.md §3.5, §4.3): the soil's hourly slices
 (`soil_update()`, given `Game.water`) give or take the free water of each
@@ -1861,7 +1881,9 @@ water above field capacity drains, the crowns over a tile, the plant on it
 gets, dew condenses on cold clear nights, and the water table keeps the
 ground near open water wet (`Soil.wet`: the distance to water, rebuilt when
 `Map.water_revision` changes). What covers each tile (`canopy`) is looked up
-every `SOIL_CANOPY_HOURS`. The moisture (`soil_moisture()`) is one scale for
+every `SOIL_CANOPY_HOURS`. Over porous rock the bucket drains into the block
+under its floor and is drawn up by the water table there (below).
+The moisture (`soil_moisture()`) is one scale for
 every terrain: 0 at the wilting point, 1 at field capacity, 2 saturated, 3 in
 open water; the tile inspector shows it in words (`soil_moisture_key()`).
 Plants feel it (`docs/CLIMATE.md` §6): `game_plant_conditions()` passes it in

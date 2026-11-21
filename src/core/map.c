@@ -32,13 +32,34 @@ static const TerrainDef TERRAIN_DEFS[TERRAIN_COUNT] = {
                                 false},
 };
 
-static const RockDef ROCK_DEFS[ROCK_COUNT] = {
-    [ROCK_NONE] = {"none", NULL, 0.0f, ITEM_NONE, 0},
-    [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f, ITEM_STONE_BLOCK, 10},
-    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE_BLOCK, 12},
-    [ROCK_EARTH] = {"earth", N_("rock.earth"), 1200.0f, ITEM_NONE, 0},
-    [ROCK_WOOD] = {"wood", N_("rock.wood"), 0.0f, ITEM_NONE, 0}, /* Felled (core/tree.h). */
+/* Water in the rocks: docs/WATER.md §5.1 (tuning): porosity, field
+ * capacity, conductivity (mm an hour), and the same in integers. */
+#define ROCK_WATER(porosity, capacity, conductivity)                                               \
+    porosity, capacity, conductivity,                                                              \
+        (uint32_t)((porosity) * (float)(WATER_CELL_FULL * MAP_PORE_FINE) + 0.5f),                  \
+        (uint32_t)((capacity) * (float)(WATER_CELL_FULL * MAP_PORE_FINE) + 0.5f),                  \
+        (int32_t)(((porosity) - (capacity)) * 1000.0f + 0.5f),                                     \
+        (int32_t)((conductivity) * 1000.0f + 0.5f)
+const RockDef ROCK_DEFS[ROCK_COUNT] = {
+    [ROCK_NONE] = {"none", NULL, 0.0f, ITEM_NONE, 0, false, TERRAIN_OPEN, ROCK_WATER(0, 0, 0)},
+    [ROCK_GRANITE] = {"granite", N_("rock.granite"), 3500.0f, ITEM_STONE_BLOCK, 10, false,
+                      TERRAIN_ROUGH_STONE, ROCK_WATER(0.01f, 0.005f, 0.05f)},
+    [ROCK_SANDSTONE] = {"sandstone", N_("rock.sandstone"), 2500.0f, ITEM_STONE_BLOCK, 12, false,
+                        TERRAIN_ROUGH_STONE, ROCK_WATER(0.15f, 0.05f, 2.0f)},
+    [ROCK_EARTH] = {"earth", N_("rock.earth"), 1200.0f, ITEM_NONE, 0, true, TERRAIN_SOIL,
+                    ROCK_WATER(0.45f, 0.30f, 10.0f)},
+    /* Felled (core/tree.h): no pore water, water does not go through it. */
+    [ROCK_WOOD] = {"wood", N_("rock.wood"), 0.0f, ITEM_NONE, 0, false, TERRAIN_SOIL,
+                   ROCK_WATER(0, 0, 0)},
+    [ROCK_SAND] = {"sand", N_("rock.sand"), 900.0f, ITEM_NONE, 0, true, TERRAIN_SAND,
+                   ROCK_WATER(0.35f, 0.08f, 300.0f)},
+    [ROCK_GRAVEL] = {"gravel", N_("rock.gravel"), 1100.0f, ITEM_NONE, 0, true, TERRAIN_GRAVEL,
+                     ROCK_WATER(0.30f, 0.05f, 1000.0f)},
+    /* Sticky to dig; its floor is fine mud that takes no water in. */
+    [ROCK_CLAY] = {"clay", N_("rock.clay"), 1500.0f, ITEM_NONE, 0, true, TERRAIN_SILT,
+                   ROCK_WATER(0.45f, 0.40f, 0.01f)},
 };
+#undef ROCK_WATER
 
 /* Seasons' days, for the plant tables. */
 #define SPRING(day) SEASON_DAY(SEASON_SPRING, day)
@@ -746,6 +767,17 @@ const RockDef *rock_def(RockType rock)
     return ((unsigned)rock < ROCK_COUNT) ? &ROCK_DEFS[rock] : NULL;
 }
 
+bool rock_is_soft(RockType rock)
+{
+    return (unsigned)rock < ROCK_COUNT && ROCK_DEFS[rock].soft;
+}
+
+void map_set_pore(Map *map, size_t index, uint32_t pore)
+{
+    uint32_t room = map_pore_room_at(map, index);
+    map->pore[index] = (uint16_t)(pore < room ? pore : room);
+}
+
 const PlantDef *plant_def(PlantType plant)
 {
     return ((unsigned)plant < PLANT_COUNT) ? &PLANT_DEFS[plant] : NULL;
@@ -1286,6 +1318,7 @@ bool map_init(Map *map, int width, int height, int depth)
     map->rock = calloc(count, 1);
     map->slope = calloc(count, 1);
     map->water = calloc(count, sizeof(*map->water));
+    map->pore = calloc(count, sizeof(*map->pore));
     map->plants = calloc(count, sizeof(Plant));
     map->cobbles = calloc(count, 1);
     map->flint = calloc(count, 1);
@@ -1308,8 +1341,8 @@ bool map_init(Map *map, int width, int height, int depth)
     map->light_solid_stamps = calloc(blocks, sizeof(*map->light_solid_stamps));
     if (map->light_stamps == NULL || map->light_solid_stamps == NULL || map->doors == NULL ||
         map->forbidden == NULL || map->terrain == NULL || map->rock == NULL || map->slope == NULL ||
-        map->water == NULL || map->plants == NULL || map->cobbles == NULL || map->flint == NULL ||
-        map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
+        map->water == NULL || map->pore == NULL || map->plants == NULL || map->cobbles == NULL ||
+        map->flint == NULL || map->branches == NULL || map->twigs == NULL || map->nuts == NULL ||
         map->tree_species == NULL || map->structure == NULL || map->structure_part == NULL ||
         map->structure_quality == NULL || map->structure_hit_points == NULL ||
         map->structure_woods == NULL || map->roof_quality == NULL || map->roof_woods == NULL) {
@@ -1333,6 +1366,7 @@ void map_free(Map *map)
     free(map->rock);
     free(map->slope);
     free(map->water);
+    free(map->pore);
     free(map->plants);
     free(map->cobbles);
     free(map->flint);
@@ -1533,12 +1567,23 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
     bool was_rock = map->rock[index] != ROCK_NONE;
     bool was_open = map_is_open_at(map, index);
     RockType old_rock = (RockType)map->rock[index];
+    uint32_t pore = map->pore[index];
     map->rock[index] = (uint8_t)rock;
+    /* Water in the ground (docs/WATER.md §5): rock filling a tile takes its
+     * free water into its pores as far as they have room (the rest is
+     * lost); a tile dug out leaves the water it held above its field
+     * capacity as free water (what it holds against gravity goes with what
+     * is dug). */
     if (rock != ROCK_NONE && map->water[index] != 0) {
-        map->water[index] = 0; /* Free water holds no room in rock (until docs/WATER.md W4). */
+        pore += (uint32_t)map->water[index] * MAP_PORE_FINE;
+        map->water[index] = 0;
         map->water_revision++;
         log_water_change(map, x, y, z);
     }
+    uint32_t held = rock_pore_capacity(old_rock);
+    uint32_t released =
+        rock == ROCK_NONE && pore > held ? (pore - held + MAP_PORE_FINE / 2) / MAP_PORE_FINE : 0;
+    map_set_pore(map, index, rock != ROCK_NONE ? pore : 0);
     if (old_rock != rock) {
         map_light_changed(map, x, y);
     }
@@ -1555,6 +1600,9 @@ void map_set_rock(Map *map, int x, int y, int z, RockType rock)
         }
     } else if (was_rock != (rock != ROCK_NONE)) {
         log_build_change(map, x, y, z); /* Rock where a wall stood: roofs, warmth. */
+    }
+    if (released > 0) {
+        map_set_water(map, x, y, z, (int)map->water[index] + (int)released);
     }
 }
 
@@ -1786,6 +1834,14 @@ void map_topology_changed(Map *map)
     log_topology_change(map, 0, 0, 0, false);
     map->topology_log[map->topology_revision % MAP_TOPOLOGY_LOG_SIZE].anywhere = true;
     map->water_revision++;
+    if (map->pore != NULL) {
+        for (size_t i = 0; i < map_tile_count(map); i++) {
+            uint32_t room = map_pore_room_at(map, i);
+            if (map->pore[i] > room) {
+                map->pore[i] = (uint16_t)room;
+            }
+        }
+    }
     light_changed_everywhere(map, true);
 }
 
@@ -2369,6 +2425,7 @@ void map_copy_tile(Map *dst, const Map *src, size_t index)
     dst->terrain[index] = src->terrain[index];
     dst->rock[index] = src->rock[index];
     dst->slope[index] = src->slope[index];
+    dst->pore[index] = src->pore[index];
     if (dst->water[index] != src->water[index]) {
         dst->water[index] = src->water[index];
         dst->water_revision++;
@@ -2476,6 +2533,10 @@ void map_serialize(Serializer *s, Map *map)
     ser_layer_u8_below(s, map->rock, count, ROCK_COUNT);
     ser_layer_u8(s, map->slope, count);
     ser_layer_u16(s, map->water, count);
+    ser_layer_u16(s, map->pore, count);
+    for (size_t i = 0; s->reading && i < count; i++) {
+        map_set_pore(map, i, map->pore[i]); /* Within the room of its rock. */
+    }
     ser_int(s, &map->slope_count);
     plants_serialize(s, map, count);
     ser_layer_u8(s, map->cobbles, count);
@@ -2564,6 +2625,12 @@ uint64_t map_hash(const Map *map)
     for (size_t i = 0; i < count; i++) { /* Maps without water hash as they did. */
         if (map->water[i] != 0) {
             uint64_t at[2] = {i, map->water[i]};
+            hash = hash_fnv1a64(hash, at, sizeof(at));
+        }
+    }
+    for (size_t i = 0; i < count; i++) { /* Maps without pore water hash as they did. */
+        if (map->pore[i] != 0) {
+            uint64_t at[2] = {i, (uint64_t)map->pore[i] << 32};
             hash = hash_fnv1a64(hash, at, sizeof(at));
         }
     }

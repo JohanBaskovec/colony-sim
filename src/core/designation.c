@@ -90,14 +90,15 @@ bool designation_doable_at(DesignationType type, double level)
            level >= def->min_level;
 }
 
-/* Whether a ramp can be cut into this tile: earth, with bare ground over it
+/* Whether a ramp can be cut into this tile: soft ground (earth, sand...), with bare ground over it
  * (nothing standing on it, open air above, so that it can be taken away) and
  * ground to lead up to beside it. */
 static bool ramp_possible(const Map *map, int x, int y, int z)
 {
     static const int DX[4] = {0, 1, 0, -1};
     static const int DY[4] = {-1, 0, 1, 0};
-    if (map->rock[map_index(map, x, y, z)] != ROCK_EARTH || !map_in_bounds(map, x, y, z + 1)) {
+    if (!rock_is_soft((RockType)map->rock[map_index(map, x, y, z)]) ||
+        !map_in_bounds(map, x, y, z + 1)) {
         return false;
     }
     size_t over = map_index(map, x, y, z + 1);
@@ -119,12 +120,12 @@ static bool ramp_possible(const Map *map, int x, int y, int z)
 }
 
 /* Whether a hole can be dug down from this tile: bare ground (nothing
- * standing on it) over earth. */
+ * standing on it) over soft ground. */
 static bool dig_down_possible(const Map *map, int x, int y, int z)
 {
     return map_in_bounds(map, x, y, z - 1) &&
-           map->rock[map_index(map, x, y, z - 1)] == ROCK_EARTH && map_is_buildable(map, x, y, z) &&
-           map_structure(map, x, y, z) == STRUCTURE_NONE &&
+           rock_is_soft((RockType)map->rock[map_index(map, x, y, z - 1)]) &&
+           map_is_buildable(map, x, y, z) && map_structure(map, x, y, z) == STRUCTURE_NONE &&
            !map_plant_blocks_building(map, x, y, z);
 }
 
@@ -144,7 +145,7 @@ bool designation_can_apply(const Map *map, int x, int y, int z, DesignationType 
     RockType rock = (RockType)map->rock[map_index(map, x, y, z)];
     switch (type) {
     case DESIGNATION_MINE: return rock != ROCK_NONE && rock != ROCK_WOOD; /* Rock or earth. */
-    case DESIGNATION_DIG: return rock == ROCK_EARTH;
+    case DESIGNATION_DIG: return rock_is_soft(rock);
     case DESIGNATION_DIG_RAMP: return ramp_possible(map, x, y, z);
     case DESIGNATION_DIG_DOWN: return dig_down_possible(map, x, y, z);
     case DESIGNATION_DECONSTRUCT:
@@ -272,7 +273,7 @@ bool designation_set(Designations *designations, const Map *map, int x, int y, i
         return false;
     }
     size_t index = index_of(designations, x, y, z);
-    if (type == DESIGNATION_MINE && map->rock[map_index(map, x, y, z)] == ROCK_EARTH) {
+    if (type == DESIGNATION_MINE && rock_is_soft((RockType)map->rock[map_index(map, x, y, z)])) {
         type = DESIGNATION_DIG; /* One order for the player, two jobs. */
     }
     if (designations->type[index] == type) {

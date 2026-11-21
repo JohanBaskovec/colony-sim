@@ -19,6 +19,7 @@
 #include "core/dirt.h"
 #include "core/game_clock.h"
 #include "core/gather_zone.h"
+#include "core/groundwater.h"
 #include "core/hearth.h"
 #include "core/item_move.h"
 #include "core/known.h"
@@ -170,6 +171,9 @@ typedef struct Game {
     /* The river's discharge (core/river.h): its stage beyond the edges, set
      * on the water's edges as it rises and falls. */
     RiverFlow river;
+    /* Water in the ground (core/groundwater.h): the pore water lives in the
+     * map (Map.pore), the water table beyond the edges here. */
+    GroundWater ground;
     TileLight
         light; /* Sky, sun and sun hours of each tile (docs/SHADOWS.md §5): read by nobody yet. */
     /* Who sees what (core/vision.h): derived from the map and where the

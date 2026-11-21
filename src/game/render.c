@@ -29,6 +29,9 @@ static const SDL_Color ROCK_COLORS[ROCK_COUNT] = {
     [ROCK_SANDSTONE] = {150, 118, 88, 255},
     [ROCK_EARTH] = {104, 78, 54, 255},
     [ROCK_WOOD] = {150, 110, 70, 255}, /* The cut face of a trunk: render_trunk(). */
+    [ROCK_SAND] = {156, 132, 90, 255},
+    [ROCK_GRAVEL] = {112, 104, 94, 255},
+    [ROCK_CLAY] = {116, 110, 104, 255},
 };
 /* A trunk's bark, around its cut face, and its growth rings. */
 static const SDL_Color BARK_COLOR = {78, 54, 34, 255};

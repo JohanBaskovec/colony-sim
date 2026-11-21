@@ -28,6 +28,7 @@ set(COLONY_UNIT_TESTS
     test_game
     test_game_clock
     test_gather_zone
+    test_groundwater
     test_hauling
     test_i18n
     test_item

@@ -155,6 +155,12 @@ water comes or goes (`Map.water_revision`). So
 beaches and banks are wet, a meadow by the river stays green in a drought,
 and a dune is dry.
 
+Since W4 (`docs/WATER.md` §5.4) this holds only where no porous block lies
+under the floor (a flat world's single level). Elsewhere the root zone
+drains into the ground under it and the water table draws it up when it
+comes near the floor: banks are wet because the table is high by the
+water.
+
 ### 3.6 A new world
 
 The water of each tile starts at moisture 0.8 (`GAME_SOIL_START_SHARE`), or
@@ -322,10 +328,9 @@ the same pass without soil and microclimate.
 
 ## 7. Not done (later)
 
-Water flowing on the ground (runoff into hollows, puddles, streams), rivers
-rising and falling, irrigation and digging ditches, and water in the ground
-under the root zone are designed in `docs/WATER.md` (the banks of §3.5 then
-come from the water table, and runoff of §3.2 is no longer lost). Wind
+Irrigation and digging ditches are designed in `docs/WATER.md` (water on
+the ground, rivers and the water in the ground under the root zone are
+built there). Wind
 (drying, wind chill), clouds of fog on cold wet mornings, snow per tile
 (drifts, melting first in the sun), frost heave.
 

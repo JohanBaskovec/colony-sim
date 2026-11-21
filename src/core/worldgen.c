@@ -1,5 +1,6 @@
 #include "core/worldgen.h"
 
+#include "core/groundwater.h"
 #include "core/noise.h"
 #include "core/rng.h"
 #include "core/shadow.h"
@@ -860,6 +861,38 @@ static bool stony_column(Terrain surface)
     return surface == TERRAIN_ROUGH_STONE || surface == TERRAIN_GRAVEL;
 }
 
+/* What makes up the inside of a column's ground. */
+typedef struct GroundLayers {
+    RockType stone;    /* The rock under it all. */
+    Terrain surface;   /* The ground on top. */
+    int aquifer_level; /* The level of the beds of sand and gravel (-1: none). */
+    RockType aquifer;  /* The bed crossing this column at that level, ROCK_NONE if none. */
+    bool clay;         /* A lens of clay lies under its top layer. */
+} GroundLayers;
+
+/* The block on `level`, `depth` levels under the ground (1: right under its
+ * floor): soft ground near the surface, its top layer the ground's own
+ * (sand under sand, gravel under gravel), a lens of clay under it here and
+ * there; rock deeper down (under stony ground, from the top), but for the
+ * beds of sand or gravel that cross the land at one level, never right
+ * under a floor. */
+static RockType ground_layer(const GroundLayers *layers, int level, int depth)
+{
+    if (level == layers->aquifer_level && depth > 1 && layers->aquifer != ROCK_NONE) {
+        return layers->aquifer;
+    }
+    if (layers->surface == TERRAIN_GRAVEL) {
+        return depth == 1 ? ROCK_GRAVEL : layers->stone;
+    }
+    if (stony_column(layers->surface) || depth > WORLDGEN_EARTH_LEVELS) {
+        return layers->stone;
+    }
+    if (layers->surface == TERRAIN_SAND) {
+        return ROCK_SAND;
+    }
+    return depth > 1 && layers->clay ? ROCK_CLAY : ROCK_EARTH;
+}
+
 /* Natural slopes: where soft ground or shallow water rises one level to an
  * orthogonal neighbor (not a rock outcrop), the lower tile slopes up to it.
  * Rock outcrops, deep water and steeper rises stay cliffs. */
@@ -1081,6 +1114,32 @@ static void place_understory(Map *map, const WorldGenParams *params, const float
     }
 }
 
+/* The water table at rest (docs/WATER.md §5.3): under lakes and the river
+ * at their surface, elsewhere at the lakes' level (WORLDGEN_LAKE_DEPTH_MM
+ * under the plains), and never closer than that under the ground. The
+ * ground over it holds its field capacity: the hills get their own table
+ * from the rain soaking down (docs/WATER.md §5.4), not from the start. A
+ * flat world (`dry`) has no table: its single level holds field capacity. */
+static void lay_water_table(Map *map, bool dry)
+{
+    const int64_t lakes = (int64_t)map->surface_level * GROUNDWATER_LEVEL -
+                          (int64_t)WORLDGEN_LAKE_DEPTH_MM * MAP_PORE_FINE;
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            int ground = map_ground_level(map, x, y);
+            size_t floor = map_index(map, x, y, ground);
+            int64_t table = (int64_t)ground * GROUNDWATER_LEVEL;
+            if (map->water[floor] > 0) {
+                table += (int64_t)map_water_depth_at(map, floor) * MAP_PORE_FINE;
+            } else {
+                table -= (int64_t)WORLDGEN_LAKE_DEPTH_MM * MAP_PORE_FINE;
+                table = table < lakes ? table : lakes;
+            }
+            groundwater_lay_table(map, x, y, dry ? 0 : table);
+        }
+    }
+}
+
 bool worldgen_generate(Map *map, const WorldGenParams *params)
 {
     TileLight light;
@@ -1106,6 +1165,9 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
     const uint32_t flint_seed = derive_seed(params->seed, 5);
     const uint32_t reed_seed = derive_seed(params->seed, 6);
     const uint32_t glade_seed = derive_seed(params->seed, 7);
+    const uint32_t aquifer_seed = derive_seed(params->seed, 8);
+    const uint32_t bed_seed = derive_seed(params->seed, 9);
+    const uint32_t clay_seed = derive_seed(params->seed, 10);
     const float frequency = 1.0f / (params->feature_scale > 1.0f ? params->feature_scale : 1.0f);
 
     /* First the relief, which decides how many levels the map needs. */
@@ -1208,18 +1270,27 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
             Terrain terrain = (Terrain)surfaces[column];
             int z = heights[column];
 
-            /* The inside of the ground: earth near the surface (rock under
-             * stony ground), rock deeper down, each with a floor under it
-             * should it be dug out. */
-            float rock_noise = noise_value2d(rock_seed, nx * 2.0f, ny * 2.0f);
-            RockType stone = rock_noise < 0.5f ? ROCK_GRANITE : ROCK_SANDSTONE;
+            /* The inside of the ground in layers (docs/WATER.md §5.1), each
+             * block with the floor it leaves should it be dug out. */
+            GroundLayers layers = {
+                .stone = noise_value2d(rock_seed, nx * 2.0f, ny * 2.0f) < 0.5f ? ROCK_GRANITE
+                                                                               : ROCK_SANDSTONE,
+                .surface = terrain,
+                .aquifer_level = params->flat ? -1 : surface_level - WORLDGEN_AQUIFER_DEPTH,
+                .aquifer =
+                    stretch(noise_fbm2d(aquifer_seed, nx * 0.7f, ny * 0.7f, 3, 2.0f, 0.5f)) >
+                            WORLDGEN_AQUIFER_FROM
+                        ? (noise_value2d(bed_seed, nx * 1.5f, ny * 1.5f) < 0.5f ? ROCK_SAND
+                                                                                : ROCK_GRAVEL)
+                        : ROCK_NONE,
+                .clay = !params->flat && stretch(noise_fbm2d(clay_seed, nx * 2.5f, ny * 2.5f, 3,
+                                                             2.0f, 0.5f)) > WORLDGEN_CLAY_FROM,
+            };
             for (int below = 0; below < z; below++) {
-                RockType fill =
-                    stony_column(terrain) || z - below > WORLDGEN_EARTH_LEVELS ? stone : ROCK_EARTH;
+                RockType fill = ground_layer(&layers, below, z - below);
                 size_t inside = map_index(map, x, y, below);
                 map->rock[inside] = (uint8_t)fill;
-                map->terrain[inside] =
-                    (uint8_t)(fill == ROCK_EARTH ? TERRAIN_SOIL : TERRAIN_ROUGH_STONE);
+                map->terrain[inside] = (uint8_t)rock_def(fill)->floor;
             }
 
             size_t index = map_index(map, x, y, z);
@@ -1241,7 +1312,7 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
             }
             if (terrain == TERRAIN_ROUGH_STONE) {
                 if (params->flat) { /* Rock walls on the only level. */
-                    map->rock[index] = (uint8_t)stone;
+                    map->rock[index] = (uint8_t)layers.stone;
                 }
                 continue; /* Bare rock on the top of outcrops. */
             }
@@ -1296,5 +1367,6 @@ bool worldgen_generate_lit(Map *map, const WorldGenParams *params, TileLight *li
     place_shore_plants(map, &shore_rng, reed_seed, frequency, &season);
     season_light_free(&season);
     free(grounds);
+    lay_water_table(map, params->flat);
     return true;
 }

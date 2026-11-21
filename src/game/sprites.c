@@ -136,12 +136,13 @@ static const char *const GROUND_NAMES[] = {"silt",
                                            "foliage_sparse_bare",
                                            "shallow_water",
                                            "deep_water"};
-static const RockType WALL_ROCKS[] = {ROCK_GRANITE, ROCK_SANDSTONE, ROCK_EARTH};
-static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth"};
+static const RockType WALL_ROCKS[] = {ROCK_GRANITE, ROCK_SANDSTONE, ROCK_EARTH,
+                                      ROCK_SAND,    ROCK_GRAVEL,    ROCK_CLAY};
+static const char *const WALL_NAMES[] = {"granite", "sandstone", "earth", "sand", "gravel", "clay"};
 #define GROUND_SPRITE_COUNT 15
 #define BARE_CROWN_FIRST 10 /* Index of the first bare crown among the ground sprites. */
 #define WATER_FIRST 13      /* Index of shallow water, then deep, among the ground sprites. */
-#define WALL_SPRITE_COUNT 3
+#define WALL_SPRITE_COUNT 6
 
 enum {
     PLANT_FIRST = 0,

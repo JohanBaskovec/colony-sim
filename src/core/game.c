@@ -645,7 +645,8 @@ bool game_prepare_load(Game *game)
     roof_watch_init(&game->roof_watch, &game->map);
     weather_init(&game->weather, game->seed, 0);
     if (!temperatures_init_empty(&game->temperatures, &game->map) ||
-        !soil_init_empty(&game->soil, &game->map) || !water_init(&game->water, &game->map)) {
+        !soil_init_empty(&game->soil, &game->map) || !water_init(&game->water, &game->map) ||
+        !groundwater_init(&game->ground, &game->map)) {
         game_shutdown(game);
         return false;
     }
@@ -789,6 +790,11 @@ bool game_init(Game *game, const NewGameParams *params)
     if (params->world.flat) {
         water_seal_edges(&game->water); /* Its lakes are not at rest. */
     }
+    /* The water table beyond the edges as world generation laid it. */
+    if (!groundwater_init(&game->ground, &game->map)) {
+        game_shutdown(game);
+        return false;
+    }
     if (!start_river(game, &params->world)) {
         game_shutdown(game);
         return false;
@@ -842,6 +848,7 @@ void game_shutdown(Game *game)
     temperatures_free(&game->temperatures);
     soil_free(&game->soil);
     water_free(&game->water);
+    groundwater_free(&game->ground);
     tile_light_free(&game->light);
     designations_free(&game->designations);
     dirt_free(&game->dirt);
@@ -1160,6 +1167,11 @@ static void update_plants(Game *game)
         }
     }
     update_soil(game, begin, end, phase);
+    /* The water in the ground (docs/WATER.md §5), the same slice. */
+    if (phase == 0) {
+        groundwater_end_hour(&game->ground, map, &game->water);
+    }
+    groundwater_update(&game->ground, map, &game->water, &game->soil, begin, end);
     update_crowns(game, phase);
     if (phase == GAME_PLANT_UPDATE_INTERVAL - 1) {
         leaf_conclude(game); /* The whole pass is done. */
@@ -3136,6 +3148,7 @@ uint64_t game_hash(const Game *game)
     hash = soil_hash(&game->soil, hash);
     hash = water_hash(&game->water, hash); /* Nothing while the water lies at rest. */
     hash = river_flow_hash(&game->river, hash);
+    hash = groundwater_hash(&game->ground, hash);
     hash = weather_hash(&game->weather, hash);
     if (game->debug.instant_build || game->debug.free_crafts || game->debug.no_tools ||
         game->debug.instant_deconstruct) {

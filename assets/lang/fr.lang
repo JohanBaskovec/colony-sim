@@ -33,6 +33,9 @@ rock.granite = Granite
 rock.sandstone = Grès
 rock.earth = Terre
 rock.wood = Tronc d’arbre
+rock.sand = Sable
+rock.gravel = Gravier
+rock.clay = Argile
 
 # Plantes
 plant.grass = Herbe
@@ -76,7 +79,7 @@ tool.stockpile_remove = Retirer des zones de stockage
 tool.zone_remove.description = Retire la surface glissée des zones ; le reste de chaque zone est conservé
 tool.gather_zone.description = Les colons y récoltent les ressources choisies : bois, nourriture sauvage, branches, brindilles, herbe et autres fibres, pierres
 tool.stockpile.description = Les colons y rangent les objets autorisés
-tool.mine.description = Les colons creusent la roche marquée et en rapportent la pierre, ou la terre marquée (galeries dans les collines, abris enterrés), plus vite avec un bâton à fouir ; un plafond a besoin de roche, d’un mur ou d’un étai à 2 cases au plus
+tool.mine.description = Les colons creusent la roche marquée et en rapportent la pierre, ou la terre, le sable, le gravier ou l’argile marqués (galeries dans les collines, abris enterrés), plus vite avec un bâton à fouir ; un plafond a besoin de roche, d’un mur ou d’un étai à 2 cases au plus
 tool.dig_down.description = Les colons creusent le sol marqué et la terre en dessous : le trou remonte en pente là où se tenait le creuseur, l’entrée d’une cave
 tool.chop.description = Les colons abattent les arbres marqués, loin des constructions, et le bois reste le long du tronc tombé
 tool.harvest.description = Les colons récoltent ce que portent les plantes marquées (fruits, feuilles, racines déterrées, herbe coupée) ; les plantes restent là où elles repoussent
@@ -507,6 +510,7 @@ hud.tile.terrain = Terrain : {0}
 hud.tile.water = Eau : {0} cm ({1})
 hud.tile.slope = Pente : mène au niveau du dessus
 hud.tile.rock = Paroi rocheuse : {0}
+hud.tile.ground_water = {0} ({1} %)
 hud.tile.plant = Plante : {0} ({1} % de croissance)
 hud.tile.tree_levels.one = Arbre haut de {0} niveau
 hud.tile.tree_levels.other = Arbre haut de {0} niveaux
@@ -564,7 +568,7 @@ colonist.task.work = Travaille
 colonist.task.chop = Coupe un arbre
 colonist.task.mine = Creuse la roche
 colonist.task.deconstruct = Démonte
-colonist.task.dig_earth = Creuse la terre
+colonist.task.dig_earth = Creuse
 colonist.task.dig_ramp = Taille une rampe
 colonist.task.dig_down = Creuse vers le bas
 colonist.task.harvest = Récolte
@@ -1651,6 +1655,10 @@ soil.fairly_dry = plutôt sec
 soil.moist = frais
 soil.wet = humide
 soil.soaked = détrempé
+ground.dry = Sec
+ground.damp = Humide
+ground.wet = Mouillé
+ground.soaked = Détrempé
 
 # Vie sociale (docs/SOCIAL.md).
 attribute.group.social = Social

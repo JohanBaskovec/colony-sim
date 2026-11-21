@@ -127,6 +127,80 @@ void soil_refresh_banks(Soil *soil, const Map *map)
     }
 }
 
+/* The porous rock under a floor, whose water table the root zone drains
+ * into and draws from (docs/WATER.md §5.4); SIZE_MAX where none is followed
+ * (the bottom of the map, a flat world's single level): the banks stand for
+ * the water table there. */
+static size_t block_under(const Map *map, size_t index)
+{
+    size_t level = map_level_tile_count(map);
+    if (index < level || map_pore_room_at(map, index - level) == 0) {
+        return SIZE_MAX;
+    }
+    return index - level;
+}
+
+/* How high the water table stands in the block under a floor: the share of
+ * its drainable room filled (0 when it holds no more than its field
+ * capacity, 1 full). */
+static float table_share(const Map *map, size_t block)
+{
+    RockType rock = (RockType)map->rock[block];
+    float room = (float)rock_pore_room(rock), capacity = (float)rock_pore_capacity(rock);
+    float above = (float)map->pore[block] - capacity;
+    return room > capacity && above > 0.0f ? fminf(above / (room - capacity), 1.0f) : 0.0f;
+}
+
+/* The water a water table in the block under a floor draws its root zone up
+ * to (capillary rise, docs/WATER.md §5.4): nothing until it stands within
+ * SOIL_RISE_FROM of the block's height from the floor, then from field
+ * capacity up to saturation when it reaches the floor. 0: none. */
+static float rise_target(const Map *map, size_t block, const SoilDef *def)
+{
+    float share = table_share(map, block);
+    if (share <= 1.0f - SOIL_RISE_FROM) {
+        return 0.0f;
+    }
+    float moisture = 1.0f + (share - (1.0f - SOIL_RISE_FROM)) / SOIL_RISE_FROM;
+    return soil_water_for(def, moisture);
+}
+
+/* What drains out of a root zone (`out` mm) soaks into the block under it, at
+ * most at the block's conductivity and as far as it has room: mm taken. */
+static float drain_into(Map *map, size_t block, float out)
+{
+    const RockDef *rock = rock_def((RockType)map->rock[block]);
+    float room = (float)(map_pore_room_at(map, block) - map->pore[block]) / (float)MAP_PORE_FINE;
+    float taken = fminf(fminf(out, room), rock->conductivity);
+    if (taken <= 0.0f) {
+        return 0.0f;
+    }
+    uint32_t pore = (uint32_t)lroundf(taken * (float)MAP_PORE_FINE);
+    map->pore[block] = (uint16_t)(map->pore[block] + pore);
+    return (float)pore / (float)MAP_PORE_FINE;
+}
+
+/* The water table in the block under a floor draws its root zone up towards
+ * rise_target(), SOIL_RISE_RATE of the gap an hour, from what the block
+ * holds above its field capacity: mm drawn. */
+static float draw_up(Map *map, size_t block, const SoilDef *def, float water)
+{
+    float target = rise_target(map, block, def);
+    if (target <= water) {
+        return 0.0f;
+    }
+    float spare = (float)((int64_t)map->pore[block] -
+                          (int64_t)rock_pore_capacity((RockType)map->rock[block])) /
+                  (float)MAP_PORE_FINE;
+    float drawn = fminf((target - water) * SOIL_RISE_RATE, spare);
+    if (drawn <= 0.0f) {
+        return 0.0f;
+    }
+    uint32_t pore = (uint32_t)lroundf(drawn * (float)MAP_PORE_FINE);
+    map->pore[block] = (uint16_t)(map->pore[block] - pore);
+    return (float)pore / (float)MAP_PORE_FINE;
+}
+
 bool soil_init(Soil *soil, const Map *map, float share)
 {
     if (!soil_init_empty(soil, map)) {
@@ -140,7 +214,10 @@ bool soil_init(Soil *soil, const Map *map, float share)
         const SoilDef *def = tile_def(map, i);
         if (def != NULL) {
             float water = def->wilting + share * (def->capacity - def->wilting);
-            soil->water[i] = fmaxf(water, soil_bank_target(def, soil->wet[i]));
+            size_t block = block_under(map, i);
+            float target = block == SIZE_MAX ? soil_bank_target(def, soil->wet[i])
+                                             : rise_target(map, block, def);
+            soil->water[i] = fmaxf(water, target);
         }
     }
     soil_look_up(soil, map, 0, count);
@@ -322,11 +399,31 @@ static int32_t fine_of(float mm)
     return (int32_t)lroundf(mm * (float)WATER_FINE);
 }
 
+/* Rough stone drinks free water into its cracks, down into the pores of the
+ * rock under it (docs/WATER.md §5.2), up to SOIL_CRACK_INTAKE mm an hour and
+ * as far as they have room: mm taken of the `offered`. */
+static float crack_intake(Map *map, size_t index, float offered)
+{
+    size_t level = map_level_tile_count(map);
+    if (index < level) {
+        return 0.0f; /* The bottom of the map. */
+    }
+    size_t below = index - level;
+    float room = (float)(map_pore_room_at(map, below) - map->pore[below]) / (float)MAP_PORE_FINE;
+    float taken = fminf(fminf(SOIL_CRACK_INTAKE, offered), room);
+    if (taken <= 0.0f) {
+        return 0.0f;
+    }
+    uint32_t pore = (uint32_t)lroundf(taken * (float)MAP_PORE_FINE);
+    map_set_pore(map, below, map->pore[below] + pore);
+    return (float)pore / (float)MAP_PORE_FINE;
+}
+
 /* Free water on a floor that is not rooting ground, or on open water: it
  * gets the rain and snowmelt and loses what evaporates (docs/WATER.md §3.5);
  * on a bed of rooting ground other than silt (a pond after a downpour, not
  * a lake), the ground under it also soaks it in, rough stone some into its
- * cracks. A roof sheds its rain over the eaves (not followed). */
+ * cracks (crack_intake()). A roof sheds its rain over the eaves (not followed). */
 static void free_water_hour(Soil *soil, Map *map, Water *water, size_t index, const SoilHour *hour,
                             float input, bool covered, float sun, const float *temperature)
 {
@@ -338,7 +435,7 @@ static void free_water_hour(Soil *soil, Map *map, Water *water, size_t index, co
     if (map->terrain[index] == TERRAIN_GRASS_ROOF) {
         change = 0.0f;
     } else if (top == index && map->terrain[index] == TERRAIN_ROUGH_STONE && !frozen) {
-        change -= fminf(SOIL_CRACK_INTAKE, held + input);
+        change -= crack_intake(map, index, held + input);
     } else if (top == index && bed != NULL && map->terrain[index] != TERRAIN_SILT && !frozen) {
         float ground = soil->water[index] != 0.0f ? soil->water[index] : bed->capacity;
         float taken =
@@ -414,14 +511,21 @@ void soil_update(Soil *soil, Map *map, Water *flow, size_t first, size_t last, c
         float soaked = fminf(input + free, room);
         water += soaked;
         float left = input + free - soaked; /* Free water after soaking in. */
-        /* Drainage above field capacity, down to the water table near open
-         * water, which draws the ground up towards it. */
-        float target = soil_bank_target(def, soil->wet[i]);
+        /* Drainage above field capacity into the block under it, which it
+         * draws up from when its water table comes close (docs/WATER.md
+         * §5.4). Where no block is followed under it, what drains is lost,
+         * down to the bank's water table near open water, which draws the
+         * ground up towards it. */
+        size_t block = block_under(map, i);
+        float target = block == SIZE_MAX ? soil_bank_target(def, soil->wet[i]) : 0.0f;
         float drained = fmaxf(def->capacity, target);
         if (water > drained) {
-            water -= (water - drained) * def->drainage;
+            float out = (water - drained) * def->drainage;
+            water -= block == SIZE_MAX ? out : drain_into(map, block, out);
         }
-        if (water < target) {
+        if (block != SIZE_MAX) {
+            water += draw_up(map, block, def, water);
+        } else if (water < target) {
             water += (target - water) * SOIL_BANK_RATE;
         }
         /* Free water evaporates first; the ground under it does not. */

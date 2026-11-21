@@ -267,6 +267,36 @@ static void test_earth_is_dug_rock_is_mined(void)
     free_world(&map, &d);
 }
 
+/* Sand, gravel and clay are soft ground, dug like earth (one order, stored
+ * as digging, a ramp cut, a hole dug down), each at its own work and leaving
+ * its own floor. */
+static void test_soft_ground_is_dug_like_earth(void)
+{
+    static const RockType SOFT[] = {ROCK_SAND, ROCK_GRAVEL, ROCK_CLAY};
+    for (size_t i = 0; i < sizeof(SOFT) / sizeof(SOFT[0]); i++) {
+        Map map;
+        Designations d;
+        REQUIRE(init_bank(&map, &d));
+        for (int y = 0; y < 16; y++) {
+            for (int x = 4; x < 16; x++) {
+                map.rock[map_index(&map, x, y, 0)] = (uint8_t)SOFT[i];
+                map.terrain[map_index(&map, x, y, 0)] = (uint8_t)rock_def(SOFT[i])->floor;
+            }
+        }
+        CHECK(designation_can_apply(&map, 4, 2, 0, DESIGNATION_DIG));
+        CHECK(designation_can_apply(&map, 4, 3, 0, DESIGNATION_DIG_RAMP));
+        CHECK(designation_can_apply(&map, 8, 8, 1, DESIGNATION_DIG_DOWN));
+        REQUIRE(designation_set(&d, &map, 4, 2, 0, DESIGNATION_MINE));
+        CHECK_EQ_INT(designation_get(&d, 4, 2, 0), DESIGNATION_DIG);
+        float needed = designation_work_needed(&d, &map, 4, 2, 0);
+        CHECK_NEAR(needed, rock_def(SOFT[i])->mine_work, 1e-3);
+        CHECK(designation_add_work(&d, &map, NULL, 4, 2, 0, needed, KNOWLEDGE_MASTERY_LEVEL, NULL));
+        CHECK(map_is_passable(&map, 4, 2, 0));
+        CHECK_EQ_INT(map.terrain[map_index(&map, 4, 2, 0)], rock_def(SOFT[i])->floor);
+        free_world(&map, &d);
+    }
+}
+
 /* A ramp cut into a bank leads up to the ground behind it. */
 static void test_ramps_are_cut_into_banks(void)
 {
@@ -540,6 +570,7 @@ int main(void)
     RUN_TEST(test_hash_detects_changes);
     RUN_TEST(test_taking_structures_apart);
     RUN_TEST(test_earth_is_dug_rock_is_mined);
+    RUN_TEST(test_soft_ground_is_dug_like_earth);
     RUN_TEST(test_ramps_are_cut_into_banks);
     RUN_TEST(test_ramps_need_bare_ground);
     RUN_TEST(test_digging_down);

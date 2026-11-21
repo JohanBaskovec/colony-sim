@@ -568,6 +568,12 @@ static void build_tile_panel(App *app, Panel *panel)
     } else if (map->rock[index] != ROCK_NONE) {
         const RockDef *rock = rock_def((RockType)map->rock[index]);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.rock"), tr(rock->name_key));
+        /* The water in its pores (docs/WATER.md §5.5). */
+        const char *damp = groundwater_dampness_key(map, index);
+        if (damp != NULL) {
+            tr_integer(a, sizeof(a), (long long)lroundf(groundwater_share(map, index) * 100.0f));
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.ground_water"), tr(damp), a);
+        }
     }
 
     /* On a tree's trunk or foliage: the tree (its plant is on its foot). */

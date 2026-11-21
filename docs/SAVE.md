@@ -55,7 +55,9 @@ Saved: the map and all its layers, revisions and logs; every module of
 crowns, corpses, stockpiles, workstations and bills, construction sites,
 beds, reservations, item moves, the clock's tick, every random stream,
 temperatures, soil, the water's active blocks and their flows, the land
-beyond the map's edges, the light's
+beyond the map's edges, the pore water of the ground (`Map.pore`) with the
+water table beyond the edges and what the ground gave to sleeping lakes
+this hour (`GroundWater.pending`), the light's
 sweeps, the vision and the known world while the fog is on, weather, the
 colonists, animals, social bonds, occupancy, notices, debug flags); the
 counters the simulation compares (revisions seen, stamps of failed
@@ -68,6 +70,8 @@ Not saved, rebuilt on load:
   drop filter, the temperature surface);
 - what a step works out afresh before reading it: whether each active water
   block is ready to sleep (`WaterBlock.ready`);
+- statistics nothing reads back: the water moved in the ground and seeped
+  out over the last hours (`GroundWater.moved`, `seeped`);
 - what the frontend only shows: the last blows to play (`CombatLog`), the
   conversation counts for the curious, the clock's speed (a loaded game
   starts paused) and its pending fraction of a tick.

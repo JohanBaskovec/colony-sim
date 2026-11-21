@@ -8,7 +8,11 @@
  * RIVER_VALLEY_TILES tiles from its banks, cut through the hills;
  * hills rising level by level with natural slopes, rock outcrops one level
  * higher behind cliffs. The inside of the ground is earth near the surface
- * and rock deeper down (rock all the way under stony ground). Open levels
+ * (sand under beaches, gravel under gravel ground, lenses of clay here and
+ * there), rock deeper down (rock all the way under stony ground), and beds
+ * of sand or gravel (aquifers) crossing the land at one level
+ * (docs/WATER.md §5.1), their pores full under a water table at rest, at the
+ * lakes' level (docs/WATER.md §5.3). Open levels
  * top the highest ground, where trees rise and roofs go: WORLDGEN_LEVELS_ABOVE
  * levels over the plains (a flat world has TREE_MAX_LEVELS levels). The tallest
  * ground of a map stands `hill_height` levels over the plains, whatever the
@@ -57,6 +61,16 @@ _Static_assert(WORLDGEN_MAX_UNDERGROUND + 1 + WORLDGEN_LEVELS_ABOVE <= MAP_MAX_L
 /* Under the ground's surface, earth for this many levels, then rock (under
  * soft ground; stony ground is rock all the way down). */
 #define WORLDGEN_EARTH_LEVELS 2
+/* The beds of sand and gravel lie this many levels under the plains, where a
+ * noise is above WORLDGEN_AQUIFER_FROM (about a third of the land); lenses of
+ * clay under the top layer of soft ground where another is above
+ * WORLDGEN_CLAY_FROM (about a fifth). */
+#define WORLDGEN_AQUIFER_DEPTH 3
+#define WORLDGEN_AQUIFER_FROM 0.58f
+#define WORLDGEN_CLAY_FROM 0.76f
+/* The water table (docs/WATER.md §5.3) lies at the lakes' level, this deep
+ * under the plains. */
+#define WORLDGEN_LAKE_DEPTH_MM (WATER_CELL_FULL - WORLDGEN_LAKE_MM)
 
 typedef struct WorldGenParams {
     uint64_t seed;

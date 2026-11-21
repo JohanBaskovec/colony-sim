@@ -592,19 +592,25 @@ like the soil:
   it. The edges keep the water table they started with (§4.1).
 
 All amounts are integers moved from one block to another. A slice does a
-fixed set of columns in a fixed order. Lateral flows use the neighbours'
-heads of the last hour, so the order of the slices does not matter
-*(design detail to settle at W4: one cached head per column and saturated
-run)*.
+fixed set of tiles in the order of their indices, each from the water as it
+is then (as built, §5.6: no cached heads; a flow never moves more than half
+of what would even the two heads out, so the order does not make water
+swing).
 
 ### 5.3 The water table
 
 World generation lays a water table close to rest:
 
 - under a lake or the river, at its surface;
-- elsewhere a smoothed copy of the ground's height, rising under the hills
-  at about half their rise and staying a level or more below their ground;
-- blocks below it saturated, blocks above it at field capacity.
+- elsewhere flat, at the lakes' level (1.6 m under the plains), and never
+  closer than that under the ground;
+- blocks below it saturated, blocks above it at field capacity;
+- a flat world has none: its single level holds field capacity.
+
+*(As built: the first design raised the table under the hills at half their
+rise. That table was far from rest, every hill drained at once and kept
+300 blocks of surface water awake for the first days. The hills get their
+own table from the rain instead, §5.4.)*
 
 From there it lives: it rises after a wet spell and falls in a drought, it
 is higher next to the water and on clay, it feeds the lakes and the river
@@ -628,8 +634,9 @@ water table comes close to it.
 
 ### 5.5 What it changes
 
-- **Digging.** A dug block leaves its pore water as free water in the new
-  cell. A gallery dug below the water table fills at the seepage rate:
+- **Digging.** A dug block leaves the pore water it held above its field
+  capacity as free water in the new cell (what it held against gravity
+  stays in the spoil: digging dry earth does not make a pond). A gallery dug below the water table fills at the seepage rate:
   slowly in granite (a drip), in hours in earth, very fast in gravel. The
   diggers (`core/designation.h`) are warned before they dig into a soaked
   block next to a lake: the walls of a gallery show how damp they are
@@ -645,6 +652,70 @@ water table comes close to it.
   view cuts through it.
 - **Later**: soaked earth caving in more easily, deep roots of trees
   drawing from the blocks, frost heave.
+
+### 5.6 As built (W4a–W4c), and what is left
+
+`core/groundwater.h` and `Map.pore` (a `uint16_t` per tile, in 1/64 mm,
+`MAP_PORE_FINE`), saved with the map:
+
+- **Head.** A tile at its field capacity or below has its bottom as head.
+  Above, the water table runs up the column while the tile above holds more
+  than its capacity; the head is the top of that run: the share of the top
+  tile's drainable room filled, of its height, or when it is full its top
+  plus the free water standing on it.
+- **The hourly pass** (`groundwater_update()`, in the slices of the soil):
+  a tile drains down at the lower conductivity; trades with its east and
+  south neighbours (Darcy, the difference of the heads over the width of a
+  tile, times the height of water in the face; the yields of the giver's
+  top of table and of the receiver's tile turn the water moved into a
+  change of head); with the open tiles beside it (not walls or closed
+  doors); with the edge (`edge_head`, the table it had when the game began,
+  per edge slot).
+- **Taking and giving** follow the column: water is taken from the top of
+  the table down and given into the tile then up its column, both limited
+  by the vertical conductivity of the tiles crossed. Water does not jump
+  through granite. A full column gives the rest out at its top.
+- **Seeping out.** Into a tile without floor it runs down to the foot of
+  the cliff (a spring on a hillside falls to its foot instead of waking a
+  block of empty air). Onto rooting ground holding less than 3 mm of free
+  water it wets the root zone first, up to saturation. The rest lies as
+  free water.
+- **Lakes asleep.** What seeps into or out of the open water of a sleeping
+  block is kept per block (`pending`) and spread alike over its tiles of
+  shallows or deeper at the end of the hour: a lake fed along its shores
+  rises as a whole and stays asleep.
+- **The root zone** (§5.4, `core/soil.h`) drains into the block under its
+  floor, as far as that block has room, at the lower of the drainage and
+  the block's conductivity. It is drawn up when the block's drainable share
+  passes half (`SOIL_RISE_FROM`): its target moisture rises from field
+  capacity to saturation as the table reaches the floor, by
+  `SOIL_RISE_RATE` of the gap an hour. The banks of `docs/CLIMATE.md` §3.5
+  are kept only where no porous block lies under the floor (a flat world).
+  Rain soaking into the cracks of rough stone goes into the block under it.
+- **The inside of the ground** (`worldgen`): earth near the surface, a bed
+  of sand or gravel three levels down where a noise is high (an aquifer),
+  gravel under gravel, sand under sand, lenses of clay two levels down,
+  stone deeper. Sand, gravel and clay are dug like earth (`rock_is_soft()`),
+  with sprites of their own; they give nothing yet.
+- **Shown**: the inspector's ground water row on a solid tile (dry, damp,
+  wet, soaked, with the share of its room).
+- **Layers written directly** (tests, scenarios) move no water:
+  `map_topology_changed()` brings every pore within the room of its rock.
+
+Cost (`bench_simulation 12 4 1`, against W3c-3 on the same machine): 8.8 s
+of processor time instead of 7.25 s (+21 %), p50 25 µs a tick instead of
+18. The hourly pass over every solid tile is most of it: tiles holding
+nothing above their field capacity beside others alike are skipped, but a
+saturated tile still works out its head by walking up to the top of its
+table, for each of its neighbours. The surface water costs less than before
+(962 blocks woken instead of 1 232): springs fall to the foot of their cliff
+and lakes are fed per block. Left to try if it matters: a head per column
+and hour, worked out once.
+
+Left for **W4d**: mud on a saturated floor, wells (a shaft filling is
+already there; drawing from it needs containers), the moisture view showing
+the walls of galleries and the inside of the ground, the diggers' warning
+before a soaked block next to a lake, items from clay and gravel.
 
 ## 6. What water changes
 
@@ -964,7 +1035,22 @@ Each step is tested, measured against the baseline (`bench_simulation`,
    the ground and drawing from it (the banks of the soil go), damp walls,
    wells, mud. Tests: a gallery under the water table filling, one in
    granite dripping, rain soaking down to the water table, a spring on a
-   hillside, a well.
+   hillside, a well. In four steps:
+   - **W4a, the ground (done)**: `Map.pore`, sand, gravel and clay (dug
+     like earth, their sprites), the layers and the water table laid by
+     world generation, digging releasing what is above field capacity.
+     Tests: the rooms, the layers, a table laid and its heads, digging.
+   - **W4b, the flow (done)**: drainage, Darcy flow, seepage, the edges,
+     springs falling to the foot of their cliff, lakes fed per block.
+     Tests: soaking down and stopping over clay, tables evening out, a
+     gallery filling, one in granite dripping, a spring, a well, a soaked
+     ceiling, no seepage into walls, the edges, determinism.
+   - **W4c, the root zone (done)**: draining into the ground, capillary
+     rise, the banks only over no ground, cracks into the block under them,
+     the inspector's row. Tests: the root zone draining, a high table
+     keeping the ground wet.
+   - **W4d, what it changes**: mud, wells, the moisture view, the diggers'
+     warning, clay and gravel items (§5.6).
 6. **W5, water in play.** Floodgates, dams of earth, cisterns, irrigation
    ditches (with farming), floating items carried away, alerts (the river
    rising, a gallery flooding), settlers keeping out of rising water.

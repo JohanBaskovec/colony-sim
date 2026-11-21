@@ -60,6 +60,10 @@ typedef enum RockType {
     ROCK_SANDSTONE,
     ROCK_EARTH, /* The inside of soft hills: dug out, it gives nothing. */
     ROCK_WOOD,  /* The trunk of a tree (core/tree.h): felled, never mined. */
+    /* Soft ground under the earth (docs/WATER.md §5.1), dug like earth: */
+    ROCK_SAND,   /* Under beaches, and beds carrying water far (aquifers). */
+    ROCK_GRAVEL, /* Beds carrying water fast (aquifers), under gravel ground. */
+    ROCK_CLAY,   /* Lenses that water stops over (a perched water table). */
     ROCK_COUNT
 } RockType;
 
@@ -117,6 +121,21 @@ typedef struct RockDef {
     float mine_work;     /* Work (in ticks of a settler working) needed to mine one tile. */
     ItemType mined_item; /* Dropped when a tile is mined. */
     int mined_yield;
+    bool soft;     /* Dug like earth (DESIGNATION_DIG, ramps, holes dug down), not mined. */
+    Terrain floor; /* The floor left when it is dug out (laid under it by world generation). */
+    /* Water in it (docs/WATER.md §5.1): the share of its volume that pores
+     * fill, the share they hold against gravity (field capacity), and how
+     * fast water goes through it, mm an hour. Nothing for a trunk. */
+    float porosity;
+    float field_capacity;
+    float conductivity;
+    /* The same in integers (core/groundwater.h): the room of its pores and
+     * their field capacity in 1/MAP_PORE_FINE mm, the drainable share
+     * (porosity less field capacity) per mille, the conductivity in 1/1000
+     * mm an hour. */
+    uint32_t pore_room, pore_capacity;
+    int32_t yield_permille;
+    int32_t conductivity_milli;
 } RockDef;
 
 /* Most products (stocks) one plant bears: a plant holds one stock of each
@@ -459,6 +478,11 @@ typedef struct Map {
      * full tile under it when it has none). Change it with map_set_water()
      * once a game runs. */
     uint16_t *water;
+    /* Water in the pores of each solid tile (docs/WATER.md §5), in
+     * 1/MAP_PORE_FINE mm over its square metre: 0 to its room
+     * (map_pore_room_at()), always 0 where there is no rock. Moved by
+     * core/groundwater.h; set with map_set_pore() once a game runs. */
+    uint16_t *pore;
     int slope_count; /* Slope tiles. */
     Plant *plants;
     /* Stones lying about each tile, that gathering takes one by one: cobbles
@@ -568,6 +592,8 @@ typedef struct Map {
 
 const TerrainDef *terrain_def(Terrain terrain);
 const RockDef *rock_def(RockType rock);
+/* Whether a rock is soft ground, dug like earth (RockDef.soft). */
+bool rock_is_soft(RockType rock);
 const PlantDef *plant_def(PlantType plant);
 
 /* The product of a plant type in a slot (NULL: none there). */
@@ -839,7 +865,9 @@ static inline void map_tile_of(const Map *map, size_t index, int *x, int *y, int
  * map_topology_changed() must be called after writing the layers directly),
  * so that topology_revision follows. Out-of-bounds tiles are ignored. A rock
  * change that leaves the tile as passable as before (granite to sandstone)
- * is not a topology change.
+ * is not a topology change. map_topology_changed() also brings the pore
+ * water of every tile within the room of its rock (none without rock): a
+ * direct write moves no water in or out of the ground.
  */
 void map_set_terrain(Map *map, int x, int y, int z, Terrain terrain);
 void map_set_rock(Map *map, int x, int y, int z, RockType rock);
@@ -1216,6 +1244,27 @@ void map_set_water(Map *map, int x, int y, int z, int mm);
  * being it. */
 void map_water_class_changed(Map *map, int x, int y, int z, bool passable_changed, bool opened,
                              bool water_changed);
+
+/* Water in the ground (docs/WATER.md §5): the pore water of solid tiles,
+ * in 1/MAP_PORE_FINE mm. */
+#define MAP_PORE_FINE 64
+/* The room of a rock's pores, and what they hold against gravity (field
+ * capacity), 1/MAP_PORE_FINE mm (0 for no rock and trunks). */
+extern const RockDef ROCK_DEFS[ROCK_COUNT]; /* Read through rock_def(); inline here for speed. */
+static inline uint32_t rock_pore_room(RockType rock)
+{
+    return (unsigned)rock < ROCK_COUNT ? ROCK_DEFS[rock].pore_room : 0;
+}
+static inline uint32_t rock_pore_capacity(RockType rock)
+{
+    return (unsigned)rock < ROCK_COUNT ? ROCK_DEFS[rock].pore_capacity : 0;
+}
+static inline uint32_t map_pore_room_at(const Map *map, size_t index)
+{
+    return rock_pore_room((RockType)map->rock[index]);
+}
+/* Sets the pore water of a tile (clamped to its room). */
+void map_set_pore(Map *map, size_t index, uint32_t pore);
 
 /* Open water: Shallows or deeper (false out of bounds). */
 bool map_is_water(const Map *map, int x, int y, int z);

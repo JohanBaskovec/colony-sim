@@ -1113,6 +1113,7 @@ static bool init_hill_game(Game *game)
         map->terrain[i] = (uint8_t)(z == 0 || (z == 1 && hill) ? TERRAIN_SOIL : TERRAIN_OPEN);
         map->water[i] = 0;
         map->rock[i] = (uint8_t)(z == 0 && hill ? ROCK_EARTH : ROCK_NONE);
+        map->pore[i] = (uint16_t)rock_pore_capacity((RockType)map->rock[i]); /* No table. */
         map->slope[i] = 0;
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
         map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
@@ -1121,7 +1122,11 @@ static bool init_hill_game(Game *game)
     }
     map->slope[map_index(map, 25, 20, 0)] = 1;
     map->slope_count = 1;
-    map_topology_changed(map); /* The layers were written directly. */
+    map_topology_changed(map);       /* The layers were written directly. */
+    groundwater_free(&game->ground); /* No water table beyond the edges either. */
+    if (!groundwater_init(&game->ground, map)) {
+        return false;
+    }
     game->clock.tick = TODAY + 12 * TICKS_PER_HOUR;
     return true;
 }

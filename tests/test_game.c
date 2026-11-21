@@ -848,7 +848,7 @@ static void test_plant_stocks_grow_back(void)
 static void test_zones_of_different_kinds_never_overlap(void)
 {
     Game game;
-    REQUIRE(init_small_game(&game, 4));
+    REQUIRE(init_flat_game(&game, 4)); /* Level 0 is the ground, over no water table. */
     for (int y = 10; y <= 20; y++) {
         for (int x = 10; x <= 20; x++) {
             map_set_rock(&game.map, x, y, 0, ROCK_NONE);
