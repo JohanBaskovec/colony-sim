@@ -2394,6 +2394,60 @@ static void test_orders_on_plants_that_are_gone_are_dropped(void)
     game_shutdown(&game);
 }
 
+/* An uprooting zone keeps an Uproot order on the plants it wants gone, the shoots that come up
+ * later too; a stockpile does so for every plant. The player's own orders are left alone. */
+static void test_uprooting_zones_and_stockpiles_order_uprooting(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Plant *bramble = add_bramble(&game.map, 16, 10);
+    REQUIRE(bramble != NULL);
+    game.map.plants[map_index(&game.map, 17, 10, 0)] = (Plant){.type = PLANT_GRASS, .growth = 1.0f};
+    add_bramble(&game.map, 18, 10); /* The player's own order on it. */
+    add_bramble(&game.map, 25, 25); /* In no zone. */
+    int zone = game_add_uproot_zone_rect(&game, 16, 10, 18, 12, 0, GATHER_ZONE_NONE);
+    REQUIRE(zone != GATHER_ZONE_NONE && gather_zone_is_uproot(&game.gather_zones, zone));
+    REQUIRE(game_designate_rect(&game, 18, 10, 18, 10, 0, DESIGNATION_HARVEST) == 1);
+    gather_zone_set_uproot_plant(&game.gather_zones, zone, PLANT_GRASS, false);
+    int pile = game_add_stockpile_rect(&game, 20, 10, 22, 12, 0, STOCKPILE_NONE);
+    REQUIRE(pile != STOCKPILE_NONE);
+    add_bramble(&game.map, 20, 10);
+    game.map.plants[map_index(&game.map, 21, 10, 0)] = (Plant){.type = PLANT_GRASS, .growth = 0.3f};
+    for (int i = 0; i < GAME_UPROOT_CHECK_INTERVAL; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(designation_get(&game.designations, 16, 10, 0), DESIGNATION_UPROOT);
+    CHECK_EQ_INT(designation_get(&game.designations, 17, 10, 0), DESIGNATION_NONE); /* Unticked. */
+    CHECK_EQ_INT(designation_get(&game.designations, 18, 10, 0), DESIGNATION_HARVEST);
+    CHECK_EQ_INT(designation_get(&game.designations, 25, 25, 0), DESIGNATION_NONE);
+    CHECK_EQ_INT(designation_get(&game.designations, 20, 10, 0), DESIGNATION_UPROOT);
+    CHECK_EQ_INT(designation_get(&game.designations, 21, 10, 0),
+                 DESIGNATION_UPROOT);                                               /* Grass too. */
+    CHECK_EQ_INT(designation_get(&game.designations, 22, 10, 0), DESIGNATION_NONE); /* Bare. */
+
+    /* A shoot that comes up later is ordered out at the next look. */
+    game.map.plants[map_index(&game.map, 16, 12, 0)] =
+        (Plant){.type = PLANT_BRAMBLE, .growth = 0.1f};
+    game.map.plants[map_index(&game.map, 22, 12, 0)] = (Plant){.type = PLANT_GRASS, .growth = 0.1f};
+    for (int i = 0; i < GAME_UPROOT_CHECK_INTERVAL; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(designation_get(&game.designations, 16, 12, 0), DESIGNATION_UPROOT);
+    CHECK_EQ_INT(designation_get(&game.designations, 22, 12, 0), DESIGNATION_UPROOT);
+
+    /* A settler pulls them up; the zone and the stockpile stay. */
+    REQUIRE(spawn_rested(&game, 10, 10) != NULL);
+    for (int i = 0; i < 20000 && game.designations.count > 1; i++) {
+        game_tick(&game);
+    }
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 16, 10, 0)].type, PLANT_NONE);
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 20, 10, 0)].type, PLANT_NONE);
+    CHECK_EQ_INT(game.map.plants[map_index(&game.map, 17, 10, 0)].type, PLANT_GRASS); /* Spared. */
+    CHECK(gather_zone_get(&game.gather_zones, zone) != NULL);
+    CHECK(stockpile_get(&game.stockpiles, pile) != NULL);
+    game_shutdown(&game);
+}
+
 /* A plant easily mistaken for a poisonous one: only a careful gatherer takes the order. */
 static void test_careful_plants_need_a_careful_gatherer(void)
 {
@@ -2833,6 +2887,7 @@ int main(void)
     RUN_TEST(test_harvest_and_uproot_orders_are_carried_out);
     RUN_TEST(test_harvest_when_ripe_waits_on_the_plant);
     RUN_TEST(test_orders_on_plants_that_are_gone_are_dropped);
+    RUN_TEST(test_uprooting_zones_and_stockpiles_order_uprooting);
     RUN_TEST(test_careful_plants_need_a_careful_gatherer);
     RUN_TEST(test_move_order_walks_holds_and_releases);
     RUN_TEST(test_heading_follows_the_walk);

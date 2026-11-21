@@ -232,7 +232,15 @@ typedef struct GatherZone {
     /* The gatherers may climb the trees to pick in the crowns (off by
      * default: they pick from the ground only). */
     bool climb;
+    /* An uprooting zone (gather_zones_add_uproot_view_rect()): it gathers nothing, and keeps an
+     * Uproot order (core/designation.h) on every plant of `uproot_plants` (PLANT_BIT) growing
+     * in it, the new shoots as well. */
+    bool uproot;
+    uint64_t uproot_plants;
 } GatherZone;
+
+/* The bit of a plant type in GatherZone.uproot_plants. */
+#define GATHER_PLANT_BIT(type) (UINT64_C(1) << (unsigned)(type))
 
 typedef struct GatherZones {
     int width;
@@ -278,6 +286,28 @@ bool gather_stone_ground(const Map *map, int x, int y, int z);
  * the list is full.
  */
 int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z);
+
+/*
+ * As gather_zones_add_view_rect() for an uprooting zone: `preferred` and the zones the
+ * rectangle overlaps merge into one only if they are uprooting zones too (tiles of gathering
+ * zones are left out, as zones lie in one layer); a new zone uproots every plant it can. Zones
+ * of both kinds are otherwise handled alike (extend, shrink, remove, delete).
+ */
+int gather_zones_add_uproot_view_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1,
+                                      int y1, int z, int preferred, const uint8_t *const *blocked);
+
+/* Whether a zone is an uprooting zone, and (for one) whether it uproots a plant type. */
+bool gather_zone_is_uproot(const GatherZones *zones, int index);
+bool gather_zone_uproots(const GatherZone *zone, PlantType plant);
+
+/* Chooses whether an uprooting zone uproots a plant type, or all of them (trees are never
+ * uprooted: gather_plant_uprootable()). No effect on a gathering zone. */
+void gather_zone_set_uproot_plant(GatherZones *zones, int index, PlantType plant, bool uproots);
+void gather_zone_set_all_uproot_plants(GatherZones *zones, int index, bool uproots);
+
+/* Whether the plant on (x, y, z) is in an uprooting zone that wants it uprooted (not
+ * forbidden). */
+bool gather_zones_want_uprooted(const GatherZones *zones, const Map *map, int x, int y, int z);
 
 /* Adds the free tiles of a rectangle a zone may cover. Returns the number of
  * tiles added. */

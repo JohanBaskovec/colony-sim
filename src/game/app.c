@@ -1032,7 +1032,9 @@ bool app_build_like_target(const App *app, AppTool *tool, int *type)
     }
     if (app->selected_gather_zone != GATHER_ZONE_NONE) {
         *tool = APP_TOOL_GATHER;
-        *type = APP_ZONE_ADD;
+        *type = gather_zone_is_uproot(&app->game.gather_zones, app->selected_gather_zone)
+                    ? APP_ZONE_ADD_UPROOT
+                    : APP_ZONE_ADD;
         return true;
     }
     const Workstation *station =
@@ -1869,6 +1871,9 @@ static void apply_gather_tool(App *app, float screen_x, float screen_y)
     } else if (zone_tool_removes(app)) {
         game_remove_gather_zone_rect(&app->game, x0, y0, x1, y1, z);
         prune_gather_zone_selection(app);
+    } else if (app->zone_mode == APP_ZONE_ADD_UPROOT) {
+        select_gather_zone(app, game_add_uproot_zone_rect(&app->game, x0, y0, x1, y1, z,
+                                                          app->selected_gather_zone));
     } else {
         select_gather_zone(app, game_add_gather_zone_rect(&app->game, x0, y0, x1, y1, z,
                                                           app->selected_gather_zone));
@@ -2437,7 +2442,8 @@ static void render_frame(App *app)
         if (app->tool == APP_TOOL_STOCKPILE) {
             render_stockpile_area(app->renderer, &app->camera, x0, y0, x1, y1, remove);
         } else if (app->tool == APP_TOOL_GATHER) {
-            render_gather_area(app->renderer, &app->camera, x0, y0, x1, y1, remove);
+            render_gather_area(app->renderer, &app->camera, x0, y0, x1, y1, remove,
+                               app->zone_mode == APP_ZONE_ADD_UPROOT);
         } else if (app->tool == APP_TOOL_FORBID) {
             render_forbid_area(app->renderer, &app->camera, x0, y0, x1, y1, !app->forbid_allows);
         } else {

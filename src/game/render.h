@@ -175,9 +175,10 @@ void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0,
 void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera *camera,
                          int selected);
 
-/* Rectangle of tiles being added to (or removed from) gathering zones. */
+/* Rectangle of tiles being added to (or removed from) gathering zones (`uproot`: uprooting
+ * zones, another color). */
 void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
-                        int y1, bool remove);
+                        int y1, bool remove, bool uproot);
 
 /* Plants (trees, shrubs, low plants), colonists (with what they carry) and
  * the animals the colony sees (game_animal_seen()), from the back to the
@@ -227,6 +228,7 @@ void render_item_selection(SDL_Renderer *renderer, Sprites *sprites, const Camer
 typedef enum RenderIcon {
     RENDER_ICON_GATHER_ZONE,
     RENDER_ICON_GATHER_ZONE_REMOVE, /* The zone icon with a "minus" sign. */
+    RENDER_ICON_UPROOT_ZONE,        /* A zone with a plant pulled up. */
     RENDER_ICON_STOCKPILE,
     RENDER_ICON_STOCKPILE_REMOVE,
     RENDER_ICON_MINE,

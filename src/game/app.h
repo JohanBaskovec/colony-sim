@@ -135,6 +135,7 @@ typedef enum FollowKind { FOLLOW_NONE, FOLLOW_COLONIST, FOLLOW_ANIMAL } FollowKi
 #define APP_ZONE_REMOVE 1
 #define APP_ZONE_EXTEND 2 /* The selected zone alone. */
 #define APP_ZONE_SHRINK 3
+#define APP_ZONE_ADD_UPROOT 4 /* Gathering-zone tool: an uprooting zone. */
 
 /* Windows (game/ui.h ids). */
 /* Two left clicks this close (milliseconds) on the same thing make a double click. */

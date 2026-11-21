@@ -130,6 +130,10 @@ typedef struct GameDebug {
 /* Ticks between looks for orders on plants that are gone (designations_drop_void()). */
 #define GAME_ORDER_CHECK_INTERVAL 30
 
+/* Ticks between the looks for plants to uproot in uprooting zones and on stockpiles
+ * (update_uproot_orders()): a tenth of an hour. */
+#define GAME_UPROOT_CHECK_INTERVAL 250
+
 /* The density of wild animals in a game as played (NewGameParams.wildlife). */
 #define GAME_WILDLIFE_DENSITY 1.0f
 
@@ -875,6 +879,11 @@ bool game_single_item_move_at(const Game *game, ItemId id, TilePos *destination)
  * GATHER_ZONE_NONE when nothing could be added. */
 int game_add_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
 int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
+/* An uprooting zone (gather_zones_add_uproot_view_rect()): it keeps an Uproot order on the
+ * plants it wants gone, and so do the stockpiles on every plant. Zones of the two kinds lie in
+ * one layer, so they never overlap; taking tiles out of them goes through
+ * game_remove_gather_zone_rect(). */
+int game_add_uproot_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred);
 
 /* Takes what is seen in a rectangle (level z shown) out of the stockpiles, or
  * of the gathering zones. Returns the number of tiles removed. */

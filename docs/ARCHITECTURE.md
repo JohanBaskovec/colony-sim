@@ -713,6 +713,19 @@ clearing's (`gather_uproot_work()`). The plant decides the level and the tool
 mistaken for a poisonous one needs `GATHER_CAREFUL_MIN_LEVEL`, roots the
 digging stick; work searches and the action menu check it on the tile
 (`colonist_can_do_at()`, `game_designation_available_at()`).
+**Uprooting zones** are gathering zones of another kind (`GatherZone.uproot`, one
+layer with the gathering zones: a tile is in one or the other, and a rectangle
+merges zones of its own kind only, `gather_zones_add_uproot_view_rect()`). They
+gather nothing (no order is on, so no job is wanted); they hold a set of plant
+kinds (`uproot_plants`, a bit per `PlantType`, trees never) and every
+`GAME_UPROOT_CHECK_INTERVAL` ticks `update_uproot_orders()` (`core/game.c`) puts an
+`DESIGNATION_UPROOT` order on each tile of such a zone whose plant is wanted gone
+(`gather_zones_want_uprooted()`), and on every uprootable plant on a stockpile
+tile, where nothing is to grow among what is stored. A tile that already has an
+order is left alone; once done, the order is gone and the next shoot gets a new
+one. The work is the Uproot order's: gatherers, level and tool as for a single
+plant (see below).
+
 **Harvest when ripe** (`DESIGNATION_HARVEST_RIPE`) is Harvest that waits for the
 plant's full harvest, the rule of a zone's "wait for the full harvest"
 (`gather_plant_ripe()`: every fruit ripe, every armful grown, a plant taken

@@ -26,6 +26,8 @@ static const MenuTool TOOLS[] = {
      N_("tool.gather_zone"), N_("tool.gather_zone.description"), APP_KEY_GATHER},
     {BUILD_CATEGORY_ZONES, APP_TOOL_GATHER, APP_ZONE_REMOVE, RENDER_ICON_GATHER_ZONE_REMOVE,
      N_("tool.gather_remove"), N_("tool.zone_remove.description"), SDL_SCANCODE_UNKNOWN},
+    {BUILD_CATEGORY_ZONES, APP_TOOL_GATHER, APP_ZONE_ADD_UPROOT, RENDER_ICON_UPROOT_ZONE,
+     N_("tool.uproot_zone"), N_("tool.uproot_zone.description"), SDL_SCANCODE_UNKNOWN},
     {BUILD_CATEGORY_ZONES, APP_TOOL_STOCKPILE, APP_ZONE_ADD, RENDER_ICON_STOCKPILE,
      N_("tool.stockpile"), N_("tool.stockpile.description"), APP_KEY_STOCKPILE},
     {BUILD_CATEGORY_ZONES, APP_TOOL_STOCKPILE, APP_ZONE_REMOVE, RENDER_ICON_STOCKPILE_REMOVE,

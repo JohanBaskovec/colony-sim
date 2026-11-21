@@ -142,6 +142,7 @@ static const SDL_Color ROOF_SUPPORT_COLOR = {120, 220, 140, 60};
 static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
 static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
 static const SDL_Color GATHER_ZONE_COLOR = {225, 170, 90, 255};
+static const SDL_Color UPROOT_ZONE_COLOR = {200, 110, 170, 255};
 static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
 static const SDL_Color STONE_COLOR = {176, 174, 168, 255};
 static const SDL_Color BERRY_COLOR = {70, 28, 64, 255};
@@ -2053,6 +2054,8 @@ static void progress_bar(SDL_Renderer *renderer, const SDL_FRect *tile, float fr
 
 /* Zone index of a tile, or -1 outside any zone and off the map. */
 typedef int (*ZoneAt)(const void *zones, int x, int y, int z);
+/* The color of the zone `index` of a layer. */
+typedef SDL_Color (*ZoneColor)(const void *zones, int index);
 /* Pixels a gathering zone's border lies inside the tile's edge. */
 #define ZONE_BORDER_INSET 3.0f
 
@@ -2073,21 +2076,22 @@ static int gather_zone_zone_at(const void *zones, int x, int y, int z)
  * zone or none, `inset` pixels inside the tile's edge (a stockpile and a gathering zone may
  * stack: their borders then show side by side). */
 static void render_zone_layer(SDL_Renderer *renderer, const Camera *camera, const void *zones,
-                              ZoneAt zone_at, int width, int height, int selected, SDL_Color color,
-                              float inset)
+                              ZoneAt zone_at, int width, int height, int selected,
+                              ZoneColor color_of, float inset)
 {
     const int z = camera->level; /* The level shown. */
     TileRect visible = camera_visible_tiles(camera, width, height);
-    SDL_Color normal = color, highlight = shade(color, 40), border = shade(color, 110);
-    normal.a = 45;
-    highlight.a = 115;
-    border.a = 255;
     for (int y = visible.y0; y < visible.y1; y++) {
         for (int x = visible.x0; x < visible.x1; x++) {
             int index = zone_at(zones, x, y, z);
             if (index < 0 || !tile_seen(x, y, z)) {
                 continue;
             }
+            SDL_Color color = color_of(zones, index);
+            SDL_Color normal = color, highlight = shade(color, 40), border = shade(color, 110);
+            normal.a = 45;
+            highlight.a = 115;
+            border.a = 255;
             SDL_FRect tile = tile_rect(camera, x, y);
             bool chosen = index == selected;
             fill(renderer, chosen ? highlight : normal, &tile);
@@ -2145,11 +2149,25 @@ static void render_zone_area(SDL_Renderer *renderer, const Camera *camera, int x
     outline(renderer, area, 2.0f, color);
 }
 
+static SDL_Color stockpile_zone_color(const void *zones, int index)
+{
+    (void)zones;
+    (void)index;
+    return STOCKPILE_COLOR;
+}
+
+/* Gathering zones and uprooting zones share a layer, and have a color each. */
+static SDL_Color gather_zone_color(const void *zones, int index)
+{
+    const GatherZone *zone = gather_zone_get(zones, index);
+    return zone != NULL && zone->uproot ? UPROOT_ZONE_COLOR : GATHER_ZONE_COLOR;
+}
+
 void render_stockpiles(SDL_Renderer *renderer, const Game *game, const Camera *camera, int selected)
 {
     const Stockpiles *stockpiles = &game->stockpiles;
     render_zone_layer(renderer, camera, stockpiles, stockpile_zone_at, stockpiles->width,
-                      stockpiles->height, selected, STOCKPILE_COLOR, 0.0f);
+                      stockpiles->height, selected, stockpile_zone_color, 0.0f);
 }
 
 void render_stockpile_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
@@ -2168,7 +2186,7 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
         return;
     }
     render_zone_layer(renderer, camera, zones, gather_zone_zone_at, zones->width, zones->height,
-                      selected, GATHER_ZONE_COLOR, ZONE_BORDER_INSET);
+                      selected, gather_zone_color, ZONE_BORDER_INSET);
     /* Progress of the job under way on each tile. */
     TileRect visible = camera_visible_tiles(camera, zones->width, zones->height);
     for (int y = visible.y0; y < visible.y1; y++) {
@@ -2183,10 +2201,11 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
 }
 
 void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
-                        int y1, bool remove)
+                        int y1, bool remove, bool uproot)
 {
     render_zone_area(renderer, camera, x0, y0, x1, y1,
-                     remove ? STOCKPILE_REMOVE_COLOR : GATHER_ZONE_COLOR);
+                     remove ? STOCKPILE_REMOVE_COLOR
+                            : (uproot ? UPROOT_ZONE_COLOR : GATHER_ZONE_COLOR));
 }
 
 /* Fraction of a recipe's work done on a station's craft in progress. */
@@ -2731,6 +2750,28 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         fill(renderer, WOOD_COLOR, &trunk);
         fill(renderer, TREE_COLOR, &crown);
         fill_outlined(renderer, stone, STONE_COLOR);
+        batch_flush(renderer);
+        break;
+    }
+    case RENDER_ICON_UPROOT_ZONE: {
+        zone_icon(renderer, rect, UPROOT_ZONE_COLOR);
+        /* A plant pulled out of the ground, roots and all. */
+        float cx = rect.x + floorf(w * 0.42f), base = rect.y + h * 0.52f;
+        SDL_SetRenderDrawColor(renderer, 230, 214, 180, 255); /* Roots. */
+        for (float d = -1.0f; d <= 1.0f; d += 1.0f) {
+            SDL_RenderLine(renderer, cx, base, cx + d * w * 0.1f, base + h * 0.2f);
+        }
+        SDL_FRect stem = {cx - 1.0f, rect.y + h * 0.34f, 2.0f, h * 0.18f};
+        fill(renderer, TREE_COLOR, &stem);
+        SDL_FRect leaf = {cx - w * 0.12f, rect.y + h * 0.22f, w * 0.24f, h * 0.16f};
+        fill(renderer, FRESH_GRASS_COLOR, &leaf);
+        /* An arrow up beside it. */
+        float ax = floorf(rect.x + w * 0.72f);
+        SDL_SetRenderDrawColor(renderer, 236, 220, 190, 255);
+        SDL_RenderLine(renderer, ax, rect.y + h * 0.3f, ax, rect.y + h * 0.66f);
+        for (float d = 0.0f; d < w * 0.09f; d += 1.0f) {
+            SDL_RenderLine(renderer, ax - d, rect.y + h * 0.3f + d, ax + d, rect.y + h * 0.3f + d);
+        }
         batch_flush(renderer);
         break;
     }

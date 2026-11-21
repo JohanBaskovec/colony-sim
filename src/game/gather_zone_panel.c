@@ -703,11 +703,123 @@ static void apply(App *app, int index, const Action *action)
     }
 }
 
+/* ---- Uprooting zones ------------------------------------------------------- */
+
+/* What the player clicked in an uprooting zone's window: a plant type, or all of them
+ * (PLANT_COUNT), turned on or off. */
+typedef struct UprootRows {
+    App *app;
+    int index;
+    int clicked; /* -1: none. */
+} UprootRows;
+
+/* Plants an uprooting zone may uproot: any but trees. */
+static bool uprootable_type(int type)
+{
+    return type != PLANT_NONE && !plant_is_tree((uint8_t)type);
+}
+
+static bool uproot_checkbox_row(UiLayout *layout, const char *label, UiCheck state)
+{
+    float width = ui_checkbox_width(layout->ui, label);
+    ui_layout_measure(layout, width);
+    bool clicked =
+        layout->draw && ui_checkbox(layout->ui, layout->x, layout->y, width, state, label);
+    layout->y += layout->row;
+    return clicked;
+}
+
+static void uproot_summary_rows(UiLayout *layout, void *userdata)
+{
+    UprootRows *rows = userdata;
+    const GatherZone *zone = gather_zone_get(&rows->app->game.gather_zones, rows->index);
+    char number[16], tiles[TEXT_SIZE];
+    tr_integer(number, sizeof(number), zone->cell_count);
+    TR_FORMAT(tiles, sizeof(tiles), tr_plural("gather_zone.tiles", zone->cell_count), number);
+    ui_layout_label(layout, tiles, 0.0f, false);
+    if (zone->forbidden) {
+        ui_layout_label(layout, tr("uproot_zone.left_alone"), 0.0f, true);
+    }
+}
+
+/* One check box for all the plants, then one for each. */
+static void uproot_plants_rows(UiLayout *layout, void *userdata)
+{
+    UprootRows *rows = userdata;
+    const GatherZone *zone = gather_zone_get(&rows->app->game.gather_zones, rows->index);
+    int on = 0, total = 0;
+    for (int type = 0; type < PLANT_COUNT; type++) {
+        if (uprootable_type(type)) {
+            total++;
+            on += gather_zone_uproots(zone, (PlantType)type) ? 1 : 0;
+        }
+    }
+    UiCheck all = on == 0 ? UI_UNCHECKED : (on == total ? UI_CHECKED : UI_PARTIAL);
+    if (uproot_checkbox_row(layout, tr("uproot_zone.all"), all)) {
+        rows->clicked = PLANT_COUNT;
+    }
+    layout->y += GAP * 0.5f;
+    for (int type = 0; type < PLANT_COUNT; type++) {
+        if (!uprootable_type(type)) {
+            continue;
+        }
+        bool uproots = gather_zone_uproots(zone, (PlantType)type);
+        if (uproot_checkbox_row(layout, tr(plant_def((PlantType)type)->name_key),
+                                uproots ? UI_CHECKED : UI_UNCHECKED)) {
+            rows->clicked = type;
+        }
+    }
+}
+
+static void uproot_zone_panel_draw(App *app, int index, const GatherZone *zone)
+{
+    GatherZones *zones = &app->game.gather_zones;
+    char number[16], title[TEXT_SIZE];
+    tr_integer(number, sizeof(number), zone->number);
+    TR_FORMAT(title, sizeof(title), tr("uproot_zone.name"), number);
+    UprootRows rows = {.app = app, .index = index, .clicked = -1};
+    bool open = inspector_box(app, INSPECT_GATHER_ZONE, title, uproot_summary_rows, &rows);
+    const char *tabs[1] = {tr("inspector.tab.plants")};
+    if (inspector_tabs(app, tabs, 1) == 0) {
+        inspector_tab_panel(app, uproot_plants_rows, &rows);
+    }
+    bool forbid =
+        inspector_forbid_action(app, 0, zone->forbidden, tr("uproot_zone.forbid.description"));
+    inspector_build_like_action(app, 1);
+    bool remove = inspector_delete_action(app, 2, tr("uproot_zone.delete.description"), true);
+    inspector_zone_edit_actions(app, 3, APP_TOOL_GATHER, RENDER_ICON_UPROOT_ZONE,
+                                RENDER_ICON_GATHER_ZONE_REMOVE);
+    if (app->selected_gather_zone != index) {
+        return; /* Building another: the zone is no longer selected. */
+    }
+    if (rows.clicked == PLANT_COUNT) {
+        gather_zone_set_all_uproot_plants(zones, index, zone->uproot_plants == 0);
+    } else if (rows.clicked >= 0) {
+        gather_zone_set_uproot_plant(zones, index, (PlantType)rows.clicked,
+                                     !gather_zone_uproots(zone, (PlantType)rows.clicked));
+    }
+    if (forbid) {
+        gather_zone_set_forbidden(zones, index, !zone->forbidden);
+    }
+    if (remove) {
+        gather_zone_delete(zones, index);
+        app->selected_gather_zone = GATHER_ZONE_NONE;
+        return;
+    }
+    if (!open) {
+        app->selected_gather_zone = GATHER_ZONE_NONE;
+    }
+}
+
 void gather_zone_panel_draw(App *app)
 {
     int index = app->selected_gather_zone;
     const GatherZone *zone = gather_zone_get(&app->game.gather_zones, index);
     if (zone == NULL) {
+        return;
+    }
+    if (zone->uproot) {
+        uproot_zone_panel_draw(app, index, zone);
         return;
     }
     char number[16], title[TEXT_SIZE];

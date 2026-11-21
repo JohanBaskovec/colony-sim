@@ -327,8 +327,20 @@ int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, in
     return extend(zones, map, index, x0, y0, x1, y1, z, NULL, false);
 }
 
+/* Every plant a zone may uproot by default (no tree, never uprooted). */
+static uint64_t uprootable_plants(void)
+{
+    uint64_t mask = 0;
+    for (int type = 1; type < PLANT_COUNT; type++) {
+        if (!plant_is_tree((PlantType)type)) {
+            mask |= GATHER_PLANT_BIT(type);
+        }
+    }
+    return mask;
+}
+
 static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
-                  const uint8_t *const *blocked, bool view)
+                  const uint8_t *const *blocked, bool view, bool uproot)
 {
     int index = GATHER_ZONE_NONE;
     for (int i = 0; i < GATHER_ZONE_MAX; i++) {
@@ -358,6 +370,10 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
     }
     zone->groups[GATHER_GROUP_FOOD] = (GatherGroupOrder){
         .mode = GATHER_UNTIL, .unit = GATHER_UNIT_FOOD_DAYS, .target = GATHER_FOOD_DAYS_DEFAULT};
+    if (uproot) {
+        zone->uproot = true;
+        zone->uproot_plants = uprootable_plants();
+    }
     if (extend(zones, map, index, x0, y0, x1, y1, z, blocked, view) == 0) {
         zone->used = false;
         return GATHER_ZONE_NONE;
@@ -369,16 +385,20 @@ static int create(GatherZones *zones, const Map *map, int x0, int y0, int x1, in
 
 int gather_zone_create(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z)
 {
-    return create(zones, map, x0, y0, x1, y1, z, NULL, false);
+    return create(zones, map, x0, y0, x1, y1, z, NULL, false, false);
 }
 
 static int add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
-                    int preferred, const uint8_t *const *blocked, bool view)
+                    int preferred, const uint8_t *const *blocked, bool view, bool uproot)
 {
     int min_x, min_y, max_x, max_y;
     clip_rect(zones, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
     bool overlapped[GATHER_ZONE_MAX] = {false};
-    int into = is_valid(zones, preferred) ? preferred : GATHER_ZONE_NONE;
+    /* Only zones of the kind drawn merge: the others hold their tiles. */
+    int into = is_valid(zones, preferred) && zones->list[preferred].uproot == uproot
+                   ? preferred
+                   : GATHER_ZONE_NONE;
+    preferred = into;
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
             int level = view ? map_view_level(map, x, y, z) : z;
@@ -386,7 +406,8 @@ static int add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, 
                 continue;
             }
             int zone = zones->zone[index_of(zones, x, y, level)] - 1;
-            if (zone == GATHER_ZONE_NONE || overlapped[zone]) {
+            if (zone == GATHER_ZONE_NONE || overlapped[zone] ||
+                zones->list[zone].uproot != uproot) {
                 continue;
             }
             overlapped[zone] = true;
@@ -397,7 +418,7 @@ static int add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, 
         }
     }
     if (into == GATHER_ZONE_NONE) {
-        return create(zones, map, x0, y0, x1, y1, z, blocked, view);
+        return create(zones, map, x0, y0, x1, y1, z, blocked, view, uproot);
     }
     bool merged = false;
     size_t count = (size_t)zones->width * (size_t)zones->height * (size_t)zones->depth;
@@ -425,13 +446,75 @@ static int add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, 
 int gather_zones_add_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,
                           int preferred, const uint8_t *const *blocked)
 {
-    return add_rect(zones, map, x0, y0, x1, y1, z, preferred, blocked, false);
+    return add_rect(zones, map, x0, y0, x1, y1, z, preferred, blocked, false, false);
 }
 
 int gather_zones_add_view_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1,
                                int z, int preferred, const uint8_t *const *blocked)
 {
-    return add_rect(zones, map, x0, y0, x1, y1, z, preferred, blocked, true);
+    return add_rect(zones, map, x0, y0, x1, y1, z, preferred, blocked, true, false);
+}
+
+int gather_zones_add_uproot_view_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1,
+                                      int y1, int z, int preferred, const uint8_t *const *blocked)
+{
+    return add_rect(zones, map, x0, y0, x1, y1, z, preferred, blocked, true, true);
+}
+
+bool gather_zone_is_uproot(const GatherZones *zones, int index)
+{
+    return is_valid(zones, index) && zones->list[index].uproot;
+}
+
+bool gather_zone_uproots(const GatherZone *zone, PlantType plant)
+{
+    return zone != NULL && zone->uproot && (unsigned)plant < PLANT_COUNT &&
+           (zone->uproot_plants & GATHER_PLANT_BIT(plant)) != 0;
+}
+
+void gather_zone_set_uproot_plant(GatherZones *zones, int index, PlantType plant, bool uproots)
+{
+    if (!gather_zone_is_uproot(zones, index) || (unsigned)plant >= PLANT_COUNT ||
+        plant == PLANT_NONE || plant_is_tree(plant)) {
+        return;
+    }
+    GatherZone *zone = &zones->list[index];
+    uint64_t was = zone->uproot_plants;
+    zone->uproot_plants = uproots ? was | GATHER_PLANT_BIT(plant) : was & ~GATHER_PLANT_BIT(plant);
+    if (zone->uproot_plants != was) {
+        zones->revision++;
+    }
+}
+
+void gather_zone_set_all_uproot_plants(GatherZones *zones, int index, bool uproots)
+{
+    if (!gather_zone_is_uproot(zones, index)) {
+        return;
+    }
+    GatherZone *zone = &zones->list[index];
+    uint64_t was = zone->uproot_plants;
+    zone->uproot_plants = uproots ? uprootable_plants() : 0;
+    if (zone->uproot_plants != was) {
+        zones->revision++;
+    }
+}
+
+bool gather_zones_want_uprooted(const GatherZones *zones, const Map *map, int x, int y, int z)
+{
+    if (!map_in_bounds(map, x, y, z) || x >= zones->width || y >= zones->height ||
+        z >= zones->depth) {
+        return false;
+    }
+    int index = zones->zone[((size_t)z * (size_t)zones->height + (size_t)y) * (size_t)zones->width +
+                            (size_t)x] -
+                1;
+    if (!is_valid(zones, index)) {
+        return false;
+    }
+    const GatherZone *zone = &zones->list[index];
+    const Plant *plant = &map->plants[map_index(map, x, y, z)];
+    return zone->uproot && !zone->forbidden && plant->type != PLANT_NONE &&
+           !plant_is_tree(plant->type) && gather_zone_uproots(zone, (PlantType)plant->type);
 }
 
 /* Takes the tiles of a rectangle out of their zone, or out of zone `only`
@@ -1622,6 +1705,9 @@ uint64_t gather_zones_hash(const GatherZones *zones, uint64_t hash)
         if (zone->climb) { /* The same for climbing. */
             hash = hash_fnv1a64(hash, &zone->climb, sizeof(zone->climb));
         }
+        if (zone->uproot) { /* And for uprooting zones. */
+            hash = hash_fnv1a64(hash, &zone->uproot_plants, sizeof(zone->uproot_plants));
+        }
         for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
             const GatherOrder *order = &zone->orders[r];
             int32_t values[6] = {order->enabled, order->ripe_only, order->mode,
@@ -1669,6 +1755,8 @@ void gather_zones_serialize(Serializer *s, GatherZones *zones)
         }
         ser_u32(s, &zone->wanted);
         ser_bool(s, &zone->climb);
+        ser_bool(s, &zone->uproot);
+        ser_u64(s, &zone->uproot_plants);
     }
     ser_int_in(s, &zones->used_count, 0, GATHER_ZONE_MAX);
     ser_int(s, &zones->next_number);

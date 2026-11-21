@@ -120,6 +120,33 @@ static void test_building_plays_on_alike(void)
     game_shutdown(&game);
 }
 
+/* An uprooting zone, its choice of plants and the orders it gave come back, and play on. */
+static void test_uprooting_zones_play_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 4, 0.0f, SCENARIO_NONE));
+    int x = game.arrival.x, y = game.arrival.y, z = game.arrival.z;
+    int zone = game_add_uproot_zone_rect(&game, x - 6, y - 6, x + 6, y + 6, z, GATHER_ZONE_NONE);
+    REQUIRE(zone != GATHER_ZONE_NONE);
+    gather_zone_set_uproot_plant(&game.gather_zones, zone, PLANT_GRASS, false);
+    run_ticks(&game, GAME_UPROOT_CHECK_INTERVAL * 2);
+    check_future_unchanged(&game, 0, TICKS_PER_HOUR);
+    size_t size = 0;
+    uint8_t *data = game_save(&game, &size);
+    REQUIRE(data != NULL);
+    Game loaded;
+    REQUIRE(game_load(&loaded, data, size) == SAVE_OK);
+    const GatherZone *back = gather_zone_get(&loaded.gather_zones, zone);
+    REQUIRE(back != NULL);
+    CHECK(back->uproot);
+    CHECK(gather_zone_uproots(back, PLANT_BRAMBLE));
+    CHECK(!gather_zone_uproots(back, PLANT_GRASS));
+    CHECK_EQ_INT(back->cell_count, gather_zone_get(&game.gather_zones, zone)->cell_count);
+    free(data);
+    game_shutdown(&loaded);
+    game_shutdown(&game);
+}
+
 static void test_feuds_and_brawls_play_on_alike(void)
 {
     Game game;
@@ -318,7 +345,7 @@ static void test_serialized_structs_keep_their_size(void)
         size_t size;
         size_t expected;
     } SIZES[] = {
-        {"Game", sizeof(Game), 2717056},
+        {"Game", sizeof(Game), 2717440},
         {"Map", sizeof(Map), 1096},
         {"Plant", sizeof(Plant), 20},
         {"MapTopologyChange", sizeof(MapTopologyChange), 8},
@@ -330,8 +357,8 @@ static void test_serialized_structs_keep_their_size(void)
         {"Rng", sizeof(Rng), 16},
         {"Designations", sizeof(Designations), 104},
         {"Dirt", sizeof(Dirt), 32},
-        {"GatherZones", sizeof(GatherZones), 6872},
-        {"GatherZone", sizeof(GatherZone), 212},
+        {"GatherZones", sizeof(GatherZones), 7256},
+        {"GatherZone", sizeof(GatherZone), 224},
         {"GatherOrder", sizeof(GatherOrder), 8},
         {"GatherGroupOrder", sizeof(GatherGroupOrder), 6},
         {"Items", sizeof(Items), 11088},
@@ -415,6 +442,7 @@ int main(void)
     RUN_TEST(test_a_new_game_comes_back);
     RUN_TEST(test_settlers_gathering_play_on_alike);
     RUN_TEST(test_building_plays_on_alike);
+    RUN_TEST(test_uprooting_zones_play_on_alike);
     RUN_TEST(test_feuds_and_brawls_play_on_alike);
     RUN_TEST(test_cooking_plays_on_alike);
     RUN_TEST(test_wild_animals_play_on_alike);

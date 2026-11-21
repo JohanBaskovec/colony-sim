@@ -750,7 +750,8 @@ static void build_tile_panel(App *app, Panel *panel, int x, int y, int z)
     if (gather != NULL) {
         char name[HUD_LINE_SIZE];
         tr_integer(a, sizeof(a), gather->number);
-        TR_FORMAT(name, sizeof(name), tr("gather_zone.name"), a);
+        TR_FORMAT(name, sizeof(name), tr(gather->uproot ? "uproot_zone.name" : "gather_zone.name"),
+                  a);
         TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.stockpile"), name);
     }
     GatherWorkInfo work;

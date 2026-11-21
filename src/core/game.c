@@ -2981,6 +2981,47 @@ static void note_hardships(Colonist *colonist, uint64_t tick)
     }
 }
 
+/* Keeps an Uproot order on the plants that stand in an uprooting zone and are wanted gone
+ * there (gather_zones_want_uprooted()), and on every plant that grows on a stockpile: nothing
+ * grows among what is stored. A tile with an order of the player's is left as it is. */
+static void update_uproot_orders(Game *game)
+{
+    const Map *map = &game->map;
+    Designations *designations = &game->designations;
+    const GatherZones *zones = &game->gather_zones;
+    const Stockpiles *stockpiles = &game->stockpiles;
+    if (!tile_box_is_empty(&zones->box)) {
+        const TileBox *box = &zones->box;
+        for (int z = box->z0; z <= box->z1; z++) {
+            for (int y = box->y0; y <= box->y1; y++) {
+                for (int x = box->x0; x <= box->x1; x++) {
+                    if (gather_zones_want_uprooted(zones, map, x, y, z) &&
+                        designation_get(designations, x, y, z) == DESIGNATION_NONE) {
+                        designation_set(designations, map, x, y, z, DESIGNATION_UPROOT);
+                    }
+                }
+            }
+        }
+    }
+    for (int index = 0; index < STOCKPILE_MAX; index++) {
+        const Stockpile *stockpile = &stockpiles->list[index];
+        if (!stockpile->used) {
+            continue;
+        }
+        for (int z = stockpile->min_z; z <= stockpile->max_z; z++) {
+            for (int y = stockpile->min_y; y <= stockpile->max_y; y++) {
+                for (int x = stockpile->min_x; x <= stockpile->max_x; x++) {
+                    if (stockpile_at(stockpiles, x, y, z) == index &&
+                        designation_get(designations, x, y, z) == DESIGNATION_NONE &&
+                        gather_plant_uprootable(map, x, y, z)) {
+                        designation_set(designations, map, x, y, z, DESIGNATION_UPROOT);
+                    }
+                }
+            }
+        }
+    }
+}
+
 void game_tick(Game *game)
 {
     game->clock.tick++;
@@ -3011,6 +3052,9 @@ void game_tick(Game *game)
         (game->designations.count_by_work[WORK_GATHERING] > 0 ||
          game->designations.count_by_work[WORK_WOODCUTTING] > 0)) {
         designations_drop_void(&game->designations, &game->map);
+    }
+    if (game->clock.tick % GAME_UPROOT_CHECK_INTERVAL == 0) {
+        update_uproot_orders(game);
     }
     tile_light_tick(&game->light, &game->map, game->clock.tick);
     update_plants(game);
@@ -4005,6 +4049,13 @@ int game_add_gather_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z,
     const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
     return gather_zones_add_view_rect(&game->gather_zones, game_view_map(game), x0, y0, x1, y1, z,
                                       preferred, blocked);
+}
+
+int game_add_uproot_zone_rect(Game *game, int x0, int y0, int x1, int y1, int z, int preferred)
+{
+    const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
+    return gather_zones_add_uproot_view_rect(&game->gather_zones, game_view_map(game), x0, y0, x1,
+                                             y1, z, preferred, blocked);
 }
 
 int game_remove_stockpile_rect(Game *game, int x0, int y0, int x1, int y1, int z)

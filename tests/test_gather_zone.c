@@ -978,6 +978,77 @@ static void test_hash(void)
     free_world(&map, &zones, &items);
 }
 
+/* Uprooting zones: a kind of zone of their own in the same layer, merging with their own kind
+ * only, uprooting the plants they are told to (no tree, ever), all of them at first. */
+static void test_uprooting_zones(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    int gather = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, 0, GATHER_ZONE_NONE, NULL);
+    int uproot =
+        gather_zones_add_uproot_view_rect(&zones, &map, 4, 0, 6, 2, 0, GATHER_ZONE_NONE, NULL);
+    REQUIRE(gather != GATHER_ZONE_NONE && uproot != GATHER_ZONE_NONE && gather != uproot);
+    CHECK(!gather_zone_is_uproot(&zones, gather));
+    CHECK(gather_zone_is_uproot(&zones, uproot));
+    const GatherZone *zone = gather_zone_get(&zones, uproot);
+    CHECK(zone->uproot);
+    CHECK(gather_zone_uproots(zone, PLANT_BRAMBLE));
+    CHECK(gather_zone_uproots(zone, PLANT_GRASS));
+    CHECK(!gather_zone_uproots(zone, PLANT_NONE));
+    CHECK(!gather_zone_uproots(zone, PLANT_OAK)); /* Never a tree. */
+    CHECK(!gather_zone_uproots(gather_zone_get(&zones, gather), PLANT_BRAMBLE));
+    /* Nothing is gathered in it. */
+    gather_zones_update(&zones, items.totals, 0.0f);
+    CHECK_EQ_UINT(zone->wanted, 0);
+
+    /* A rectangle over both kinds merges only zones of its kind; the other keeps its tiles. */
+    CHECK_EQ_INT(
+        gather_zones_add_uproot_view_rect(&zones, &map, 2, 1, 5, 1, 0, GATHER_ZONE_NONE, NULL),
+        uproot);
+    CHECK_EQ_INT(zones.used_count, 2);
+    CHECK_EQ_INT(gather_zone_at(&zones, 2, 1, 0), gather);
+    CHECK_EQ_INT(gather_zone_at(&zones, 3, 1, 0), uproot);
+    CHECK_EQ_INT(gather_zone_get(&zones, gather)->cell_count, 9);
+    CHECK_EQ_INT(gather_zone_get(&zones, uproot)->cell_count, 9 + 1);
+    /* A gathering zone drawn over it, the uprooting one selected: a zone of its own kind. */
+    int beside = gather_zones_add_rect(&zones, &map, 6, 1, 8, 1, 0, uproot, NULL);
+    CHECK(beside != GATHER_ZONE_NONE && beside != uproot && beside != gather);
+    CHECK_EQ_INT(gather_zone_at(&zones, 7, 1, 0), beside);
+    CHECK_EQ_INT(gather_zone_at(&zones, 6, 1, 0), uproot);
+    CHECK_EQ_INT(gather_zone_get(&zones, uproot)->cell_count, 10);
+    CHECK_EQ_INT(gather_zone_get(&zones, beside)->cell_count, 2);
+
+    /* The plants it uproots, one by one or all, and where a plant is wanted gone. */
+    put_plant(&map, 4, 0, PLANT_BRAMBLE, 1.0f);
+    put_plant(&map, 5, 0, PLANT_GRASS, 1.0f);
+    put_plant(&map, 1, 0, PLANT_BRAMBLE, 1.0f); /* In the gathering zone. */
+    put_plant(&map, 12, 12, PLANT_GRASS, 1.0f); /* In no zone. */
+    CHECK(gather_zones_want_uprooted(&zones, &map, 4, 0, 0));
+    CHECK(gather_zones_want_uprooted(&zones, &map, 5, 0, 0));
+    CHECK(!gather_zones_want_uprooted(&zones, &map, 6, 0, 0)); /* No plant. */
+    CHECK(!gather_zones_want_uprooted(&zones, &map, 1, 0, 0));
+    CHECK(!gather_zones_want_uprooted(&zones, &map, 12, 12, 0));
+    uint64_t before = gather_zones_hash(&zones, HASH_FNV1A64_INIT);
+    gather_zone_set_uproot_plant(&zones, uproot, PLANT_GRASS, false);
+    CHECK(!gather_zones_want_uprooted(&zones, &map, 5, 0, 0));
+    CHECK(gather_zones_want_uprooted(&zones, &map, 4, 0, 0));
+    CHECK(gather_zones_hash(&zones, HASH_FNV1A64_INIT) != before);
+    gather_zone_set_all_uproot_plants(&zones, uproot, false);
+    CHECK(!gather_zones_want_uprooted(&zones, &map, 4, 0, 0));
+    gather_zone_set_all_uproot_plants(&zones, uproot, true);
+    CHECK(gather_zones_want_uprooted(&zones, &map, 5, 0, 0));
+    gather_zone_set_uproot_plant(&zones, uproot, PLANT_OAK, true); /* A tree: refused. */
+    CHECK(!gather_zone_uproots(gather_zone_get(&zones, uproot), PLANT_OAK));
+    gather_zone_set_uproot_plant(&zones, gather, PLANT_BRAMBLE, true); /* A gathering zone. */
+    CHECK(!gather_zone_uproots(gather_zone_get(&zones, gather), PLANT_BRAMBLE));
+    /* Forbidden: nothing is uprooted. */
+    gather_zone_set_forbidden(&zones, uproot, true);
+    CHECK(!gather_zones_want_uprooted(&zones, &map, 4, 0, 0));
+    free_world(&map, &zones, &items);
+}
+
 static void test_overlapping_rectangle_merges_zones(void)
 {
     Map map;
@@ -1402,6 +1473,7 @@ int main(void)
     RUN_TEST(test_available_resources);
     RUN_TEST(test_plants_growing_wake_settlers);
     RUN_TEST(test_hash);
+    RUN_TEST(test_uprooting_zones);
     RUN_TEST(test_overlapping_rectangle_merges_zones);
     RUN_TEST(test_blocked_tiles_are_left_out);
     RUN_TEST(test_clearing_plants);
