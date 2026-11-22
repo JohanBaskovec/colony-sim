@@ -164,3 +164,24 @@ Prefer the `headless` preset while working on the simulation core.
 - Commit only when asked; "commit et pousse" means push straight to `main`.
   Commit messages in English, imperative mood
   (`Add pathfinding module`), small focused commits.
+
+## Cloud sessions
+
+A session may run on a cloud machine (Claude Code on the web, started from the
+user's phone): then `CLAUDE_CODE_REMOTE=true`. The environment's setup script is
+`tools/cloud-setup.sh` (packages, `clang-format` 18); if a tool is missing, run
+it (as root) and tell the user the environment needs it.
+
+- Fresh clone: first run `git config core.hooksPath tools/git-hooks`.
+- Nothing runs at start: start Xvfb yourself before a visual check (any game
+  instance on the machine is then your own).
+- A command in the foreground stops after 2 minutes by default (10 at most): run
+  the first `debug`/`asan` configure (it builds SDL3) and long benchmarks or
+  test runs in the background.
+- About 4 processors and 16 GB: `ctest -j4`, one build at a time.
+- Timings are noisier than on the desktop (shared machine): compare a baseline
+  and a change run one after the other in the same session; state hashes are
+  exact anywhere.
+- Hand back pushed work: commit and push as on the desktop (`main` when asked
+  to "commit et pousse", otherwise a branch); the user reads it from the phone,
+  so say in the reply what changed in the game and how to see it.
