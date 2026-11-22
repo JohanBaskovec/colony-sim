@@ -1535,6 +1535,65 @@ static void test_cattail_leaves_are_cut(void)
     free_world(&map, &zones, &items);
 }
 
+/* Birch bark is peeled once (docs/CONTAINERS.md §4.3): the tree lives, shows it peeled, and its
+ * bark grows back over years; out of its season (end of May to mid July) it is peeled warmed
+ * first: four times the work, half the sheets, worse ones. */
+static void test_birch_bark_is_peeled_once(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    Plant *birch = put_plant(&map, 2, 2, PLANT_BIRCH, 1.0f);
+    Plant *spring = put_plant(&map, 6, 2, PLANT_BIRCH, 1.0f);
+    REQUIRE(!plant_product_in_season(birch, 0)); /* August: winter bark only. */
+    REQUIRE(plant_product_out_of_season(birch, 0));
+    spring->warmth = 100.0f; /* June, the sap running. */
+    REQUIRE(plant_product_in_season(spring, 0) && !plant_product_out_of_season(spring, 0));
+    int sheets = plant_stock_available(birch, 0);
+    REQUIRE(sheets >= 2);
+    CHECK_EQ_INT(plant_stock_available(spring, 0), sheets); /* Kept out of season. */
+    CHECK(!plant_peeled(birch));
+    int index = gather_zone_create(&zones, &map, 2, 2, 6, 2, 0);
+    order(&zones, &items, index, GATHER_BIRCH_BARK, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_PEEL);
+    CHECK_EQ_INT(gather_job_def(GATHER_JOB_PEEL)->tool_use, TOOL_USE_PEELING);
+
+    /* In season: a sheet 0.2 h, every sheet, the gatherer's quality; peeled off the foot of a
+     * trunk (solid wood), the sheets land beside it. */
+    map.rock[map_index(&map, 6, 2, 0)] = ROCK_WOOD;
+    float work = gather_job_work_needed(&map, 6, 2, 0, GATHER_JOB_PEEL);
+    CHECK_NEAR(work, 500.0 * sheets, 1e-3);
+    REQUIRE(gather_zone_add_work(&zones, &map, &items, 6, 2, 0, GATHER_JOB_PEEL, work, 75.0, NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_BIRCH_BARK], sheets);
+    ItemStack sheet = items_get(&items, 6, 1, 0); /* North of it, the first side tried. */
+    CHECK_EQ_INT(sheet.type, ITEM_BIRCH_BARK);
+    CHECK_EQ_INT(sheet.count, sheets);
+    int quality = knowledge_product(ITEM_BIRCH_BARK, sheets, 75.0, NULL).quality;
+    CHECK_EQ_INT(sheet.quality, quality);
+    CHECK_EQ_INT(spring->type, PLANT_BIRCH); /* The tree lives... */
+    CHECK_NEAR(spring->growth, 1.0, 1e-6);
+    CHECK(plant_peeled(spring)); /* ...its trunk shows it. */
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 6, 2, 0, ~(GatherJobMask)0), GATHER_JOB_NONE);
+
+    /* Out of season: four times the work, half the sheets, 25 off their quality. */
+    float winter = gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_PEEL);
+    CHECK_NEAR(winter, 500.0 * 4.0 * sheets, 1e-3);
+    REQUIRE(
+        gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_PEEL, winter, 75.0, NULL));
+    ItemStack warmed = items_get(&items, 2, 2, 0);
+    CHECK_EQ_INT(warmed.count, (sheets + 1) / 2);
+    CHECK_EQ_INT((int)items.totals[ITEM_BIRCH_BARK], sheets + (sheets + 1) / 2);
+    CHECK_EQ_INT(warmed.quality, quality - PLANT_OUT_OF_SEASON_QUALITY);
+
+    /* Its bark grows back slowly: a sheet in 1800 hours awake. */
+    plant_regrow_stocks(birch, 1799);
+    CHECK_EQ_INT(plant_stock_available(birch, 0), 0);
+    plant_regrow_stocks(birch, 1);
+    CHECK_EQ_INT(plant_stock_available(birch, 0), 1);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1572,5 +1631,6 @@ int main(void)
     RUN_TEST(test_picking_in_the_crowns);
     RUN_TEST(test_nettle_stems_are_cut_whole);
     RUN_TEST(test_cattail_leaves_are_cut);
+    RUN_TEST(test_birch_bark_is_peeled_once);
     return test_summary();
 }

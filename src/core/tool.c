@@ -41,6 +41,11 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
                            N_("tool_use.piercing"),
                            0.0f,
                            {[ITEM_FLAKE] = 0.4f, [ITEM_FLINT_BORER] = 1.0f}},
+    /* One cut down the trunk with a sharp edge, then the sheet lifted off. */
+    [TOOL_USE_PEELING] = {"peeling",
+                          N_("tool_use.peeling"),
+                          0.3f,
+                          {[ITEM_CHOPPER] = 0.6f, [ITEM_FLAKE] = 1.0f, [ITEM_HAND_AXE] = 0.8f}},
 };
 
 /* Speed factor of a tool of the worst and of the best quality, linear in

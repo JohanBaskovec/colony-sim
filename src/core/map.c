@@ -238,7 +238,18 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                      .light_full = 0.7f,
                      .dark_days = 20.0f,
                      .cut_item = ITEM_WOOD,
-                     .cut_yield = 30},
+                     .cut_yield = 30,
+                     /* Its outer bark lifts off in sheets when the sap runs, end of May to mid
+                      * July; the rest of the year, warmed first, slower and fewer. Peeled, the
+                      * tree lives; its bark grows back over years (docs/CONTAINERS.md §3.1). */
+                     .products = {{.item = ITEM_BIRCH_BARK,
+                                   .capacity = 4,
+                                   .regrow_hours = 1800,
+                                   .warmth_from = 80.0f,
+                                   .warmth_until = 220.0f,
+                                   .min_growth = 0.6f,
+                                   .quality_follows_plant = true,
+                                   .all_year = true}}},
     /* The wild apple tree, small and low, at edges and in clearings: its apples fall from the end
        of summer. */
     [PLANT_WILD_APPLE] = {.id = "wild_apple",
@@ -882,6 +893,24 @@ bool plant_product_in_season(const Plant *plant, int slot)
             (float)plant->climate / PLANT_CLIMATE_SCALE >= product->lost_below);
 }
 
+bool plant_product_out_of_season(const Plant *plant, int slot)
+{
+    const PlantProduct *product = plant_product((PlantType)plant->type, slot);
+    return product != NULL && product->all_year && !plant_product_in_season(plant, slot);
+}
+
+bool plant_peeled(const Plant *plant)
+{
+    for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
+        const PlantProduct *product = plant_product((PlantType)plant->type, slot);
+        int capacity = product != NULL && product->all_year ? plant_stock_capacity(plant, slot) : 0;
+        if (capacity > 0 && plant_stock_available(plant, slot) * 2 < capacity) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void plant_regrow_stocks(Plant *plant, int hours)
 {
     if (hours < 0 || (unsigned)plant->type >= PLANT_COUNT) {
@@ -892,13 +921,15 @@ void plant_regrow_stocks(Plant *plant, int hours)
         if (def->products[slot].item == ITEM_NONE) {
             continue;
         }
-        if (!plant_product_in_season(plant, slot)) {
+        if (!plant_product_in_season(plant, slot) && !def->products[slot].all_year) {
             plant->stock[slot] = 0; /* Fallen, rotten or woody. */
             continue;
         }
-        /* A stock above the limit (the plant was eaten down) drops to it. */
-        plant->stock[slot] =
-            (uint16_t)clampi((int)plant->stock[slot] + hours, 0, stock_limit(def, plant, slot));
+        /* A stock above the limit (the plant was eaten down) drops to it; a
+         * stock of many years on a wide trunk stops where its count does. */
+        int limit = stock_limit(def, plant, slot);
+        plant->stock[slot] = (uint16_t)clampi((int)plant->stock[slot] + hours, 0,
+                                              limit < UINT16_MAX ? limit : UINT16_MAX);
     }
 }
 
@@ -1352,7 +1383,7 @@ void plant_settle(Plant *plant, int day_of_year)
     }
     for (int slot = 0; slot < PLANT_PRODUCTS_MAX; slot++) {
         bool full = !state_is_underground(state) && def->products[slot].item != ITEM_NONE &&
-                    plant_product_in_season(plant, slot);
+                    (plant_product_in_season(plant, slot) || def->products[slot].all_year);
         int limit = full ? stock_limit(def, plant, slot) : 0;
         plant->stock[slot] = (uint16_t)clampi(limit, 0, UINT16_MAX);
     }

@@ -88,6 +88,7 @@ typedef enum GatherResource {
     GATHER_REEDS,
     GATHER_NETTLE_STEMS,   /* Cut whole after flowering, for their fibre (GATHER_JOB_CUT_STEMS). */
     GATHER_CATTAIL_LEAVES, /* Cut for weaving; the plant grows on. */
+    GATHER_BIRCH_BARK,     /* Peeled off birches (GATHER_JOB_PEEL); the tree lives. */
     GATHER_RESOURCE_COUNT
 } GatherResource;
 
@@ -105,6 +106,9 @@ typedef enum GatherJob {
     GATHER_JOB_CUT_GRASS,     /* Cut grass or another fibre plant, which grows back. */
     /* Cut stems or leaves for craft (nettle stems, cattail leaves), a flake best. */
     GATHER_JOB_CUT_STEMS,
+    /* Peel bark off a tree (birch bark, a flake best): once, it grows back over
+     * years; out of its season, warmed first, slower and fewer sheets. */
+    GATHER_JOB_PEEL,
     /* Pick the fruit or nuts hanging in a block of foliage (core/crown.h),
      * from the ground below it or, climbing, from the dense foliage around
      * it (gather_pick_reaches()). */

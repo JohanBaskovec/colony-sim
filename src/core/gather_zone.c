@@ -18,6 +18,7 @@
 #define CUT_GRASS_WORK 150.0f /* Clearing a tile of low plants. */
 #define CUT_GRASS_ARMFUL_WORK 50.0f
 #define CUT_STEMS_WORK 250.0f   /* A bundle of stems or leaves: 0.1 h (docs/CONTAINERS.md §4). */
+#define PEEL_WORK 500.0f        /* A sheet of bark: 0.2 h (docs/CONTAINERS.md §4.3). */
 #define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
 
 #define ONE(type)                                                                                  \
@@ -83,6 +84,8 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
     [GATHER_CATTAIL_LEAVES] = {"cattail_leaves", N_("gather_zone.resource.cattail_leaves"),
                                ITEM_CATTAIL_LEAVES, ONE(ITEM_CATTAIL_LEAVES), GATHER_JOB_CUT_STEMS,
                                true, MATERIALS},
+    [GATHER_BIRCH_BARK] = {"birch_bark", N_("gather_zone.resource.birch_bark"), ITEM_BIRCH_BARK,
+                           ONE(ITEM_BIRCH_BARK), GATHER_JOB_PEEL, false, MATERIALS},
 };
 
 #undef WOOD
@@ -109,7 +112,9 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
                                  MEMBER(GATHER_HEATHER) | MEMBER(GATHER_REEDS),
                              false},
     [GATHER_GROUP_MATERIALS] = {"materials", N_("gather_zone.group.materials"),
-                                MEMBER(GATHER_NETTLE_STEMS) | MEMBER(GATHER_CATTAIL_LEAVES), false},
+                                MEMBER(GATHER_NETTLE_STEMS) | MEMBER(GATHER_CATTAIL_LEAVES) |
+                                    MEMBER(GATHER_BIRCH_BARK),
+                                false},
 };
 
 #undef MEMBER
@@ -143,6 +148,8 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_CUT_STEMS] = {"cut_stems", N_("colonist.task.cut_stems"), GATHERING,
                               RESOURCE(GATHER_NETTLE_STEMS) | RESOURCE(GATHER_CATTAIL_LEAVES),
                               TOOL_USE_CUTTING, true},
+    [GATHER_JOB_PEEL] = {"peel", N_("colonist.task.peel"), GATHERING, RESOURCE(GATHER_BIRCH_BARK),
+                         TOOL_USE_PEELING, true},
     [GATHER_JOB_PICK] = {"pick", N_("colonist.task.pick"), GATHERING,
                          RESOURCE(GATHER_HAZELNUTS) | RESOURCE(GATHER_CHESTNUTS) |
                              RESOURCE(GATHER_APPLES) | RESOURCE(GATHER_PEARS),
@@ -1140,7 +1147,7 @@ static bool takes_product(GatherJob job)
 {
     return job == GATHER_JOB_HARVEST || job == GATHER_JOB_HARVEST_CAREFULLY ||
            job == GATHER_JOB_DIG || job == GATHER_JOB_DIG_CAREFULLY ||
-           job == GATHER_JOB_CUT_GRASS || job == GATHER_JOB_CUT_STEMS;
+           job == GATHER_JOB_CUT_GRASS || job == GATHER_JOB_CUT_STEMS || job == GATHER_JOB_PEEL;
 }
 
 /* The slot of the product of a plant that a job takes (-1: none). */
@@ -1474,6 +1481,12 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
     case GATHER_JOB_DIG_CAREFULLY: return DIG_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_CUT_GRASS: return CUT_GRASS_ARMFUL_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_CUT_STEMS: return CUT_STEMS_WORK * (float)(items > 1 ? items : 1);
+    case GATHER_JOB_PEEL: {
+        int slot = product_slot_for(plant, job);
+        float harder =
+            slot >= 0 && plant_product_out_of_season(plant, slot) ? PLANT_OUT_OF_SEASON_WORK : 1.0f;
+        return PEEL_WORK * harder * (float)(items > 1 ? items : 1);
+    }
     case GATHER_JOB_PICK: {
         int fruit = crown_fruit(map, x, y, z, JOB_DEFS[GATHER_JOB_PICK].resources);
         return HARVEST_WORK * (float)(fruit > 1 ? fruit : 1);
@@ -1487,23 +1500,56 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
  * nothing), and the factor on the gatherer's quality the plant's state sets
  * (plant_product_quality_factor()). */
 static ItemType complete(Map *map, int x, int y, int z, GatherJob job, int *count,
-                         float *quality_factor)
+                         float *quality_factor, int *quality_malus)
 {
     Plant *plant = &map->plants[map_index(map, x, y, z)];
     ItemType item = ITEM_NONE;
     *count = plant_yield(map, x, y, z, job);
     *quality_factor = 1.0f;
+    *quality_malus = 0;
     if (takes_product(job)) {
         int slot = product_slot_for(plant, job);
         if (slot >= 0) {
             item = plant_stock_item((PlantType)plant->type, slot);
             *quality_factor = plant_product_quality_factor(plant, slot); /* Before it is cut. */
+            bool harder = plant_product_out_of_season(plant, slot);
             *count = plant_take_stock(plant, slot, INT16_MAX);
+            if (harder) { /* Out of its season: half of it, and worse. */
+                *count = (*count + 1) / 2;
+                *quality_malus = PLANT_OUT_OF_SEASON_QUALITY;
+            }
             plant_product_harvested(map, x, y, z, slot);
         }
         return item;
     }
     return item;
+}
+
+/* Drops what was gathered on a tile, or beside it when it is the foot of a
+ * trunk (bark peeled off): on the first passable tile around, in a fixed order. */
+static void drop_gathered(Items *items, const Map *map, int x, int y, int z, ItemStack stack)
+{
+    static const int DX[4] = {0, 1, 0, -1}, DY[4] = {-1, 0, 1, 0};
+    for (int i = 0; !map_is_passable(map, x, y, z) && i < 4; i++) {
+        if (map_is_passable(map, x + DX[i], y + DY[i], z)) {
+            x += DX[i];
+            y += DY[i];
+        }
+    }
+    items_drop(items, map, x, y, z, stack);
+}
+
+/* A gatherer's product, with what the plant's state and the season make of
+ * its quality (complete()). */
+static ItemStack gathered_stack(ItemType item, int count, double level, Rng *rng,
+                                float quality_factor, int quality_malus)
+{
+    ItemStack stack = knowledge_product(item, count, level, rng);
+    if ((quality_factor < 1.0f || quality_malus > 0) && item_def(item)->has_quality) {
+        long quality = lroundf((float)stack.quality * quality_factor) - quality_malus;
+        stack.quality = (uint8_t)(quality > ITEM_QUALITY_WORST ? quality : ITEM_QUALITY_WORST);
+    }
+    return stack;
 }
 
 /* The resource an item counts as for its job's orders (GATHER_RESOURCE_COUNT: none). */
@@ -1591,28 +1637,26 @@ bool gather_zone_add_work(GatherZones *zones, Map *map, Items *items, int x, int
     int count;
     ItemType item;
     float quality_factor = 1.0f;
+    int quality_malus = 0;
     if (job == GATHER_JOB_CHOP) { /* The tree stays until it falls, below. */
         item = plant_def((PlantType)map->plants[map_index(map, x, y, z)].type)->cut_item;
         count = plant_yield(map, x, y, z, job);
     } else {
-        item = complete(map, x, y, z, job, &count, &quality_factor);
+        item = complete(map, x, y, z, job, &count, &quality_factor, &quality_malus);
     }
     GatherResource resource = resource_of(job, item);
     bool wanted = resource != GATHER_RESOURCE_COUNT && count > 0 &&
                   (zone->wanted & GATHER_RESOURCE_BIT(resource));
     ItemStack stack = {0};
     if (wanted && items != NULL) {
-        stack = knowledge_product(item, count, level, rng);
-        if (quality_factor < 1.0f && item_def(item)->has_quality) {
-            stack.quality = (uint8_t)lroundf((float)stack.quality * quality_factor);
-        }
+        stack = gathered_stack(item, count, level, rng, quality_factor, quality_malus);
     }
     if (job == GATHER_JOB_CHOP) {
         if (tree_fell(map, items, x, y, z, stack).harmed > 0) {
             zones->harmful_tree_falls++;
         }
     } else if (stack.count > 0) {
-        items_drop(items, map, x, y, z, stack);
+        drop_gathered(items, map, x, y, z, stack);
     }
     if (wanted) {
         count_gathered(zones, zone, resource, count);
@@ -1731,16 +1775,13 @@ bool gather_harvest_plant(Map *map, Items *items, int x, int y, int z, double le
     if (!gather_plant_harvestable(map, x, y, z)) {
         return false;
     }
-    int count;
+    int count, quality_malus;
     float quality_factor;
-    ItemType item =
-        complete(map, x, y, z, gather_plant_harvest_job(map, x, y, z), &count, &quality_factor);
+    ItemType item = complete(map, x, y, z, gather_plant_harvest_job(map, x, y, z), &count,
+                             &quality_factor, &quality_malus);
     if (item != ITEM_NONE && count > 0 && items != NULL) {
-        ItemStack stack = knowledge_product(item, count, level, rng);
-        if (quality_factor < 1.0f && item_def(item)->has_quality) {
-            stack.quality = (uint8_t)lroundf((float)stack.quality * quality_factor);
-        }
-        items_drop(items, map, x, y, z, stack);
+        drop_gathered(items, map, x, y, z,
+                      gathered_stack(item, count, level, rng, quality_factor, quality_malus));
     }
     return true;
 }

@@ -191,7 +191,16 @@ typedef struct PlantProduct {
      * (docs/CONTAINERS.md §6): the gatherer's, times 0.7 + 0.3 × its growth,
      * less for a plant in poor health (plant_product_quality_factor()). */
     bool quality_follows_plant;
+    /* Taken all year, its stock kept out of its window: out of it, it is
+     * harder to take (birch bark warmed in winter): PLANT_OUT_OF_SEASON_WORK
+     * times the work, half the items, PLANT_OUT_OF_SEASON_QUALITY off their
+     * quality (plant_product_out_of_season()). */
+    bool all_year;
 } PlantProduct;
+
+/* What taking a product out of its window costs (PlantProduct.all_year). */
+#define PLANT_OUT_OF_SEASON_WORK 4.0f
+#define PLANT_OUT_OF_SEASON_QUALITY 25
 
 /* How a plant lives through the cold (docs/PLANTS.md §4). */
 typedef enum PlantRest {
@@ -631,6 +640,14 @@ bool plant_days_contain(PlantDays days, int day_of_year);
 /* Whether a product is in season on the plant: the warmth gathered and the
  * climate say it is on it (PlantProduct.warmth_from). */
 bool plant_product_in_season(const Plant *plant, int slot);
+
+/* Whether a product taken all year (PlantProduct.all_year) is out of its
+ * window now: harder to take. */
+bool plant_product_out_of_season(const Plant *plant, int slot);
+
+/* Whether a plant has given most of a product it bears all year (birch bark
+ * peeled off: less than half of it left to take), as its trunk shows. */
+bool plant_peeled(const Plant *plant);
 
 /* Lets the stocks grow back for `hours`, up to the capacity, while in
  * season (the stock is gone out of it); `hours` 0: only drops what is above

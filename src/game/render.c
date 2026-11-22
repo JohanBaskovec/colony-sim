@@ -467,6 +467,11 @@ static void render_trunk(SDL_Renderer *renderer, const Map *map, int x, int y, i
     batch_quad(renderer, shade(ROCK_COLORS[ROCK_WOOD], tile_variation(x, y) / 2), tile);
     float bark = SDL_max(1.0f, floorf(tile->w * 0.14f));
     int sides = 0;
+    uint8_t species = map->tree_species[map_index(map, x, y, z)];
+    /* A peeled birch shows its red brown inner bark (docs/CONTAINERS.md §9.5). */
+    TreeRef tree;
+    bool peeled = species == PLANT_BIRCH && tree_at(map, x, y, z, &tree) &&
+                  plant_peeled(&map->plants[map_index(map, tree.x, tree.y, tree.z)]);
     for (int d = 0; d < 4; d++) {
         int nx = x + DX[d], ny = y + DY[d];
         if (map_in_bounds(map, nx, ny, z) && map->rock[map_index(map, nx, ny, z)] == ROCK_WOOD) {
@@ -485,8 +490,8 @@ static void render_trunk(SDL_Renderer *renderer, const Map *map, int x, int y, i
         } else {
             strip.h = bark;
         }
-        uint8_t species = map->tree_species[map_index(map, x, y, z)];
-        SDL_Color color = TREE_BARK[species < PLANT_COUNT ? species : PLANT_NONE];
+        SDL_Color color = peeled ? BIRCH_BARK_INNER_COLOR
+                                 : TREE_BARK[species < PLANT_COUNT ? species : PLANT_NONE];
         batch_quad(renderer, color.a != 0 ? color : BARK_COLOR, &strip);
     }
     if (sides == 4 && zoom >= TREE_DETAIL_MIN_ZOOM) {

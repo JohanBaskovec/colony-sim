@@ -423,9 +423,28 @@ rods and the pack basket; then the net bag.
    - Recipes: nettle fibre (dry stems; the wooden scraper or a flake, cap −10
      with a flake; a cobble; 2,500 ticks), nettle cord (a handful of fibre, two
      hanks, 3,750 ticks, `RecipeDef.product_count`). `SAVE_VERSION` 14.
-3. **C3 Bark tray and cattail basket**: birch bark (window, winter bark, the
+3. **C3 Bark tray and cattail basket** *(built)*: birch bark (window, winter bark, the
    tree peeled), softening in water (the folded tray is already there); cattail leaves
    (drying, green weaving), the plaited basket.
+   - *As built*: cattail leaves are the cattail's second product (warmth 50 to
+     220: mid July to about the end of September, a little later in a warm year),
+     cut by the cutting job (renamed *stems and leaves*), the plant keeping its
+     rhizomes. The basket: three bundles, a flake that only trims (not shaping),
+     12,500 ticks, Basketry 55; green leaves (`item_moisture_green()`) take 15 off
+     its cap (`ItemDef.shrinks_green`). Dried leaves are dampened by the weaver
+     within the work (no state wanted).
+   - Birch bark is the birch's product, kept all year (`PlantProduct.all_year`:
+     the stock is not lost out of the window, warmth 80 to 220, the end of May to
+     mid July): out of it, `PLANT_OUT_OF_SEASON_WORK` (×4), half the sheets and
+     `PLANT_OUT_OF_SEASON_QUALITY` (25) off. 4 sheets a grown tree, more on a wide
+     trunk (the capacity follows its area, the stock capped at what 16 bits hold);
+     a sheet regrows in 1,800 hours awake (a young tree peeled bare in about ten
+     years). `GATHER_JOB_PEEL`, `TOOL_USE_PEELING` (flake 1, hand axe 0.8, chopper
+     0.6, bare hands 0.3), 500 ticks a sheet. A tree with less than half its bark
+     (`plant_peeled()`) shows its red brown inner bark on the trunk. What a job at
+     the foot of a trunk gives lands on the first passable tile beside it.
+     Softening dried bark: lying in water soaks it within the hour (§4.3 says half
+     a game day: left for later). `SAVE_VERSION` 15.
 4. **C4 Carrying in containers**: sub-places, the back place, what fits,
    taking one for a trip, wear and rot, contents dropped when broken; the
    Gear tab shows contents (`docs/CARRYING.md` §8).

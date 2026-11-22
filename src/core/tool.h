@@ -28,6 +28,7 @@ typedef enum ToolUse {
     TOOL_USE_CUTTING,  /* Cutting stems, leaves and bark, trimming. */
     TOOL_USE_SCRAPING, /* Cleaning the bark off fibre without cutting it. */
     TOOL_USE_PIERCING, /* Piercing bark to sew it. */
+    TOOL_USE_PEELING,  /* Peeling bark off a tree. */
     TOOL_USE_COUNT
 } ToolUse;
 
