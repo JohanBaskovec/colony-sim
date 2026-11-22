@@ -544,6 +544,48 @@ static void test_step_heading(void)
     CHECK_EQ_INT(path_step_heading(here, (TilePos){10, 10, 1}, HEADING_NORTH), HEADING_NORTH);
 }
 
+/* The memo of a search's predicate: two answers per tile, each unknown until
+ * told, kept until the next start, then forgotten all at once, also when the
+ * stamps wrap around. */
+static void test_memo_keeps_answers_for_one_search(void)
+{
+    Pathfinder finder;
+    REQUIRE(pathfinder_init(&finder, 8, 8, 2));
+    pathfinder_memo_start(&finder);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 0), -1);
+    pathfinder_memo_set(&finder, 5, 0, true);
+    pathfinder_memo_set(&finder, 70, 1, false);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 0), 1);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 1), -1); /* The other question. */
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 70, 1), 0);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 70, 0), -1);
+    pathfinder_memo_set(&finder, 5, 1, false);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 0), 1); /* Kept beside it. */
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 1), 0);
+    pathfinder_memo_set(&finder, 5, 0, false); /* Told again. */
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 0), 0);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 6, 0), -1);
+    pathfinder_memo_start(&finder); /* Another search. */
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 0), -1);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 1), -1);
+    pathfinder_memo_set(&finder, 5, 1, true); /* The older answer beside it is gone. */
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 0), -1);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 1), 1);
+
+    /* The last stamp before the wrap, then the wrap: nothing kept comes back. */
+    finder.memo_stamp = (UINT32_C(1) << 28) - 2;
+    pathfinder_memo_start(&finder);
+    pathfinder_memo_set(&finder, 9, 0, true);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 9, 0), 1);
+    pathfinder_memo_start(&finder);
+    CHECK_EQ_UINT(finder.memo_stamp, 1);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 9, 0), -1);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 5, 1), -1);
+    pathfinder_memo_set(&finder, 9, 0, false);
+    CHECK_EQ_INT(pathfinder_memo_get(&finder, 9, 0), 0);
+    pathfinder_free(&finder);
+}
+
 int main(void)
 {
     RUN_TEST(test_straight_and_diagonal_paths);
@@ -563,5 +605,6 @@ int main(void)
     RUN_TEST(test_nearest_in_box_is_as_cheap);
     RUN_TEST(test_many_searches_reuse_memory);
     RUN_TEST(test_step_heading);
+    RUN_TEST(test_memo_keeps_answers_for_one_search);
     return test_summary();
 }

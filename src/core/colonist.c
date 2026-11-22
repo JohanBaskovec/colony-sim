@@ -2122,7 +2122,14 @@ typedef struct WorkSearch {
      * the same. */
     bool pick_jobs;
     uint8_t self;
+    /* When set: is_open_job() and is_open_pick() answers kept for the search
+     * under way (pathfinder_memo_start() before it), each tile being asked
+     * about once per neighbor. */
+    Pathfinder *memo;
 } WorkSearch;
+
+/* The questions the work search keeps answers to (Pathfinder's memo). */
+enum { MEMO_OPEN_JOB, MEMO_OPEN_PICK };
 
 /* Gathering jobs a colonist may do: work type among `mask`, and knowledge. */
 static GatherJobMask gather_jobs_for(const Colonist *colonist, WorkTypeMask mask)
@@ -2205,6 +2212,22 @@ static bool is_open_pick(const WorkSearch *search, int x, int y, int z)
                                         search->self);
 }
 
+/* is_open_pick() through the search's memo, when it has one. */
+static bool open_pick_kept(const WorkSearch *search, int x, int y, int z)
+{
+    if (search->memo == NULL || !map_in_bounds(search->map, x, y, z)) {
+        return is_open_pick(search, x, y, z);
+    }
+    size_t index = map_index(search->map, x, y, z);
+    int kept = pathfinder_memo_get(search->memo, index, MEMO_OPEN_PICK);
+    if (kept >= 0) {
+        return kept != 0;
+    }
+    bool open = is_open_pick(search, x, y, z);
+    pathfinder_memo_set(search->memo, index, MEMO_OPEN_PICK, open);
+    return open;
+}
+
 /* First block of foliage with fruit to pick that a settler on (x, y, z)
  * reaches (gather_pick_reaches()), in a fixed order: the one above, then,
  * on dense foliage, its own and the eight around it. */
@@ -2220,7 +2243,7 @@ static bool find_pick_job(const WorkSearch *search, int x, int y, int z, TilePos
     for (int i = 0; i < candidates; i++) {
         int tx = x + OFFSETS[i][0], ty = y + OFFSETS[i][1], tz = z + OFFSETS[i][2];
         if (gather_pick_reaches(search->gather_zones, map, x, y, z, tx, ty, tz) &&
-            is_open_pick(search, tx, ty, tz)) {
+            open_pick_kept(search, tx, ty, tz)) {
             *out = (TilePos){(int16_t)tx, (int16_t)ty, (int16_t)tz};
             return true;
         }
@@ -2233,10 +2256,22 @@ static bool find_pick_job(const WorkSearch *search, int x, int y, int z, TilePos
  * fruit in the crowns within reach. */
 static bool find_adjacent_job(const WorkSearch *search, int x, int y, int z, TilePos *out)
 {
+    const Map *map = search->map;
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i];
         int ny = y + NEIGHBOR_DY[i];
-        if (is_open_job(search, nx, ny, z)) {
+        bool open;
+        if (search->memo != NULL && map_in_bounds(map, nx, ny, z)) {
+            size_t index = map_index(map, nx, ny, z);
+            int kept = pathfinder_memo_get(search->memo, index, MEMO_OPEN_JOB);
+            open = kept >= 0 ? kept != 0 : is_open_job(search, nx, ny, z);
+            if (kept < 0) {
+                pathfinder_memo_set(search->memo, index, MEMO_OPEN_JOB, open);
+            }
+        } else {
+            open = is_open_job(search, nx, ny, z);
+        }
+        if (open) {
             *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
             return true;
         }
@@ -2524,6 +2559,9 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
          * inside rock, across water, or all taken by others, the search would
          * explore the whole area for nothing. The path is untouched on failure:
          * a wanderer keeps walking. */
+        /* The tiles' answers hold for this priority's search alone. */
+        search.memo = context->pathfinder;
+        pathfinder_memo_start(context->pathfinder);
         found = open_job_reachable(&search, context, region) &&
                 pathfinder_find_nearest_in_box(
                     context->pathfinder, context->plan_map, current_tile(colonist), &spots,

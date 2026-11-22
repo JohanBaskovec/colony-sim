@@ -67,7 +67,7 @@ searches, `Game.stock`).
 
 Not saved, rebuilt on load:
 
-- scratch memory (the pathfinder's nodes and heap, the temperature
+- scratch memory (the pathfinder's nodes, heap and memo, the temperature
   buffers), pointers between modules (`Map.crowns`, `Items.mirror`, the
   drop filter, the temperature surface);
 - what a step works out afresh before reading it: whether each active water

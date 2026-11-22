@@ -80,7 +80,7 @@ simulation:
 | `attributes` | Settler attributes: positions in thousandths drawn on a bell curve, their effects (factors, thought weight, outlook points, temperature shifts), the word bands and translation keys |
 | `mood`       | Moods: thoughts (states setting in and growing worse, memories; all fading over time), the mood as their sum, its effects on work speed, quality and learning, breaks (sulking, going off alone, binging) |
 | `occupancy`  | Who stops on which tile, settlers and animals alike: one claim per tile (where a being stands, or where its path ends), yielding claims (idle, strolling), forced ones (knocked down), how many beings are on each tile now (crossing slows down), the pathfinder's stop filter |
-| `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level; for a kind of walker (`PathWalker`: settlers, or animals who open no door and climb neither ladders nor trees) |
+| `pathfinding`| A* to a goal, Dijkstra to the nearest tile matching a predicate, on the start's level; for a kind of walker (`PathWalker`: settlers, or animals who open no door and climb neither ladders nor trees); a memo of a search's predicate answers per tile (`pathfinder_memo_start()`) |
 | `region`     | Connectivity regions: which tiles can reach each other on foot, per level (a cache) |
 | `tile_box`   | Box of tiles holding every tile of a sparse layer (designations, gathering zones, a region), so that scans skip the rest of the map |
 | `tree`       | Trees in the volume: a trunk of solid wood and floors of foliage built into the map as the tree grows, finding the tree of a tile, where a felled tree falls (aimed away from structures) and what it leaves along its length |

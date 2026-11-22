@@ -372,7 +372,7 @@ static void test_serialized_structs_keep_their_size(void)
         size_t size;
         size_t expected;
     } SIZES[] = {
-        {"Game", sizeof(Game), 2728600},
+        {"Game", sizeof(Game), 2728616},
         {"AllowedAreas", sizeof(AllowedAreas), 672},
         {"AllowedArea", sizeof(AllowedArea), 40},
         {"Map", sizeof(Map), 1096},

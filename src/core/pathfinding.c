@@ -110,7 +110,9 @@ bool pathfinder_init(Pathfinder *finder, int width, int height, int depth)
     }
     size_t count = (size_t)width * (size_t)height * (size_t)depth;
     finder->nodes = calloc(count, sizeof(*finder->nodes));
-    if (finder->nodes == NULL) {
+    finder->memo = calloc(count, sizeof(*finder->memo));
+    if (finder->nodes == NULL || finder->memo == NULL) {
+        pathfinder_free(finder);
         return false;
     }
     finder->width = width;
@@ -123,7 +125,18 @@ void pathfinder_free(Pathfinder *finder)
 {
     free(finder->nodes);
     free(finder->heap);
+    free(finder->memo);
     memset(finder, 0, sizeof(*finder));
+}
+
+void pathfinder_memo_start(Pathfinder *finder)
+{
+    /* A stamp takes 28 bits (memo_stamp << 4 + the answers); 0 is never one. */
+    if (++finder->memo_stamp >= UINT32_C(1) << 28) {
+        size_t count = (size_t)finder->width * (size_t)finder->height * (size_t)finder->depth;
+        memset(finder->memo, 0, count * sizeof(*finder->memo));
+        finder->memo_stamp = 1;
+    }
 }
 
 static void begin_search(Pathfinder *finder)

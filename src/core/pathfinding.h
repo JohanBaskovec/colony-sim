@@ -98,10 +98,46 @@ typedef struct Pathfinder {
     /* Statistics of the last search. */
     size_t last_expanded;
     float last_cost;
+    /* Answers kept per tile for the predicate of a search (see
+     * pathfinder_memo_start()): memo_stamp << 4, then for each of the
+     * PATHFINDER_MEMO_SLOTS questions 2 bits (known, yes); older stamps are
+     * unknown. */
+    uint32_t *memo;
+    uint32_t memo_stamp;
 } Pathfinder;
 
 bool pathfinder_init(Pathfinder *finder, int width, int height, int depth);
 void pathfinder_free(Pathfinder *finder);
+
+/*
+ * A memo for a predicate that looks at the same tiles again and again in one
+ * search (the neighbors of every tile it is asked about): start it before the
+ * search, which forgets every answer kept before, then ask it first and tell
+ * it the answers worked out, for up to PATHFINDER_MEMO_SLOTS questions per
+ * tile (`slot`). Only for answers that do not change during the search. Tile
+ * indices are map_index()'s.
+ */
+#define PATHFINDER_MEMO_SLOTS 2
+void pathfinder_memo_start(Pathfinder *finder);
+/* 1 or 0 for an answer kept since the start, -1 for none. */
+static inline int pathfinder_memo_get(const Pathfinder *finder, size_t index, int slot)
+{
+    uint32_t value = finder->memo[index];
+    if (value >> 4 != finder->memo_stamp) {
+        return -1;
+    }
+    uint32_t bits = value >> (2 * slot);
+    return (bits & 2u) != 0 ? (int)(bits & 1u) : -1;
+}
+static inline void pathfinder_memo_set(Pathfinder *finder, size_t index, int slot, bool answer)
+{
+    uint32_t value = finder->memo[index];
+    if (value >> 4 != finder->memo_stamp) {
+        value = finder->memo_stamp << 4; /* Answers of an older search: gone. */
+    }
+    value &= ~(UINT32_C(3) << (2 * slot));
+    finder->memo[index] = value | (UINT32_C(2) | (answer ? 1u : 0u)) << (2 * slot);
+}
 
 /* Whether a walker of this kind can stand on a tile (settlers: where
  * map_is_passable(); animals: not in a doorway either). */
