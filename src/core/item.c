@@ -687,7 +687,8 @@ bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want)
         ItemMoistureState state = item_moisture_state(type, moisture);
         return state == ITEM_MOISTURE_WET || state == ITEM_MOISTURE_SOAKED;
     }
-    case ITEM_WANT_RETTED: return true; /* Its retting, not its moisture: chosen(). */
+    case ITEM_WANT_RETTED:            /* Its retting, not its moisture: chosen(). */
+    case ITEM_WANT_WORN: return true; /* Its hit points: chosen(). */
     case ITEM_WANT_COUNT: break;
     }
     return false;
@@ -1845,7 +1846,10 @@ static bool chosen(const Item *item, const ItemStack *stack, ItemChoice choice)
            item->quality <= choice.max_quality &&
            item_moisture_fits((ItemType)item->type, item_moisture(item),
                               (ItemMoistureWant)choice.moisture) &&
-           (choice.moisture != ITEM_WANT_RETTED || item->retting >= ITEM_RETTING_UNITS);
+           (choice.moisture != ITEM_WANT_RETTED || item->retting >= ITEM_RETTING_UNITS) &&
+           (choice.moisture != ITEM_WANT_WORN ||
+            (float)item->hit_points <
+                ITEM_WORN_SHARE * (float)ITEM_DEFS[item->type].max_hit_points);
 }
 
 int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, ItemChoice choice)

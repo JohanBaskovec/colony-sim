@@ -1,3 +1,4 @@
+#include "core/carry.h"
 #include "core/recipe.h"
 #include "core/wood.h"
 #include "core/workstation.h"
@@ -280,6 +281,31 @@ static void test_net_bag(void)
     CHECK(item_def(ITEM_NET_BAG)->strap && item_def(ITEM_NET_BAG)->net);
 }
 
+/* Mending (docs/CONTAINERS.md §11): a worn container and a little of its material make the same
+ * container, whole again, as good as it was. */
+static void test_mending_containers(void)
+{
+    static const RecipeType MENDS[] = {RECIPE_MEND_CATTAIL_BASKET, RECIPE_MEND_FRAME_BASKET,
+                                       RECIPE_MEND_PACK_BASKET, RECIPE_MEND_BARK_BOX,
+                                       RECIPE_MEND_NET_BAG};
+    for (size_t i = 0; i < sizeof(MENDS) / sizeof(MENDS[0]); i++) {
+        const RecipeDef *def = recipe_def(MENDS[i]);
+        CHECK(def->mends);
+        CHECK_EQ_INT(recipe_ingredient(MENDS[i], 0)->types[0], def->product);
+        CHECK_EQ_INT(recipe_ingredient(MENDS[i], 0)->moisture, ITEM_WANT_WORN);
+        CHECK(carry_is_container(def->product));
+    }
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_FRAME_BASKET, 1, 83, 12),
+                                               item_stack_make(ITEM_WILLOW_RODS, 1, 20, 0)};
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_MEND_FRAME_BASKET, inputs,
+                              item_stack_make(ITEM_FLAKE, 1, 50, 0), 55.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_FRAME_BASKET);
+    CHECK_EQ_INT(out[0].count, 1);
+    CHECK_EQ_INT(out[0].quality, 83); /* Kept, whoever mends it. */
+    CHECK_EQ_INT(out[0].hit_points, item_def(ITEM_FRAME_BASKET)->max_hit_points);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -420,6 +446,7 @@ int main(void)
     RUN_TEST(test_osier_weaves_faster_and_finer);
     RUN_TEST(test_lime_bast_chain);
     RUN_TEST(test_net_bag);
+    RUN_TEST(test_mending_containers);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

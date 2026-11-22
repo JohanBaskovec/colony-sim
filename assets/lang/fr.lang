@@ -903,6 +903,11 @@ recipe.lime_bark = Écorcer des perches de tilleul
 recipe.lime_bast = Séparer le liber de tilleul
 recipe.lime_cord = Corde de liber de tilleul
 recipe.net_bag = Sac en filet bouclé
+recipe.mend_cattail_basket = Réparer un panier en massette
+recipe.mend_frame_basket = Réparer un panier à armature
+recipe.mend_pack_basket = Réparer une hotte
+recipe.mend_bark_box = Réparer une boîte en écorce
+recipe.mend_net_bag = Réparer un sac en filet
 recipe.ingredient = {0} ×{1}
 recipe.ingredient_quality = {0} (qualité {1} ou mieux)
 recipe.either = {0} ou {1}
@@ -917,6 +922,8 @@ recipe.ingredient_wet = {0}, souple
 recipe.ingredient_wet.tip = L’ingrédient doit être frais, ou trempé dans l’eau s’il a séché.
 recipe.ingredient_retted = {0}, roui
 recipe.ingredient_retted.tip = L’ingrédient doit avoir roui : laissé des jours dans l’eau peu profonde, jusqu’à ce que ses couches se séparent.
+recipe.ingredient_worn = {0}, usé
+recipe.ingredient_worn.tip = Seul un exemplaire usé est pris, pour être réparé : sous les trois quarts de son état.
 
 # Inspecteur de poste de travail
 forbid.forbid = Interdire

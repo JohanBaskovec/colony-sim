@@ -50,6 +50,12 @@ typedef enum RecipeType {
     RECIPE_LIME_BAST,      /* Retted lime bark parted into bast strips. */
     RECIPE_LIME_CORD,      /* Bast twisted into two hanks of cord. */
     RECIPE_NET_BAG,        /* Cord looped with the fingers into a bag. */
+    /* Mending a worn container (RecipeDef.mends): a patched weave, a new rim. */
+    RECIPE_MEND_CATTAIL_BASKET,
+    RECIPE_MEND_FRAME_BASKET,
+    RECIPE_MEND_PACK_BASKET,
+    RECIPE_MEND_BARK_BOX,
+    RECIPE_MEND_NET_BAG,
     RECIPE_COUNT
 } RecipeType;
 
@@ -96,6 +102,10 @@ typedef struct RecipeDef {
     /* Kind of work: the speed factor of the tool of the first set (see
      * core/tool.h). */
     ToolUse tool_use;
+    /* Mends its first ingredient (a worn container, ITEM_WANT_WORN) with the
+     * others: the product is that item, its hit points whole again, its
+     * quality kept (docs/CONTAINERS.md §11). */
+    bool mends;
 } RecipeDef;
 
 /* NULL when out of range. */

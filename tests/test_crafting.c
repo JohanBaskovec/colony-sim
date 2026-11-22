@@ -874,6 +874,35 @@ static void test_lime_bast_wants_retted_bark(void)
     game_shutdown(&game);
 }
 
+/* A bill of mending takes only a worn basket (docs/CONTAINERS.md §11): the whole one is left. */
+static void test_a_worn_basket_is_mended(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist_add_tool(colonist, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    int bill = workstation_add_bill(&game.workstations, index, RECIPE_MEND_CATTAIL_BASKET);
+    REQUIRE(bill >= 0);
+    workstation_set_bill_mode(&game.workstations, index, bill, BILL_DO_TIMES);
+    workstation_set_bill_target(&game.workstations, index, bill, 1);
+    int whole = item_def(ITEM_CATTAIL_BASKET)->max_hit_points;
+    items_add(&game.items, 16, 10, 0, item_stack_make(ITEM_CATTAIL_BASKET, 1, 70, whole));
+    items_add(&game.items, 18, 12, 0, item_stack_make(ITEM_CATTAIL_BASKET, 1, 40, 10));
+    items_add(&game.items, 16, 13, 0, item_stack_make(ITEM_CATTAIL_LEAVES, 1, 50, 20));
+    const Workstation *station = workstation_get_const(&game.workstations, index);
+    for (int i = 0; i < 12000 && station->bills[bill].done == 0; i++) {
+        run_ticks(&game, 1);
+    }
+    CHECK_EQ_INT(station->bills[bill].done, 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_CATTAIL_BASKET], 2);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_CATTAIL_LEAVES], 0);
+    CHECK_EQ_INT(items_count_at(&game.items, 16, 10, 0, ITEM_CATTAIL_BASKET), 1); /* Untouched. */
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 /* Nettle stems at their moisture (0 .. 1). */
 static ItemStack stems_at(float moisture)
 {
@@ -1472,6 +1501,7 @@ int main(void)
     RUN_TEST(test_a_tray_takes_bark_and_twigs_laid_by_the_station);
     RUN_TEST(test_a_basket_is_woven_with_a_trimming_flake);
     RUN_TEST(test_lime_bast_wants_retted_bark);
+    RUN_TEST(test_a_worn_basket_is_mended);
     RUN_TEST(test_a_tray_wants_pliable_bark);
     RUN_TEST(test_nettle_stems_become_fibre_then_cord);
     RUN_TEST(test_a_bill_without_pliable_bark_lets_the_next_one_go);

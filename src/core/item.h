@@ -685,15 +685,19 @@ ItemMoistureState item_moisture_state(ItemType type, float moisture);
  * wet or soaked, i.e. not dry: pliable, fresh or softened in water again
  * (bark folded, rods soaked); retted, whatever its moisture (ItemStack.retting
  * at 1 or more: lime bark whose layers come apart, checked on each item by
- * the item choices, not by item_moisture_fits()). */
+ * the item choices, not by item_moisture_fits()); worn, below
+ * ITEM_WORN_SHARE of its hit points (a basket to mend: also the item's). */
 typedef enum ItemMoistureWant {
     ITEM_WANT_ANY,
     ITEM_WANT_DRY,
     ITEM_WANT_GREEN,
     ITEM_WANT_WET,
     ITEM_WANT_RETTED,
+    ITEM_WANT_WORN,
     ITEM_WANT_COUNT
 } ItemMoistureWant;
+
+#define ITEM_WORN_SHARE 0.75f
 
 /* Green: at least ITEM_GREEN_SHARE of the way from its equilibrium in the
  * reference air (item_reference_moisture()) up to its fresh moisture, and not
@@ -702,8 +706,8 @@ typedef enum ItemMoistureWant {
 bool item_moisture_green(ItemType type, float moisture);
 
 /* Whether an item of a type at this moisture is as `want` asks (always for
- * ITEM_WANT_ANY and ITEM_WANT_RETTED; for a type that takes no water, only
- * ITEM_WANT_ANY, ITEM_WANT_DRY and ITEM_WANT_RETTED). */
+ * ITEM_WANT_ANY, ITEM_WANT_RETTED and ITEM_WANT_WORN; for a type that takes no
+ * water, only those and ITEM_WANT_DRY). */
 bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want);
 /* A phrase that fits any item (never an adjective that would have to agree
  * with it), NULL for ITEM_MOISTURE_NONE. */

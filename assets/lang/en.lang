@@ -981,6 +981,11 @@ recipe.lime_bark = Peel lime poles
 recipe.lime_bast = Part lime bast
 recipe.lime_cord = Lime bast cord
 recipe.net_bag = Looped net bag
+recipe.mend_cattail_basket = Mend a cattail basket
+recipe.mend_frame_basket = Mend a frame basket
+recipe.mend_pack_basket = Mend a pack basket
+recipe.mend_bark_box = Mend a bark box
+recipe.mend_net_bag = Mend a net bag
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted
@@ -1009,6 +1014,10 @@ recipe.ingredient_wet.tip = The ingredient must be fresh, or soaked in water if 
 recipe.ingredient_retted = {0}, retted
 # Tooltip of an ingredient wanted retted
 recipe.ingredient_retted.tip = The ingredient must have retted: left lying in shallow water for days, until its layers come apart.
+# {0} = ingredient with its count, wanted worn: a container to mend
+recipe.ingredient_worn = {0}, worn
+# Tooltip of an ingredient wanted worn
+recipe.ingredient_worn.tip = Only a worn one is taken, to be mended: below three quarters of its condition.
 
 # Workstation inspector
 forbid.forbid = Forbid

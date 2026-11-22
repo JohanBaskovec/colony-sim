@@ -35,6 +35,17 @@
         ITEM_FLAKE, ITEM_HAND_AXE                                                                  \
     }
 
+/* A recipe mending a worn `container` with `count` of a material (`m0`, or `m1`) in the
+ * state `want`, with a tool `t0` or `t1` (RecipeDef.mends); `key` its name. */
+#define MEND(id_, key, container, m0, m1, count, want, t0, t1, work_)                              \
+    {                                                                                              \
+        .id = id_, .name_key = key, .stations = CRAFTING_SPOT,                                     \
+        .ingredients = {{{container, ITEM_NONE}, 1, ITEM_WANT_WORN}, {{m0, m1}, count, want}},     \
+        .input_min_quality = ITEM_QUALITY_WORST, .tools = {{t0, t1}}, .work = work_,               \
+        .knowledge = KNOWLEDGE_BASKETRY, .min_level = 50.0f, .product = container, .dirt = 1,      \
+        .tool_use = TOOL_USE_NONE, .mends = true                                                   \
+    }
+
 static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
     [RECIPE_CHOPPER] = {.id = "chopper",
                         .name_key = N_("recipe.chopper"),
@@ -367,12 +378,33 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                         .product = ITEM_NET_BAG,
                         .dirt = 0,
                         .tool_use = TOOL_USE_NONE},
+    /* Mending (docs/CONTAINERS.md §11): broken leaves plaited anew, 1 h. */
+    [RECIPE_MEND_CATTAIL_BASKET] =
+        MEND("mend_cattail_basket", N_("recipe.mend_cattail_basket"), ITEM_CATTAIL_BASKET,
+             ITEM_CATTAIL_LEAVES, ITEM_NONE, 1, ITEM_WANT_ANY, ITEM_FLAKE, ITEM_NONE, 2500.0f),
+    /* Broken weavers replaced with pliable rods, 1.5 h. */
+    [RECIPE_MEND_FRAME_BASKET] = MEND("mend_frame_basket", N_("recipe.mend_frame_basket"),
+                                      ITEM_FRAME_BASKET, ITEM_WILLOW_RODS, ITEM_HAZEL_RODS, 1,
+                                      ITEM_WANT_WET, ITEM_FLAKE, ITEM_HAND_AXE, 3750.0f),
+    /* A new rim and weavers, 2 h. */
+    [RECIPE_MEND_PACK_BASKET] =
+        MEND("mend_pack_basket", N_("recipe.mend_pack_basket"), ITEM_PACK_BASKET, ITEM_WILLOW_RODS,
+             ITEM_HAZEL_RODS, 2, ITEM_WANT_WET, ITEM_FLAKE, ITEM_HAND_AXE, 5000.0f),
+    /* The seams sewn again, through holes pierced anew, 1 h. */
+    [RECIPE_MEND_BARK_BOX] =
+        MEND("mend_bark_box", N_("recipe.mend_bark_box"), ITEM_BARK_BOX, ITEM_NETTLE_CORD,
+             ITEM_LIME_BAST, 1, ITEM_WANT_ANY, ITEM_FLINT_BORER, ITEM_FLAKE, 2500.0f),
+    /* Broken loops knotted and looped again by hand, 1 h. */
+    [RECIPE_MEND_NET_BAG] =
+        MEND("mend_net_bag", N_("recipe.mend_net_bag"), ITEM_NET_BAG, ITEM_NETTLE_CORD,
+             ITEM_LIME_CORD, 1, ITEM_WANT_ANY, ITEM_NONE, ITEM_NONE, 2500.0f),
 };
 
 #undef CRAFTING_SPOT
 #undef OPEN_HEARTH
 #undef HAMMER
 #undef CUTTING_TOOL
+#undef MEND
 
 const RecipeDef *recipe_def(RecipeType recipe)
 {
@@ -651,6 +683,16 @@ int recipe_craft_with(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIEN
     const RecipeDef *def = recipe_def(recipe);
     if (def == NULL) {
         return 0;
+    }
+    if (def->mends) { /* The same item, made whole again. */
+        const ItemDef *mended = item_def((ItemType)inputs[0].type);
+        if (inputs[0].count <= 0 || mended == NULL) {
+            return 0;
+        }
+        out[0] = inputs[0];
+        out[0].count = 1;
+        out[0].hit_points = (uint16_t)mended->max_hit_points;
+        return 1;
     }
     ItemQuality cap = recipe_quality_cap_of(recipe, inputs, tool);
     int count = craft_products(recipe, def, inputs[0], cap, level, rng, out);
