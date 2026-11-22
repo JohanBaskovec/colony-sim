@@ -183,6 +183,14 @@ typedef struct PlantProduct {
     /* Easily mistaken for a poisonous plant: only a skilled gatherer takes it
      * (see core/gather_zone.h), and nobody eats it in place. */
     bool confusable;
+    /* Taken by cutting the plant whole (nettle stems): it goes back to growth
+     * 0, every stock gone, whatever PlantDef.harvest says
+     * (plant_product_harvest()). */
+    bool cuts_plant;
+    /* A craft material whose quality follows the plant it comes from
+     * (docs/CONTAINERS.md §6): the gatherer's, times 0.7 + 0.3 × its growth,
+     * less for a plant in poor health (plant_product_quality_factor()). */
+    bool quality_follows_plant;
 } PlantProduct;
 
 /* How a plant lives through the cold (docs/PLANTS.md §4). */
@@ -726,6 +734,19 @@ bool plant_has_food(const Plant *plant);
  * taken: nothing, its growth back to 0 (and its stocks emptied), or the plant
  * gone (the tile is then bare; "gone" only when no product is left). */
 void plant_harvested(Map *map, int x, int y, int z);
+
+/* What taking product `slot` does to the plant: PlantDef.harvest, or a reset
+ * for a product cut with the whole plant (PlantProduct.cuts_plant); the
+ * plant's own for a slot out of range. */
+PlantHarvest plant_product_harvest(PlantType type, int slot);
+
+/* plant_harvested() once product `slot` is taken (plant_product_harvest()). */
+void plant_product_harvested(Map *map, int x, int y, int z, int slot);
+
+/* The factor on a gatherer's quality for product `slot` of a plant: 1 for most
+ * products, 0.7 .. 1 by its growth and down to half for a plant near death
+ * for a material whose quality follows the plant (quality_follows_plant). */
+float plant_product_quality_factor(const Plant *plant, int slot);
 
 /* Whether nothing of the plant shows above ground (died back until the warmth
  * returns). */

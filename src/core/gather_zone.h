@@ -86,6 +86,7 @@ typedef enum GatherResource {
     GATHER_BRACKEN,
     GATHER_HEATHER,
     GATHER_REEDS,
+    GATHER_NETTLE_STEMS, /* Cut whole after flowering, for their fibre (GATHER_JOB_CUT_STEMS). */
     GATHER_RESOURCE_COUNT
 } GatherResource;
 
@@ -101,6 +102,9 @@ typedef enum GatherJob {
     GATHER_JOB_DIG,           /* Dig roots up (a digging stick helps). */
     GATHER_JOB_DIG_CAREFULLY, /* The same, easily mistaken for a poisonous plant. */
     GATHER_JOB_CUT_GRASS,     /* Cut grass or another fibre plant, which grows back. */
+    /* Cut a plant's stems whole for their fibre (nettle stems, a flake best); it
+     * grows back from its roots. */
+    GATHER_JOB_CUT_STEMS,
     /* Pick the fruit or nuts hanging in a block of foliage (core/crown.h),
      * from the ground below it or, climbing, from the dense foliage around
      * it (gather_pick_reaches()). */
@@ -123,6 +127,8 @@ typedef enum GatherGroup {
     GATHER_GROUP_WOOD,   /* Wood. */
     GATHER_GROUP_FOOD,   /* Wild food. */
     GATHER_GROUP_FIBRES, /* Grass, moss, bracken, heather, reeds: bedding, thatch, fuel. */
+    /* Craft materials (docs/CONTAINERS.md): nettle stems for their fibre. */
+    GATHER_GROUP_MATERIALS,
     GATHER_GROUP_COUNT
 } GatherGroup;
 

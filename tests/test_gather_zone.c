@@ -4,10 +4,12 @@
 #include "core/crown.h"
 #include "core/gather_zone.h"
 #include "core/i18n.h"
+#include "core/knowledge.h"
 #include "core/util.h"
 
 #include "test_framework.h"
 
+#include <math.h>
 #include <stdlib.h>
 
 #define ALL_JOBS ((GatherJobMask)((1u << GATHER_JOB_COUNT) - 1u))
@@ -1452,6 +1454,58 @@ static void test_picking_in_the_crowns(void)
     free_world(&map, &zones, &items);
 }
 
+/* Nettle stems are cut whole (docs/CONTAINERS.md §4.1): the cut stems job takes them, the plant
+ * goes back to growth 0 (its young shoots gone with it), and their quality follows the plant;
+ * picking the shoots leaves the plant standing. */
+static void test_nettle_stems_are_cut_whole(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    Plant *nettle = put_plant(&map, 2, 2, PLANT_NETTLE, 1.0f);
+    REQUIRE(plant_product_in_season(nettle, 1)); /* After flowering, at the start of a game. */
+    int stems = plant_stock_available(nettle, 1);
+    REQUIRE(stems > 0);
+    CHECK_EQ_INT(plant_product_harvest(PLANT_NETTLE, 1), PLANT_HARVEST_RESETS);
+    CHECK_EQ_INT(plant_product_harvest(PLANT_NETTLE, 0), PLANT_HARVEST_KEEPS);
+    int index = gather_zone_create(&zones, &map, 2, 2, 2, 2, 0);
+    order(&zones, &items, index, GATHER_NETTLE_STEMS, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_CUT_STEMS);
+    CHECK_EQ_INT(gather_job_def(GATHER_JOB_CUT_STEMS)->tool_use, TOOL_USE_CUTTING);
+    nettle->damage = PLANT_DAMAGE_MAX / 2; /* Half its health: poorer fibre. */
+    float factor = plant_product_quality_factor(nettle, 1);
+    CHECK_NEAR(factor, 0.75, 1e-4);
+    CHECK_NEAR(plant_product_quality_factor(nettle, 0), 1.0, 1e-6); /* Food: as it was. */
+    float work = gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_CUT_STEMS);
+    CHECK_NEAR(work, 250.0 * stems, 1e-3);
+    REQUIRE(gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_CUT_STEMS, work, 75.0,
+                                 NULL));
+    ItemStack cut = items_get(&items, 2, 2, 0);
+    CHECK_EQ_INT(cut.type, ITEM_NETTLE_STEMS);
+    CHECK_EQ_INT(cut.count, stems);
+    ItemStack standard = knowledge_product(ITEM_NETTLE_STEMS, stems, 75.0, NULL);
+    CHECK_EQ_INT(cut.quality, (int)lroundf((float)standard.quality * factor));
+    CHECK_NEAR(nettle->growth, 0.0, 1e-6); /* Cut whole: it grows again from its roots. */
+    CHECK_EQ_INT(plant_stock_available(nettle, 0), 0);
+    CHECK_EQ_INT(nettle->type, PLANT_NETTLE);
+
+    /* The shoots, picked: the plant stays as it was. */
+    Plant *other = put_plant(&map, 4, 2, PLANT_NETTLE, 1.0f);
+    other->warmth = 50.0f; /* Spring: young shoots, no stems yet. */
+    plant_regrow_stocks(other, 72);
+    REQUIRE(plant_stock_available(other, 0) > 0);
+    CHECK_EQ_INT(plant_stock_available(other, 1), 0);
+    int index2 = gather_zone_create(&zones, &map, 4, 2, 4, 2, 0);
+    order(&zones, &items, index2, GATHER_NETTLES, GATHER_FOREVER);
+    float pick = gather_job_work_needed(&map, 4, 2, 0, GATHER_JOB_HARVEST);
+    CHECK(
+        gather_zone_add_work(&zones, &map, &items, 4, 2, 0, GATHER_JOB_HARVEST, pick, 75.0, NULL));
+    CHECK_EQ_INT(items_get(&items, 4, 2, 0).type, ITEM_NETTLES);
+    CHECK_NEAR(other->growth, 1.0, 1e-6);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1487,5 +1541,6 @@ int main(void)
     RUN_TEST(test_zone_tiles_box);
     RUN_TEST(test_extend_and_shrink_one);
     RUN_TEST(test_picking_in_the_crowns);
+    RUN_TEST(test_nettle_stems_are_cut_whole);
     return test_summary();
 }

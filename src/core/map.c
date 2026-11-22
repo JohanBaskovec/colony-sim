@@ -409,7 +409,17 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                                     .capacity = 3,
                                     .regrow_hours = 24,
                                     .warmth_until = 100.0f, /* Young shoots, tough later. */
-                                    .min_growth = 0.2f}}},
+                                    .min_growth = 0.2f},
+                                   /* Stems cut whole after flowering (the start of a game,
+                                    * at the beginning of August), until it dies back; it
+                                    * grows again from its roots (docs/CONTAINERS.md §3.1). */
+                                   {.item = ITEM_NETTLE_STEMS,
+                                    .capacity = 3,
+                                    .regrow_hours = 24,
+                                    .warmth_from = 260.0f,
+                                    .min_growth = 0.5f,
+                                    .cuts_plant = true,
+                                    .quality_follows_plant = true}}},
     [PLANT_PLANTAIN] = {.id = "plantain",
                         .name_key = N_("plant.plantain"),
                         .transpiration = 0.8f,
@@ -1244,13 +1254,42 @@ bool plant_has_food(const Plant *plant)
     return slot >= 0 && plant_stock_available(plant, slot) > 0;
 }
 
+PlantHarvest plant_product_harvest(PlantType type, int slot)
+{
+    const PlantDef *def = plant_def(type);
+    if (def == NULL) {
+        return PLANT_HARVEST_KEEPS;
+    }
+    if (slot >= 0 && slot < PLANT_PRODUCTS_MAX && def->products[slot].cuts_plant) {
+        return PLANT_HARVEST_RESETS;
+    }
+    return def->harvest;
+}
+
+float plant_product_quality_factor(const Plant *plant, int slot)
+{
+    const PlantDef *def = plant_def((PlantType)plant->type);
+    if (def == NULL || slot < 0 || slot >= PLANT_PRODUCTS_MAX ||
+        !def->products[slot].quality_follows_plant) {
+        return 1.0f;
+    }
+    float growth = clampf(plant->growth, 0.0f, 1.0f);
+    float health = 1.0f - (float)plant->damage / (float)PLANT_DAMAGE_MAX;
+    return (0.7f + 0.3f * growth) * (0.5f + 0.5f * clampf(health, 0.0f, 1.0f));
+}
+
 void plant_harvested(Map *map, int x, int y, int z)
+{
+    plant_product_harvested(map, x, y, z, -1);
+}
+
+void plant_product_harvested(Map *map, int x, int y, int z, int slot)
 {
     if (!map_in_bounds(map, x, y, z)) {
         return;
     }
     Plant *plant = &map->plants[map_index(map, x, y, z)];
-    switch (plant_def((PlantType)plant->type)->harvest) {
+    switch (plant_product_harvest((PlantType)plant->type, slot)) {
     case PLANT_HARVEST_KEEPS: break;
     case PLANT_HARVEST_RESETS:
         plant->growth = 0.0f; /* Grows again from what is left in the ground. */

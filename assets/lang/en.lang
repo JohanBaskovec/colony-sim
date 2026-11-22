@@ -636,6 +636,7 @@ colonist.task.dig = Digging up roots
 # Digging up roots easily mistaken for a poisonous plant (wild carrots)
 colonist.task.dig_carefully = Digging up roots with care
 colonist.task.cut_grass = Cutting grass and other fibres
+colonist.task.cut_stems = Cutting nettle stems
 colonist.task.pick = Picking fruit in the trees
 colonist.task.craft = Crafting
 colonist.task.construct = Building
@@ -869,10 +870,12 @@ gather_zone.resource.moss = Moss
 gather_zone.resource.bracken = Bracken
 gather_zone.resource.heather = Heather
 gather_zone.resource.reeds = Reeds
+gather_zone.resource.nettle_stems = Nettle stems
 # Groups of resources (foldable rows; their setting limits each of their resources)
 gather_zone.group.wood = Wood
 gather_zone.group.food = Food
 gather_zone.group.fibres = Fibres
+gather_zone.group.materials = Craft materials
 # Repeat modes of an order (dropdown); the target follows
 gather_zone.mode.do_count = Gather
 gather_zone.mode.until = Until
