@@ -403,7 +403,11 @@ with grass: one job, cutting) are:
 - **fire**: dry bracken and heather are fuel (`HEARTH_FUEL_TYPES`, not
   brought by default: the player allows them in the hearth's window), and
   dry grass, bracken and moss are tinder (`ITEM_TINDER_TYPES`);
-- **food**: the berries, hips and leaves, with the food zones.
+- **food**: the berries, hips and leaves, with the food zones;
+- **cord and baskets** (`docs/CONTAINERS.md`, to come): nettle stems (a
+  second product of the nettle, cut whole after flowering) for fibre and
+  cord, cattail leaves (a second product of the cattail) for plaited
+  baskets, hazel and willow rods, birch bark, lime bast.
 
 ### Who eats them
 

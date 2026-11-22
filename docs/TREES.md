@@ -338,6 +338,11 @@ Each step is a commit of its own, with its tests and docs.
 
 ## 10. Later
 
+- **Willow and lime** (designed in `docs/CONTAINERS.md` §3.2, step C6): a
+  low willow of many stems by the water, for basket rods; the small-leaved
+  lime in mixed woods on rich soil, for bast. Birch bark peeled in its
+  season, hazel and willow rods: products of trees (`docs/CONTAINERS.md`
+  §3.1).
 - Acorns and beechnuts, with mast years (a heavy crop every few years);
   acorns eaten by settlers after leaching.
 - Beating a tree with a long pole to bring nuts and chestnuts down.

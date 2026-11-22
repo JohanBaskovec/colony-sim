@@ -326,7 +326,7 @@ their own, folded and unfolded the same way (§8).
   `docs/COMBAT.md` §7); what fills the hands the weapon needs should be set
   aside and picked up after the fight (today the load is put down and free
   tools that no longer fit are set down).
-- **Containers** (baskets, bags, packs) take a place (a basket in a hand, a
+- **Containers** (baskets, bags, packs; designed in `docs/CONTAINERS.md`) take a place (a basket in a hand, a
   bag slung, a pack on a new **back** place) and are places themselves, with
   their own room and weight: **sub-places**. The hand holding a basket holds
   nothing else, but the basket takes the berries. The Gear tab nests them

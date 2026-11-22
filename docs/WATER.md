@@ -915,7 +915,12 @@ in a wood do not cost every hour.
   material or ingredient may require "dry" (bedding and thatch of grass,
   tinder bundles). The search for ingredients skips the items that are not.
   Bills keep their quality range. A moisture range for the player comes
-  later if needed.
+  later if needed. Recipes of fibres and containers (`docs/CONTAINERS.md`
+  §9.2) want an ingredient **dry**, **green** (still near its fresh
+  moisture: rods woven as cut) or **wet** (rods soaked, bark softened).
+- **Retting** (`docs/CONTAINERS.md` §4.4): nettle stems and lime bark ret
+  while wet and warm, from rain, from the dew of humid nights (a small
+  wetting at night, to come) or lying in shallow water.
 - **Rot**: the rot of food goes by its moisture relative to its fresh one.
   Below its "dry" moisture it rots ten times slower *(tuning)*. Food out in
   the rain rots faster because it gets wetter (it replaces today's ×
