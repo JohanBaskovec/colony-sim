@@ -2409,9 +2409,9 @@ static float left_windows_top(const App *app)
     return top;
 }
 
-/* While a box of tiles is dragged out (zones, orders): its size; for a zone, the size the zone
- * will have once the button is released (or the tiles the removal takes out), and the levels
- * covered when the drag went over several. */
+/* While a box of tiles is dragged out (zones, orders, forbidding): its size; for a zone, the size
+ * the zone will have once the button is released (or the tiles the removal takes out); and the
+ * levels covered when the drag went over several. */
 static void drag_tooltip(App *app)
 {
     int x0, y0, x1, y1;
@@ -2438,14 +2438,14 @@ static void drag_tooltip(App *app)
                           : tr_plural("hud.drag_zone", zone_size),
                   tiles);
         lines[line_count++] = zone;
-        if (app->drag_level != app->camera.level) {
-            char low[16], high[16];
-            const Map *map = &app->game.map;
-            hud_level_text(low, sizeof(low), map, SDL_min(app->drag_level, app->camera.level));
-            hud_level_text(high, sizeof(high), map, SDL_max(app->drag_level, app->camera.level));
-            TR_FORMAT(levels, sizeof(levels), tr("hud.drag_levels"), low, high);
-            lines[line_count++] = levels;
-        }
+    }
+    if (app->drag_level != app->camera.level) { /* Every drag of a box covers them. */
+        char low[16], high[16];
+        const Map *map = &app->game.map;
+        hud_level_text(low, sizeof(low), map, SDL_min(app->drag_level, app->camera.level));
+        hud_level_text(high, sizeof(high), map, SDL_max(app->drag_level, app->camera.level));
+        TR_FORMAT(levels, sizeof(levels), tr("hud.drag_levels"), low, high);
+        lines[line_count++] = levels;
     }
     ui_tooltip(&app->ui, lines, line_count);
 }

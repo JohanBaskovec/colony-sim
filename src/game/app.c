@@ -2075,14 +2075,19 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
     bool additive = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
     const int z = app->camera.level; /* The level shown. */
     if (app->tool == APP_TOOL_DESIGNATE) {
-        int x0, y0, x1, y1;
+        int x0, y0, x1, y1, low, high;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
+        drag_levels(app, &low, &high); /* Each level the drag went over, as one on it would. */
         /* Orders nobody can carry out are refused (the tool panel says why). */
         if (app->tool_type == DESIGNATION_NONE) {
-            game_cancel_rect(&app->game, x0, y0, x1, y1, z);
+            for (int level = low; level <= high; level++) {
+                game_cancel_rect(&app->game, x0, y0, x1, y1, level);
+            }
             prune_station_selection(app);
         } else if (game_designation_available(&app->game, app->tool_type)) {
-            game_designate_rect(&app->game, x0, y0, x1, y1, z, app->tool_type);
+            for (int level = low; level <= high; level++) {
+                game_designate_rect(&app->game, x0, y0, x1, y1, level, app->tool_type);
+            }
         }
     } else if (app->tool == APP_TOOL_BUILD) {
         /* Blueprints nobody can build are refused (the tool panel says why). */
@@ -2101,9 +2106,12 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
                                            app->structure_woods[app->structure_type]);
         }
     } else if (app->tool == APP_TOOL_FORBID) {
-        int x0, y0, x1, y1;
+        int x0, y0, x1, y1, low, high;
         tool_rect(app, button->x, button->y, &x0, &y0, &x1, &y1);
-        game_set_forbidden_rect(&app->game, x0, y0, x1, y1, z, !app->forbid_allows);
+        drag_levels(app, &low, &high);
+        for (int level = low; level <= high; level++) {
+            game_set_forbidden_rect(&app->game, x0, y0, x1, y1, level, !app->forbid_allows);
+        }
     } else if (app->tool == APP_TOOL_MOVE) {
         if (app->selected_count > 0) {
             int x, y;
