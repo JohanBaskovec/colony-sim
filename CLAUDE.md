@@ -15,7 +15,8 @@ current milestone.
 - **All code is written in English: identifiers, comments, log messages,
   commit messages, documentation files.** No French in the source tree, except
   inside translation files (`assets/lang/fr.lang`).
-- The user (project owner) speaks French: talk to them in French in chat.
+- The user (project owner) speaks French: talk to them in French in chat, and
+  explain simply (what changed in the game, not the code in detail).
 - **The game is multi-language.** Never hardcode player-visible text in C code:
   every string shown to the player goes through `tr()`, `tr_plural()`,
   `TR_FORMAT()`, `tr_integer()` / `tr_decimal()` (see `src/core/i18n.h`).
@@ -146,10 +147,20 @@ Prefer the `headless` preset while working on the simulation core.
   and `import -window root shot.png`). Also set `XDG_DATA_HOME` to a scratch
   folder: changing a setting in the game saves it, and it must not overwrite
   the user's own `settings.cfg`.
+  - Check Xvfb with `pgrep -x Xvfb` (`pgrep -f` matches its own command line) and
+    `/tmp/.X11-unix/X99`; start it if missing. If it is not installed, ask for it
+    (`sudo apt install xvfb`) rather than fall back to the real display.
+  - Never kill the user's own game: stop only an instance you started, by its PID,
+    after checking that `/proc/<pid>/environ` has `DISPLAY=:99` (no `pkill colony_sim`).
+  - Another keyboard layout (AZERTY): start Xvfb with `-noreset` (it reverts to US
+    when its last client leaves), then `setxkbmap -layout fr -print | xkbcomp -w0 - :99`
+    (plain `setxkbmap` does not take on Xvfb); `xmodmap -pke | grep "keycode  25"`
+    then shows `z`.
 
 ## Workflow
 
 - Keep `docs/ROADMAP.md` up to date (tick items, add discovered tasks).
 - Update `docs/ARCHITECTURE.md` when adding a module or changing a design decision.
-- Commit only when asked. Commit messages in English, imperative mood
+- Commit only when asked; "commit et pousse" means push straight to `main`.
+  Commit messages in English, imperative mood
   (`Add pathfinding module`), small focused commits.
