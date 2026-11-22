@@ -1819,6 +1819,7 @@ static bool is_free_bed(const Map *map, int x, int y, int z, void *userdata)
 
 static bool go_to_warm_spot(Colonist *colonist, const ColonistContext *context);
 static void stay_warm_asleep(Colonist *colonist, const ColonistContext *context);
+static bool free_spot_near(const ColonistContext *context, TilePos from, TilePos *out);
 
 /* Whether some bed (any structure settlers sleep on) stands on the map. */
 static bool any_bed(const Map *map)
@@ -1831,15 +1832,35 @@ static bool any_bed(const Map *map)
     return false;
 }
 
+/* Asleep on the ground where it stands, unless someone else holds the tile:
+ * then on the nearest free one. (Lying down there, it would be made to step
+ * aside at once, and choose to sleep again before taking the step: a search
+ * for a bed every tick, standing still, until the other left.) */
+static void sleep_here_or_beside(Colonist *colonist, const ColonistContext *context)
+{
+    TilePos here = current_tile(colonist), spot;
+    if (context->occupancy == NULL ||
+        occupancy_can_stop(context->occupancy, (BeingId)context->worker_id, here) ||
+        !free_spot_near(context, here, &spot) ||
+        !pathfinder_find(context->pathfinder, context->plan_map, here, spot,
+                         COLONIST_MAKE_WAY_MAX_COST * 2.0f, &colonist->path)) {
+        return; /* Here (with nowhere else to go, it makes way as it can). */
+    }
+    colonist->target = spot;
+    reservations_add(context->reservations, RESERVATION_BED, spot, context->worker_id);
+}
+
 /* Goes to sleep in its own bed, else in the nearest free one (which becomes
  * its own), else at a spot beside a fire when too cold or hot where the
- * colonist stands, else there. */
+ * colonist stands, else there (or beside, sleep_here_or_beside()). */
 static void start_sleeping(Colonist *colonist, const ColonistContext *context)
 {
     begin_task(colonist, context, TASK_SLEEP);
     path_clear(&colonist->path);
     if (!any_bed(context->plan_map)) {
-        go_to_warm_spot(colonist, context);
+        if (!go_to_warm_spot(colonist, context)) {
+            sleep_here_or_beside(colonist, context);
+        }
         return;
     }
     TilePos bed;
@@ -1860,8 +1881,8 @@ static void start_sleeping(Colonist *colonist, const ColonistContext *context)
     if (found) {
         colonist->target = bed;
         reservations_add(context->reservations, RESERVATION_BED, bed, context->worker_id);
-    } else {
-        go_to_warm_spot(colonist, context);
+    } else if (!go_to_warm_spot(colonist, context)) {
+        sleep_here_or_beside(colonist, context);
     }
 }
 

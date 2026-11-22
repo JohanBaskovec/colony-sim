@@ -463,6 +463,35 @@ static void test_colonists_drink_before_sleeping(void)
     game_shutdown(&game);
 }
 
+/* Tired at night with no bed, on a tile another sleeper holds: it lies down
+ * on a free tile nearby, rather than settling where it is pushed off of at
+ * once (it used to search for a bed again every tick, never taking the step
+ * aside, until the other woke up). */
+static void test_sleeper_on_a_held_tile_lies_down_beside(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    game.clock.tick = TODAY + 23 * TICKS_PER_HOUR;
+    Colonist *first = spawn_rested(&game, 20, 20);
+    REQUIRE(first != NULL);
+    first->needs[NEED_REST] = 0.2f;
+    game_tick(&game); /* Asleep where it stands: the tile is its own. */
+    REQUIRE(first->task == TASK_SLEEP);
+
+    Colonist *second = spawn_rested(&game, 20, 20);
+    REQUIRE(second != NULL);
+    second->needs[NEED_REST] = 0.2f;
+    run_ticks(&game, 5 * TICKS_PER_SECOND);
+    CHECK_EQ_INT(second->task, TASK_SLEEP);
+    CHECK(!colonist_is_moving(second));
+    CHECK(second->x != 20 || second->y != 20);
+    CHECK(abs(second->x - 20) <= 1 && abs(second->y - 20) <= 1); /* Close by. */
+    CHECK_EQ_INT(first->x, 20); /* The first sleeps on undisturbed. */
+    CHECK_EQ_INT(first->y, 20);
+    CHECK_EQ_INT(first->task, TASK_SLEEP);
+    game_shutdown(&game);
+}
+
 /* ---- Work on designations ---------------------------------------------- */
 
 /* Ticks needed to walk `tiles` tiles on cheap terrain, plus some margin. */
@@ -2954,6 +2983,7 @@ int main(void)
     RUN_TEST(test_tired_colonist_sleeps_and_recovers);
     RUN_TEST(test_colonists_sleep_at_night);
     RUN_TEST(test_colonists_drink_before_sleeping);
+    RUN_TEST(test_sleeper_on_a_held_tile_lies_down_beside);
     RUN_TEST(test_idle_colonist_gathers_berries);
     RUN_TEST(test_nobody_fells_or_mines_yet);
     RUN_TEST(test_one_worker_per_designation);
