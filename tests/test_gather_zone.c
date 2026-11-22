@@ -987,9 +987,11 @@ static void test_uprooting_zones(void)
     Items items;
     REQUIRE(init_world(&map, &zones, &items));
     int gather = gather_zones_add_rect(&zones, &map, 0, 0, 2, 2, 0, GATHER_ZONE_NONE, NULL);
+    CHECK(!gather_zones_any_uprooting(&zones)); /* A gathering zone alone. */
     int uproot =
         gather_zones_add_uproot_view_rect(&zones, &map, 4, 0, 6, 2, 0, GATHER_ZONE_NONE, NULL);
     REQUIRE(gather != GATHER_ZONE_NONE && uproot != GATHER_ZONE_NONE && gather != uproot);
+    CHECK(gather_zones_any_uprooting(&zones));
     CHECK(!gather_zone_is_uproot(&zones, gather));
     CHECK(gather_zone_is_uproot(&zones, uproot));
     const GatherZone *zone = gather_zone_get(&zones, uproot);
@@ -1037,8 +1039,10 @@ static void test_uprooting_zones(void)
     CHECK(gather_zones_hash(&zones, HASH_FNV1A64_INIT) != before);
     gather_zone_set_all_uproot_plants(&zones, uproot, false);
     CHECK(!gather_zones_want_uprooted(&zones, &map, 4, 0, 0));
+    CHECK(!gather_zones_any_uprooting(&zones)); /* It uproots no plant. */
     gather_zone_set_all_uproot_plants(&zones, uproot, true);
     CHECK(gather_zones_want_uprooted(&zones, &map, 5, 0, 0));
+    CHECK(gather_zones_any_uprooting(&zones));
     gather_zone_set_uproot_plant(&zones, uproot, PLANT_OAK, true); /* A tree: refused. */
     CHECK(!gather_zone_uproots(gather_zone_get(&zones, uproot), PLANT_OAK));
     gather_zone_set_uproot_plant(&zones, gather, PLANT_BRAMBLE, true); /* A gathering zone. */
@@ -1046,6 +1050,7 @@ static void test_uprooting_zones(void)
     /* Forbidden: nothing is uprooted. */
     gather_zone_set_forbidden(&zones, uproot, true);
     CHECK(!gather_zones_want_uprooted(&zones, &map, 4, 0, 0));
+    CHECK(!gather_zones_any_uprooting(&zones));
     free_world(&map, &zones, &items);
 }
 

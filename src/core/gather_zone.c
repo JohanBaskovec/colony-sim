@@ -517,6 +517,17 @@ bool gather_zones_want_uprooted(const GatherZones *zones, const Map *map, int x,
            !plant_is_tree(plant->type) && gather_zone_uproots(zone, (PlantType)plant->type);
 }
 
+bool gather_zones_any_uprooting(const GatherZones *zones)
+{
+    for (int index = 0; index < GATHER_ZONE_MAX; index++) {
+        const GatherZone *zone = &zones->list[index];
+        if (zone->used && zone->uproot && !zone->forbidden && zone->uproot_plants != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Takes the tiles of a rectangle out of their zone, or out of zone `only`
  * alone (GATHER_ZONE_NONE: any). */
 static int remove_rect(GatherZones *zones, const Map *map, int x0, int y0, int x1, int y1, int z,

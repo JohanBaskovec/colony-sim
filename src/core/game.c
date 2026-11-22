@@ -2993,7 +2993,8 @@ static void update_uproot_orders(Game *game)
     Designations *designations = &game->designations;
     const GatherZones *zones = &game->gather_zones;
     const Stockpiles *stockpiles = &game->stockpiles;
-    if (!tile_box_is_empty(&zones->box)) {
+    /* Most often no zone uproots: the scan of their box would find nothing. */
+    if (!tile_box_is_empty(&zones->box) && gather_zones_any_uprooting(zones)) {
         const TileBox *box = &zones->box;
         for (int z = box->z0; z <= box->z1; z++) {
             for (int y = box->y0; y <= box->y1; y++) {

@@ -309,6 +309,10 @@ void gather_zone_set_all_uproot_plants(GatherZones *zones, int index, bool uproo
  * forbidden). */
 bool gather_zones_want_uprooted(const GatherZones *zones, const Map *map, int x, int y, int z);
 
+/* Whether some zone may want a plant uprooted (an uprooting zone, not forbidden, uprooting some
+ * plant type): otherwise gather_zones_want_uprooted() is false everywhere. */
+bool gather_zones_any_uprooting(const GatherZones *zones);
+
 /* Adds the free tiles of a rectangle a zone may cover. Returns the number of
  * tiles added. */
 int gather_zone_extend(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
