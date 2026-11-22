@@ -91,6 +91,7 @@ simulation:
 | `temperature`| Outdoor air through the seasons and the day, a temperature per tile: heat spreading, walls, roofs, caves, hearths, the microclimate under the sky (sun, shade, evaporation, heat stored in the ground) |
 | `soil`       | The water in the ground of each tile (a bucket by terrain: rain and snowmelt, interception by crowns, drainage, evaporation and transpiration, banks near water), and what the microclimate needs from it (see `docs/CLIMATE.md`) |
 | `water`      | The flow of the free water (`Game.water`, docs/WATER.md §3): falling between levels and virtual pipes between tiles in 1/256 mm, only in active blocks of 16 × 16 tiles woken by the map's logs and asleep at rest (a steady current included); the land beyond the edges, and a river's source and outlet there (`water_set_edge()`); the class changes told to the map at most once a second |
+| `stall`      | Stall watch for the tests and benchmarks: settlers with a path to follow that stay on one tile for half an in-game hour (a loop in their decisions), read from outside the game's state |
 | `vision`     | Who sees what: sight in 3D through the map's volume (rock, walls and floors block it, no range limit), fields of view per settler, how many see each tile (see *Vision*) |
 | `weather`    | The sky every 6 hours (clear, cloudy, fog, rain, storm; snow when cold), warm and cold spells, snow cover, recent rain, rainfall in mm, the air's dew point and relative humidity |
 | `pool`       | Fixed-capacity slot allocator with generational handles (`EntityId`)        |

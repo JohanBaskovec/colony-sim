@@ -3,10 +3,12 @@
  * in-game hour (game_check_items()): gathering, building, cooking, with the
  * fog of war and with wild animals. Items are dropped, hauled, piled in
  * heaps of several kinds, picked from under others, eaten, rotted, burnt
- * and built in all along.
+ * and built in all along. No settler may get stuck on its way meanwhile
+ * (core/stall.h).
  */
 #include "core/game.h"
 #include "core/scenario.h"
+#include "core/stall.h"
 
 #include "test_framework.h"
 
@@ -23,13 +25,22 @@ static bool init_colony(Game *game, int size, int colonists, Scenario scenario, 
     return game_init(game, &params) && scenario_apply(game, scenario);
 }
 
-/* Runs `hours` in-game hours, checking the items after each; stops at the
- * first problem. Returns the hours run without one. */
+/* Runs `hours` in-game hours, checking the items after each and that no
+ * settler is stuck on its way after every tick; stops at the first problem.
+ * Returns the hours run without one. */
 static int run_checked(Game *game, int hours)
 {
+    static StallWatch watch;
+    stall_watch_init(&watch);
     for (int hour = 0; hour < hours; hour++) {
         for (int tick = 0; tick < TICKS_PER_HOUR; tick++) {
             game_tick(game);
+            if (stall_watch_update(&watch, game) > 0) {
+                fprintf(stderr, "hour %d: settler %d stuck on its way for %u ticks (tick %llu)\n",
+                        hour, watch.longest_slot, (unsigned)watch.longest,
+                        (unsigned long long)watch.longest_tick);
+                return hour;
+            }
         }
         ItemsCheck check = game_check_items(game);
         if (check.problems > 0) {

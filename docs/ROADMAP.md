@@ -466,6 +466,7 @@ A new game generates a whole world (poles, a hot middle, mountain ranges, seas, 
 - [x] Sanitized builds (`headless`, `asan`) at `-O1`: a full headless `ctest` went from 206 s to 100 s on 4 cores, AddressSanitizer and UBSan still on
 - [x] World creation: the noon light of the seasons skips a tile already all in the sun at the first noon sun (10 to 15% faster, the same worlds); the rays themselves are lean already, fewer of them would change the worlds
 - [x] Vision casts 30 to 45% faster (bench_vision), the same fields: open space and slopes out of the open set are told apart before any call, one division a ray step, the slow sweep of the columns reads a level of 256 columns at once (vectorized); a foggy game runs 10 to 25% faster in optimized builds (the sanitized tests barely change)
+- [x] Stall watch (`core/stall.h`): a settler with a path that stays on one tile for half an hour is stuck (the longest real wait is about 260 ticks); the long colony tests fail on it, `bench_simulation` reports it with the longest run of ticks over 1 ms in a row (the stuck sleeper of before would have shown 11 364 ticks)
 - [ ] Windows and macOS CI builds
 - [ ] Choose a license
 - [x] Debug menu (F4): instant free construction, free crafts, work without tools, instant taking apart (`GameDebug`); items menu (F5): every item of the game, one or a full stack, dropped on the clicked tile

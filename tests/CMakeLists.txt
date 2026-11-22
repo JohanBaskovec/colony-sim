@@ -52,6 +52,7 @@ set(COLONY_UNIT_TESTS
     test_region
     test_roof
     test_social
+    test_stall
     test_strike_anim
     test_test_scenario
     test_vision

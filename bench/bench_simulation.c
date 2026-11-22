@@ -15,6 +15,10 @@
  * Profiling a slow tick: BENCH_TIMESTAMPS=1 perf record -g -k CLOCK_MONOTONIC
  * bench_simulation ..., then perf report --time with the times printed.
  *
+ * The longest run of ticks over 1 ms in a row, and the settlers stuck on their
+ * way (core/stall.h): a loop in someone's decisions shows up there (a tired
+ * settler once searched for a bed every tick for hours, 10 000 slow ticks).
+ *
  * The items are checked at the end (game_check_items()); BENCH_CHECK_ITEMS=1
  * checks them every in-game hour too (outside the times measured) and stops
  * at the first problem, with its tick.
@@ -30,6 +34,7 @@
 #include "core/game.h"
 #include "core/save.h"
 #include "core/scenario.h"
+#include "core/stall.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -290,7 +295,10 @@ int main(int argc, char **argv)
      * cut to them (perf report --time begin,end). */
     bool timestamps = getenv("BENCH_TIMESTAMPS") != NULL;
     bool check_items = getenv("BENCH_CHECK_ITEMS") != NULL;
-    long slow_ticks = 0;            /* Ticks over one millisecond. */
+    long slow_ticks = 0;                                       /* Ticks over one millisecond. */
+    long slow_run = 0, slow_run_longest = 0, slow_run_end = 0; /* Of them in a row. */
+    static StallWatch stalls;
+    stall_watch_init(&stalls);
     long water_ticks = 0;           /* Ticks with some water flowing. */
     uint32_t water_most_blocks = 0; /* The most blocks of water awake at once. */
     double begin = now_seconds();
@@ -310,7 +318,14 @@ int main(int argc, char **argv)
         }
         if (elapsed > 1e-3) {
             slow_ticks++;
+            if (++slow_run > slow_run_longest) {
+                slow_run_longest = slow_run;
+                slow_run_end = (long)game.clock.tick;
+            }
+        } else {
+            slow_run = 0;
         }
+        stall_watch_update(&stalls, &game);
         if (check_items && game.clock.tick % TICKS_PER_HOUR == 0) {
             ItemsCheck check = game_check_items(&game);
             if (check.problems > 0) {
@@ -343,6 +358,21 @@ int main(int argc, char **argv)
                tick / TICKS_PER_DAY, minutes / 60, minutes % 60, times[i].seconds * 1e3);
     }
     printf("\n");
+    if (slow_run_longest > 0) {
+        long first = slow_run_end - slow_run_longest + 1;
+        long minutes = first % TICKS_PER_DAY * 60 / TICKS_PER_HOUR;
+        printf("  longest run of ticks over 1 ms: %ld from tick %ld (day %ld %02ld:%02ld)\n",
+               slow_run_longest, first, first / TICKS_PER_DAY, minutes / 60, minutes % 60);
+    }
+    if (stalls.stalls > 0) {
+        printf("  STUCK: settlers stuck on their way (%d ticks on a tile with a path) %d times, "
+               "longest %u ticks (settler %d, until tick %llu)\n",
+               STALL_TICKS, stalls.stalls, (unsigned)stalls.longest, stalls.longest_slot,
+               (unsigned long long)stalls.longest_tick);
+    } else {
+        printf("  no settler stuck on its way (longest stay on a tile with a path: %u ticks)\n",
+               (unsigned)stalls.longest);
+    }
     if (timestamps) {
         printf("  slowest ticks, CLOCK_MONOTONIC seconds (perf report --time begin,end):\n");
         for (long i = 0; i < SLOWEST_SHOWN && i < ticks; i++) {

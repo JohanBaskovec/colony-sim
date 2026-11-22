@@ -63,6 +63,7 @@ add_library(colony_core STATIC
     reservation.c
     river.c
     rng.c
+    stall.c
     stockpile.c
     tool.c
     weapon.c
