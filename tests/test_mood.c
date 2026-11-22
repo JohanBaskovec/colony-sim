@@ -267,6 +267,11 @@ static void test_meals(void)
     CHECK(!mood_has(&mood, THOUGHT_SPOILED_FOOD));
     mood_meal(&mood, ITEM_MUSHROOMS, MOOD_SPOILED_PERCENT - 1);
     CHECK(mood_has(&mood, THOUGHT_SPOILED_FOOD));
+    /* Meat eaten raw sits heavy; roasted, it is a cooked meal. */
+    CHECK(!mood_has(&mood, THOUGHT_RAW_MEAT));
+    mood_meal(&mood, ITEM_RAW_MEAT, 100);
+    CHECK(mood_has(&mood, THOUGHT_RAW_MEAT));
+    CHECK(mood_food_cooked(ITEM_ROASTED_MEAT) && !mood_food_cooked(ITEM_RAW_MEAT));
     /* Not food: no meal. */
     int count = mood.meal_count;
     mood_meal(&mood, ITEM_TWIGS, 100);

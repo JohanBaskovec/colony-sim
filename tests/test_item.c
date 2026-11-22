@@ -783,8 +783,12 @@ static void test_rot_definitions(void)
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
         const ItemDef *def = item_def((ItemType)type);
         if (item_rots((ItemType)type)) {
-            /* Food, or a body: not food. */
-            CHECK(item_is_food((ItemType)type) != (def->category == ITEM_CATEGORY_BODIES));
+            /* Food, a body (not food), or what butchering leaves to work (raw hides, sinew). */
+            bool animal_product = type == ITEM_RAW_HIDE_SMALL || type == ITEM_RAW_HIDE_MEDIUM ||
+                                  type == ITEM_RAW_HIDE_LARGE || type == ITEM_SINEW;
+            CHECK(animal_product ||
+                  item_is_food((ItemType)type) != (def->category == ITEM_CATEGORY_BODIES));
+            CHECK(!animal_product || !item_is_food((ItemType)type));
             CHECK(def->damageable);
         }
     }

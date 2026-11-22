@@ -1449,6 +1449,70 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
     case ITEM_WOLF_CARCASS:
     case ITEM_FOX_CARCASS:
     case ITEM_HARE_CARCASS: render_body(renderer, tile, type); break;
+    case ITEM_RAW_MEAT:
+    case ITEM_ROASTED_MEAT:
+    case ITEM_FAT:
+    case ITEM_MARROW: {
+        /* Chunks: red meat streaked with white fat, browned once roasted; pale
+         * lumps of fat; grey pink marrow. */
+        SDL_Color color = type == ITEM_RAW_MEAT       ? (SDL_Color){168, 54, 54, 255}
+                          : type == ITEM_ROASTED_MEAT ? (SDL_Color){120, 70, 40, 255}
+                          : type == ITEM_FAT          ? (SDL_Color){232, 222, 196, 255}
+                                                      : (SDL_Color){206, 160, 150, 255};
+        for (int i = 0; i < 3; i++) {
+            SDL_FRect chunk = {tile->x + floorf(w * (0.2f + 0.2f * (float)i)),
+                               tile->y + floorf(h * (0.46f + 0.08f * (float)(i % 2))),
+                               floorf(w * 0.24f), floorf(h * 0.2f)};
+            fill_outlined(renderer, chunk, shade(color, -i * 10));
+            if (type == ITEM_RAW_MEAT || type == ITEM_ROASTED_MEAT) {
+                SDL_FRect streak = {chunk.x + 1.0f, chunk.y + floorf(chunk.h * 0.4f),
+                                    chunk.w - 2.0f, SDL_max(1.0f, floorf(chunk.h * 0.2f))};
+                batch_quad(renderer, (SDL_Color){236, 224, 206, 255}, &streak);
+            }
+        }
+        break;
+    }
+    case ITEM_RAW_HIDE_SMALL:
+    case ITEM_RAW_HIDE_MEDIUM:
+    case ITEM_RAW_HIDE_LARGE: {
+        /* A skin lying flat, its legs spread, the pale flesh side up. */
+        float size = type == ITEM_RAW_HIDE_SMALL    ? 0.4f
+                     : type == ITEM_RAW_HIDE_MEDIUM ? 0.6f
+                                                    : 0.8f;
+        SDL_FRect skin = {tile->x + floorf(w * (0.5f - size * 0.5f)),
+                          tile->y + floorf(h * (0.55f - size * 0.35f)), floorf(w * size),
+                          floorf(h * size * 0.7f)};
+        fill_outlined(renderer, skin, (SDL_Color){214, 176, 150, 255});
+        float leg = SDL_max(1.0f, floorf(w * 0.05f));
+        for (int i = 0; i < 4; i++) {
+            float x = i % 2 == 0 ? skin.x : skin.x + skin.w;
+            float y = i < 2 ? skin.y : skin.y + skin.h;
+            batch_bar(renderer, (SDL_Color){150, 110, 84, 255}, x, y,
+                      x + (i % 2 == 0 ? -leg * 2.0f : leg * 2.0f),
+                      y + (i < 2 ? -leg * 2.0f : leg * 2.0f), leg);
+        }
+        break;
+    }
+    case ITEM_BONE: {
+        /* Two long bones crossed, their knobbed ends. */
+        float bone = SDL_max(1.0f, floorf(w * 0.07f));
+        SDL_Color white = {226, 218, 196, 255};
+        batch_bar(renderer, white, tile->x + w * 0.2f, tile->y + h * 0.4f, tile->x + w * 0.8f,
+                  tile->y + h * 0.7f, bone);
+        batch_bar(renderer, white, tile->x + w * 0.25f, tile->y + h * 0.72f, tile->x + w * 0.75f,
+                  tile->y + h * 0.42f, bone);
+        break;
+    }
+    case ITEM_SINEW: {
+        /* Pale strands bundled. */
+        float strand = SDL_max(1.0f, floorf(h * 0.05f));
+        for (int i = 0; i < 3; i++) {
+            float y = tile->y + floorf(h * (0.46f + 0.07f * (float)i));
+            batch_bar(renderer, (SDL_Color){224, 210, 176, 255}, tile->x + floorf(w * 0.18f), y,
+                      tile->x + floorf(w * 0.82f), y + (float)(i - 1), strand);
+        }
+        break;
+    }
     case ITEM_WOOD: {
         /* Three logs. */
         float log_h = SDL_max(1.0f, floorf(h * 0.16f));

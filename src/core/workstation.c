@@ -25,6 +25,14 @@ static const WorkstationDef WORKSTATION_DEFS[WORKSTATION_TYPE_COUNT] = {
                                  KNOWLEDGE_BASIC_SHELTERS,
                                  50.0f,
                                  .hearth = true},
+    /* A spot cleared and a flat stone laid to cut on (docs/KNOWLEDGE.md §9.4). */
+    [WORKSTATION_BUTCHERING_SPOT] = {"butchering_spot",
+                                     N_("workstation.butchering_spot"),
+                                     N_("workstation.butchering_spot.description"),
+                                     {{ITEM_NONE, 0}, {ITEM_NONE, 0}},
+                                     250.0f,
+                                     KNOWLEDGE_BUTCHERING,
+                                     50.0f},
 };
 
 const WorkstationDef *workstation_def(WorkstationType type)

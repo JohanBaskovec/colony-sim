@@ -115,6 +115,16 @@ typedef enum ItemType {
     ITEM_BRAMBLE_CANES,  /* A bundle of long bramble canes, thorns and all. */
     ITEM_SPLIT_CANES,    /* Canes stripped of their thorns and split in four: binding. */
     ITEM_COILED_BASKET,  /* Coils of grass bound with split cane: slow to make, very strong. */
+    /* Butchering (docs/KNOWLEDGE.md §9): what a carcass is cut into. */
+    ITEM_RAW_MEAT,        /* A portion of half a kilo, eaten raw at a cost to the mood. */
+    ITEM_ROASTED_MEAT,    /* The same, roasted at a hearth. */
+    ITEM_FAT,             /* A quarter kilo of fat: rich food, later lamps. */
+    ITEM_MARROW,          /* Cracked out of bones. */
+    ITEM_RAW_HIDE_SMALL,  /* A hare's or a fox's skin, rotting until it is worked. */
+    ITEM_RAW_HIDE_MEDIUM, /* A deer's, a boar's or a wolf's. */
+    ITEM_RAW_HIDE_LARGE,  /* An aurochs' or a horse's (none yet). */
+    ITEM_BONE,
+    ITEM_SINEW, /* Tendons, kept for cord and sewing. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,

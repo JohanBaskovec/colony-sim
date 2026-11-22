@@ -25,6 +25,7 @@
 
 #define CRAFTING_SPOT WORKSTATION_BIT(WORKSTATION_CRAFTING_SPOT)
 #define OPEN_HEARTH WORKSTATION_BIT(WORKSTATION_OPEN_HEARTH)
+#define BUTCHERING_SPOT WORKSTATION_BIT(WORKSTATION_BUTCHERING_SPOT)
 /* Knapping is done with a plain cobble as a hammer. */
 #define HAMMER                                                                                     \
     {                                                                                              \
@@ -448,10 +449,56 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
     [RECIPE_MEND_COILED_BASKET] =
         MEND("mend_coiled_basket", N_("recipe.mend_coiled_basket"), ITEM_COILED_BASKET,
              ITEM_SPLIT_CANES, ITEM_NONE, 1, ITEM_WANT_WET, ITEM_FLINT_BORER, ITEM_FLAKE, 5000.0f),
+    /* A carcass skinned and cut up with a flake (an axe or a chopper for the joints):
+     * 40 ticks a kilogram, a red deer about 1.8 h (docs/KNOWLEDGE.md §9.2). */
+    [RECIPE_BUTCHER] = {.id = "butcher",
+                        .name_key = N_("recipe.butcher"),
+                        .stations = BUTCHERING_SPOT,
+                        .ingredients = {{{ITEM_ROE_DEER_CARCASS, ITEM_RED_DEER_CARCASS,
+                                          ITEM_BOAR_CARCASS, ITEM_HARE_CARCASS, ITEM_WOLF_CARCASS,
+                                          ITEM_FOX_CARCASS},
+                                         1,
+                                         ITEM_WANT_ANY}},
+                        .input_min_quality = ITEM_QUALITY_WORST,
+                        .tools = {{ITEM_FLAKE, ITEM_HAND_AXE, ITEM_CHOPPER}},
+                        .work = 40.0f,
+                        .knowledge = KNOWLEDGE_BUTCHERING,
+                        .min_level = 50.0f,
+                        .product = ITEM_RAW_MEAT,
+                        .dirt = 10, /* Blood and offal. */
+                        .tool_use = TOOL_USE_BUTCHERING,
+                        .butchers = true},
+    /* Two bones cracked on a stone with a cobble: 0.1 h. */
+    [RECIPE_CRACK_BONES] = {.id = "crack_bones",
+                            .name_key = N_("recipe.crack_bones"),
+                            .stations = BUTCHERING_SPOT,
+                            .ingredients = {{{ITEM_BONE, ITEM_NONE}, 2, ITEM_WANT_ANY}},
+                            .input_min_quality = ITEM_QUALITY_WORST,
+                            .tools = {HAMMER},
+                            .work = 250.0f,
+                            .knowledge = KNOWLEDGE_BUTCHERING,
+                            .min_level = 50.0f,
+                            .product = ITEM_MARROW,
+                            .dirt = 2,
+                            .tool_use = TOOL_USE_NONE},
+    /* Two portions roasted on the embers: 0.1 h. */
+    [RECIPE_ROAST_MEAT] = {.id = "roast_meat",
+                           .name_key = N_("recipe.roast_meat"),
+                           .stations = OPEN_HEARTH,
+                           .ingredients = {{{ITEM_RAW_MEAT, ITEM_NONE}, 2, ITEM_WANT_ANY}},
+                           .input_min_quality = ITEM_QUALITY_WORST,
+                           .tools = {{ITEM_NONE}},
+                           .work = 250.0f,
+                           .knowledge = KNOWLEDGE_FIRE,
+                           .min_level = 50.0f,
+                           .product = ITEM_ROASTED_MEAT,
+                           .dirt = 0,
+                           .tool_use = TOOL_USE_NONE},
 };
 
 #undef CRAFTING_SPOT
 #undef OPEN_HEARTH
+#undef BUTCHERING_SPOT
 #undef HAMMER
 #undef CUTTING_TOOL
 #undef MEND
@@ -626,6 +673,12 @@ float recipe_work_factor(RecipeType recipe, const ItemStack inputs[RECIPE_INGRED
     if (recipe_def(recipe) == NULL || inputs[0].count <= 0 || main == NULL) {
         return 1.0f;
     }
+    if (recipe_def(recipe)->butchers) { /* `work` a kilogram of carcass. */
+        ItemStack one = inputs[0];
+        one.count = 1;
+        float kg = item_stack_mass(one);
+        return kg > 0.0f ? 1.0f / kg : 1.0f;
+    }
     if (main->craft_work_factor > 0.0f) { /* Osier rods: woven faster. */
         return 1.0f / main->craft_work_factor;
     }
@@ -694,7 +747,8 @@ static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack inp
             item_hit_points_at_percent(def->product, item_stack_hit_points_percent(input)));
         return 1;
     case RECIPE_ROAST_RHIZOMES:
-    case RECIPE_ROAST_CARROTS: {
+    case RECIPE_ROAST_CARROTS:
+    case RECIPE_ROAST_MEAT: {
         /* One roasted root per raw one, keeping no longer than the raw ones
          * would have (as long, though: a root about to rot does not rot
          * sooner for being roasted). */
@@ -715,6 +769,56 @@ static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack inp
     }
 }
 
+float recipe_butcher_efficiency(double level)
+{
+    return clampf(0.7f + 0.006f * (float)(level - 50.0), 0.7f, 1.0f);
+}
+
+/* `kg` of a product of `type` at `level`, its hit points the carcass's share of its own. */
+static int butcher_product(ItemType type, float kg, float condition, double level, Rng *rng,
+                           ItemStack *out)
+{
+    int count = (int)lroundf(kg / item_def(type)->weight);
+    if (count <= 0) {
+        return 0;
+    }
+    *out = knowledge_product(type, count, level, rng);
+    int hit_points = (int)lroundf((float)out->hit_points * condition);
+    out->hit_points = (uint16_t)(hit_points > 1 ? hit_points : 1);
+    return 1;
+}
+
+/* A carcass cut up (docs/KNOWLEDGE.md §9.3): meat, fat, a hide (if not eaten away), bones and
+ * sinew, by the weight left and the butcher's efficiency; its rot passes to them. */
+static int butcher_products(ItemStack carcass, double level, Rng *rng,
+                            ItemStack out[RECIPE_PRODUCT_MAX])
+{
+    const ItemDef *def = item_def((ItemType)carcass.type);
+    if (def == NULL || carcass.count <= 0) {
+        return 0;
+    }
+    ItemStack one = carcass;
+    one.count = 1;
+    float yield = item_stack_mass(one) * recipe_butcher_efficiency(level);
+    float condition = clampf((float)carcass.hit_points / (float)def->max_hit_points, 0.0f, 1.0f);
+    int count = 0;
+    count += butcher_product(ITEM_RAW_MEAT, yield * BUTCHER_MEAT_SHARE, condition, level, rng,
+                             &out[count]);
+    count +=
+        butcher_product(ITEM_FAT, yield * BUTCHER_FAT_SHARE, condition, level, rng, &out[count]);
+    if ((float)carcass.eaten < BUTCHER_HIDE_EATEN_MAX * (float)ITEM_EATEN_FULL) {
+        ItemType hide = def->weight < BUTCHER_HIDE_SMALL_BELOW_KG    ? ITEM_RAW_HIDE_SMALL
+                        : def->weight < BUTCHER_HIDE_MEDIUM_BELOW_KG ? ITEM_RAW_HIDE_MEDIUM
+                                                                     : ITEM_RAW_HIDE_LARGE;
+        count += butcher_product(hide, item_def(hide)->weight, condition, level, rng, &out[count]);
+    }
+    count +=
+        butcher_product(ITEM_BONE, yield * BUTCHER_BONE_SHARE, condition, level, rng, &out[count]);
+    count += butcher_product(ITEM_SINEW, yield * BUTCHER_SINEW_SHARE, condition, level, rng,
+                             &out[count]);
+    return count;
+}
+
 /* The species of the first wooden ingredient (0 when none is wooden). */
 static WoodMask ingredient_woods(const ItemStack inputs[RECIPE_INGREDIENT_MAX])
 {
@@ -733,6 +837,9 @@ int recipe_craft_with(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIEN
     const RecipeDef *def = recipe_def(recipe);
     if (def == NULL) {
         return 0;
+    }
+    if (def->butchers) {
+        return butcher_products(inputs[0], level, rng, out);
     }
     if (def->mends) { /* The same item, made whole again. */
         const ItemDef *mended = item_def((ItemType)inputs[0].type);

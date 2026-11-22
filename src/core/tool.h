@@ -30,6 +30,7 @@ typedef enum ToolUse {
     TOOL_USE_PIERCING,     /* Piercing bark to sew it. */
     TOOL_USE_PEELING,      /* Peeling bark off a tree. */
     TOOL_USE_CUTTING_RODS, /* Cutting rods and poles at the stool. */
+    TOOL_USE_BUTCHERING,   /* Skinning and cutting up a carcass. */
     TOOL_USE_COUNT
 } ToolUse;
 

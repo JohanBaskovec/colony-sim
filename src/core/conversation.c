@@ -28,6 +28,10 @@ static const char *const FOOD_KEYS[ITEM_TYPE_COUNT] = {
     [ITEM_CHESTNUTS] = N_("topic.food.chestnuts"),
     [ITEM_APPLES] = N_("topic.food.apples"),
     [ITEM_PEARS] = N_("topic.food.pears"),
+    [ITEM_RAW_MEAT] = N_("topic.food.raw_meat"),
+    [ITEM_ROASTED_MEAT] = N_("topic.food.roasted_meat"),
+    [ITEM_FAT] = N_("topic.food.fat"),
+    [ITEM_MARROW] = N_("topic.food.marrow"),
 };
 
 static const char *const WEATHER_KEYS[JOURNAL_WEATHER_SNOW + 1] = {

@@ -66,6 +66,8 @@ static const ThoughtDef THOUGHT_DEFS[THOUGHT_COUNT] = {
                                    N_("thought.cooked_meal.description"), 4.0f, 2.0f, 4.0f, 1),
     [THOUGHT_SPOILED_FOOD] = MEMORY("spoiled_food", N_("thought.spoiled_food"),
                                     N_("thought.spoiled_food.description"), -6.0f, 2.0f, 4.0f, 1),
+    [THOUGHT_RAW_MEAT] = MEMORY("raw_meat", N_("thought.raw_meat"),
+                                N_("thought.raw_meat.description"), -4.0f, 2.0f, 4.0f, 1),
     [THOUGHT_WARMED_BY_FIRE] =
         MEMORY("warmed_by_fire", N_("thought.warmed_by_fire"),
                N_("thought.warmed_by_fire.description"), 4.0f, 1.0f, 2.0f, 1),
@@ -123,6 +125,7 @@ static const char *const JOURNAL_KEYS[THOUGHT_COUNT] = {
     [THOUGHT_SAME_FOOD] = N_("thought.same_food.journal"),
     [THOUGHT_COOKED_MEAL] = N_("thought.cooked_meal.journal"),
     [THOUGHT_SPOILED_FOOD] = N_("thought.spoiled_food.journal"),
+    [THOUGHT_RAW_MEAT] = N_("thought.raw_meat.journal"),
     [THOUGHT_WARMED_BY_FIRE] = N_("thought.warmed_by_fire.journal"),
     [THOUGHT_FIRESIDE_STORY] = N_("thought.fireside_story.journal"),
     [THOUGHT_CHAT] = N_("thought.chat.journal"),
@@ -361,7 +364,8 @@ void mood_advance(Mood *mood, int ticks)
 
 bool mood_food_cooked(ItemType type)
 {
-    return type == ITEM_ROASTED_RHIZOMES || type == ITEM_ROASTED_CARROTS;
+    return type == ITEM_ROASTED_RHIZOMES || type == ITEM_ROASTED_CARROTS ||
+           type == ITEM_ROASTED_MEAT;
 }
 
 void mood_meal(Mood *mood, ItemType type, int hit_points_percent)
@@ -379,6 +383,9 @@ void mood_meal(Mood *mood, ItemType type, int hit_points_percent)
     }
     if (hit_points_percent < MOOD_SPOILED_PERCENT) {
         mood_remember(mood, THOUGHT_SPOILED_FOOD);
+    }
+    if (type == ITEM_RAW_MEAT) {
+        mood_remember(mood, THOUGHT_RAW_MEAT);
     }
     /* Kinds among the meals remembered. */
     int kinds = 0;

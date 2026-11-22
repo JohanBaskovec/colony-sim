@@ -343,6 +343,75 @@ static void test_coiled_basket(void)
           2 * item_def(ITEM_FRAME_BASKET)->max_hit_points);
 }
 
+/* Butchering (docs/KNOWLEDGE.md §9.3): a carcass gives shares of its weight left, times the
+ * butcher's efficiency (0.7 at 50, 1 at 100): meat 45 %, fat 5 %, one hide, bones 15 %, sinew
+ * 0.5 %; a carcass eaten half away has no hide left; its rot passes to what it gives. The work is
+ * 40 ticks a kilogram. */
+static void test_butchering(void)
+{
+    const RecipeDef *def = recipe_def(RECIPE_BUTCHER);
+    CHECK(def->butchers && def->stations == WORKSTATION_BIT(WORKSTATION_BUTCHERING_SPOT));
+    CHECK(recipe_accepts_ingredient(RECIPE_BUTCHER, 0, item_stack_pristine(ITEM_HARE_CARCASS, 1)));
+    CHECK(recipe_accepts_ingredient(RECIPE_BUTCHER, 0, item_stack_pristine(ITEM_WOLF_CARCASS, 1)));
+    CHECK(!recipe_accepts_ingredient(RECIPE_BUTCHER, 0, item_stack_pristine(ITEM_SETTLER_BODY, 1)));
+    CHECK_NEAR(recipe_butcher_efficiency(50.0), 0.7, 1e-6);
+    CHECK_NEAR(recipe_butcher_efficiency(100.0), 1.0, 1e-6);
+
+    ItemStack deer[RECIPE_INGREDIENT_MAX] = {item_stack_pristine(ITEM_RED_DEER_CARCASS, 1)};
+    float kg = item_def(ITEM_RED_DEER_CARCASS)->weight;
+    CHECK_NEAR(recipe_work_factor(RECIPE_BUTCHER, deer) * def->work * kg, def->work, 1e-3);
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    int count = recipe_craft_with(RECIPE_BUTCHER, deer, item_stack_make(ITEM_FLAKE, 1, 60, 0),
+                                  100.0, NULL, out);
+    REQUIRE(count == 5);
+    CHECK_EQ_INT(out[0].type, ITEM_RAW_MEAT);
+    CHECK_EQ_INT(out[0].count, (int)lroundf(kg * 0.45f / 0.5f));
+    CHECK_EQ_INT(out[1].type, ITEM_FAT);
+    CHECK_EQ_INT(out[1].count, (int)lroundf(kg * 0.05f / 0.25f));
+    CHECK_EQ_INT(out[2].type, ITEM_RAW_HIDE_MEDIUM);
+    CHECK_EQ_INT(out[2].count, 1);
+    CHECK_EQ_INT(out[3].type, ITEM_BONE);
+    CHECK_EQ_INT(out[3].count, (int)lroundf(kg * 0.15f));
+    CHECK_EQ_INT(out[4].type, ITEM_SINEW);
+    CHECK_EQ_INT(out[4].count, (int)lroundf(kg * 0.005f / 0.1f));
+    /* A beginner gets less out of it. */
+    ItemStack less[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_BUTCHER, deer, item_stack_make(ITEM_FLAKE, 1, 60, 0), 50.0,
+                              NULL, less) == 5);
+    CHECK_EQ_INT(less[0].count, (int)lroundf(kg * 0.7f * 0.45f / 0.5f));
+    /* Half eaten by the wolves, and rotting: half of it, no hide, worn products. */
+    ItemStack eaten = item_stack_make(ITEM_RED_DEER_CARCASS, 1, 0, 50);
+    eaten.eaten = ITEM_EATEN_FULL / 2;
+    ItemStack left[RECIPE_INGREDIENT_MAX] = {eaten};
+    REQUIRE(recipe_craft_with(RECIPE_BUTCHER, left, item_stack_make(ITEM_FLAKE, 1, 60, 0), 100.0,
+                              NULL, out) == 4);
+    CHECK_EQ_INT(out[0].count, (int)lroundf(kg * 0.5f * 0.45f / 0.5f));
+    for (int i = 0; i < 4; i++) {
+        CHECK(out[i].type != ITEM_RAW_HIDE_MEDIUM);
+    }
+    CHECK(out[0].hit_points <= (item_def(ITEM_RAW_MEAT)->max_hit_points + 1) / 2);
+    /* A hare: a small hide, a few portions. */
+    ItemStack hare[RECIPE_INGREDIENT_MAX] = {item_stack_pristine(ITEM_HARE_CARCASS, 1)};
+    count = recipe_craft_with(RECIPE_BUTCHER, hare, item_stack_make(ITEM_FLAKE, 1, 60, 0), 75.0,
+                              NULL, out);
+    bool small = false;
+    for (int i = 0; i < count; i++) {
+        small |= out[i].type == ITEM_RAW_HIDE_SMALL;
+    }
+    CHECK(small);
+    /* Bones cracked for marrow, meat roasted. */
+    ItemStack bones[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_BONE, 2, 50, 200)};
+    REQUIRE(recipe_craft_with(RECIPE_CRACK_BONES, bones, item_stack_make(ITEM_COBBLE, 1, 50, 200),
+                              75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_MARROW);
+    ItemStack meat[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_RAW_MEAT, 2, 50, 10)};
+    REQUIRE(recipe_craft_with(RECIPE_ROAST_MEAT, meat, (ItemStack){.type = ITEM_NONE}, 75.0, NULL,
+                              out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_ROASTED_MEAT);
+    CHECK_EQ_INT(out[0].count, 2);
+    CHECK(item_def(ITEM_ROASTED_MEAT)->nutrition > item_def(ITEM_RAW_MEAT)->nutrition);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -486,6 +555,7 @@ int main(void)
     RUN_TEST(test_mending_containers);
     RUN_TEST(test_plaited_mat);
     RUN_TEST(test_coiled_basket);
+    RUN_TEST(test_butchering);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

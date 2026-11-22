@@ -857,6 +857,23 @@ digging sticks and spears.
 bones and sinew: the materials of the next knowledges (skin working, bone
 working, sewing).*
 
+*As built*: the items of §9.1 (raw meat portions of 0.5 kg, nutrition 0.15,
+rotting in 3 days; roasted meat 0.4 kg, 0.2, 5 days; fat; marrow; three raw
+hides rotting in 5 days; bones that do not rot; sinew rotting in 10 days),
+the **butchering spot** (one tile, no material, 250 ticks, Butchering 50: §9.4's
+2 × 2 footprint and the smell wait), **Butcher a carcass** (`RecipeDef.butchers`:
+any carcass, `RECIPE_INPUT_ALTERNATIVES` raised to 6; a flake, a hand axe or a
+chopper, `TOOL_USE_BUTCHERING`; 40 ticks a kilogram of the carcass's weight
+left, `recipe_work_factor()`; products as §9.3 from the weight left, no hide
+past half eaten, their hit points the carcass's share of its own; dirt 10:
+blood and offal), **Crack bones** (two bones, a cobble: marrow) and **Roast
+meat** (two portions at an open hearth, Fire 50: as many roasted, a cooked
+meal). Eating raw meat leaves a memory, *Ate raw meat* (−4). The fat's season,
+butchering in the field, carcasses of 600 kg, disease and scavengers drawn
+by the spot wait for their systems. Settlers bring carcasses as any bill's
+ingredient (within its radius); hunting by settlers is a roadmap step of its
+own (wolves leave carcasses). `SAVE_VERSION` 21.
+
 ### 9.1 Items
 
 | id                  | Name             | Category        | kg   | Bulk | Stack | HP  | Quality | Damageable | Notes |

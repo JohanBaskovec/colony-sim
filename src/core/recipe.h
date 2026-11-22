@@ -60,16 +60,20 @@ typedef enum RecipeType {
     RECIPE_MEND_BARK_BOX,
     RECIPE_MEND_NET_BAG,
     RECIPE_MEND_COILED_BASKET,
+    /* Butchering (docs/KNOWLEDGE.md §9.2). */
+    RECIPE_BUTCHER,     /* A carcass cut into meat, fat, a hide, bones and sinew. */
+    RECIPE_CRACK_BONES, /* Bones cracked with a cobble for their marrow. */
+    RECIPE_ROAST_MEAT,  /* Raw meat roasted at a hearth. */
     RECIPE_COUNT
 } RecipeType;
 
-#define RECIPE_INPUT_ALTERNATIVES 2
+#define RECIPE_INPUT_ALTERNATIVES 6
 #define RECIPE_INGREDIENT_MAX 3
 /* Types a tool set may hold. */
-#define RECIPE_TOOL_ALTERNATIVES 2
+#define RECIPE_TOOL_ALTERNATIVES 3
 #define RECIPE_TOOL_MAX 2
 /* Most stacks one craft gives (a hand axe and its flakes). */
-#define RECIPE_PRODUCT_MAX 2
+#define RECIPE_PRODUCT_MAX 6
 
 /* One kind of ingredient: `count` items of one of its types (one type per
  * craft), as moist as `moisture` asks. */
@@ -110,7 +114,25 @@ typedef struct RecipeDef {
      * others: the product is that item, its hit points whole again, its
      * quality kept (docs/CONTAINERS.md §11). */
     bool mends;
+    /* Cuts up a carcass (its first ingredient): the products follow its
+     * weight left and the butcher's level (docs/KNOWLEDGE.md §9.3), the work
+     * is `work` per kilogram (recipe_work_factor()). */
+    bool butchers;
 } RecipeDef;
+
+/* What butchering a carcass gives (docs/KNOWLEDGE.md §9.3): shares of its
+ * weight left times the butcher's efficiency (recipe_butcher_efficiency()). */
+#define BUTCHER_MEAT_SHARE 0.45f
+#define BUTCHER_FAT_SHARE 0.05f
+#define BUTCHER_BONE_SHARE 0.15f
+#define BUTCHER_SINEW_SHARE 0.005f
+#define BUTCHER_HIDE_SMALL_BELOW_KG 10.0f
+#define BUTCHER_HIDE_MEDIUM_BELOW_KG 200.0f
+/* A carcass eaten past this share has no hide left worth taking. */
+#define BUTCHER_HIDE_EATEN_MAX 0.5f
+
+/* The share of a carcass a butcher at `level` gets out of it: 0.7 at 50 up to 1 at 100. */
+float recipe_butcher_efficiency(double level);
 
 /* NULL when out of range. */
 const RecipeDef *recipe_def(RecipeType recipe);

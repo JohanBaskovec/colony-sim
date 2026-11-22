@@ -52,6 +52,11 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
          N_("tool_use.cutting_rods"),
          0.0f,
          {[ITEM_CHOPPER] = 0.9f, [ITEM_FLAKE] = 0.6f, [ITEM_HAND_AXE] = 1.0f}},
+    /* A sharp flake skins and cuts best; the axe and the chopper break the joints. */
+    [TOOL_USE_BUTCHERING] = {"butchering",
+                             N_("tool_use.butchering"),
+                             0.0f,
+                             {[ITEM_CHOPPER] = 0.8f, [ITEM_FLAKE] = 1.0f, [ITEM_HAND_AXE] = 0.9f}},
 };
 
 /* Speed factor of a tool of the worst and of the best quality, linear in

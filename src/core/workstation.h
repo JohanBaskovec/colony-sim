@@ -39,6 +39,7 @@
 typedef enum WorkstationType {
     WORKSTATION_CRAFTING_SPOT,
     WORKSTATION_OPEN_HEARTH,
+    WORKSTATION_BUTCHERING_SPOT, /* A cleared spot with a flat stone: carcasses cut up. */
     WORKSTATION_TYPE_COUNT
 } WorkstationType;
 
