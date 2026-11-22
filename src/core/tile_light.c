@@ -437,7 +437,8 @@ void tile_light_noon_on(TileLight *light, const Map *map, int day, const size_t 
         prepare_sun(light, sun);
         for (size_t i = 0; i < count; i++) {
             size_t index = tiles[i];
-            if (index < light->count && light->open[index] > 0 &&
+            /* Already all in the sun: no other sun lights it more. */
+            if (out[i] < 1.0f && index < light->count && light->open[index] > 0 &&
                 tile_light_has_surface(map, index)) {
                 out[i] = fmaxf(out[i], tile_direct(light, map, sun, index));
             }

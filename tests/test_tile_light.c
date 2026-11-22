@@ -303,6 +303,47 @@ static void test_noon_on_another_day(void)
     map_free(&map);
 }
 
+/* On a generated world (relief, crowns, shade), the noon of the day the light
+ * was worked out is what `noon` holds, tile by tile: a tile all in the sun
+ * at one noon sun is not worked out again for the other. */
+static void test_noon_on_a_generated_world(void)
+{
+    WorldGenParams params;
+    worldgen_default_params(&params);
+    params.seed = 42;
+    params.width = 64;
+    params.height = 64;
+    Map map;
+    REQUIRE(worldgen_generate(&map, &params));
+    TileLight light;
+    REQUIRE(tile_light_init(&light, &map, SUMMER_NOON));
+    size_t count = (size_t)map.width * (size_t)map.height;
+    static size_t tiles[64 * 64];
+    static float noon[64 * 64];
+    for (int y = 0; y < map.height; y++) {
+        for (int x = 0; x < map.width; x++) {
+            tiles[(size_t)y * (size_t)map.width + (size_t)x] =
+                map_index(&map, x, y, map_ground_level(&map, x, y));
+        }
+    }
+    tile_light_noon_on(&light, &map, MIDSUMMER, tiles, count, noon);
+    int full = 0, shaded = 0, wrong = 0;
+    for (size_t i = 0; i < count; i++) {
+        int x, y, z;
+        map_tile_of(&map, tiles[i], &x, &y, &z);
+        if (fabsf(noon[i] - tile_light_noon(&light, x, y, z)) > 1.0f / 255.0f) {
+            wrong++;
+        }
+        full += noon[i] >= 1.0f;
+        shaded += noon[i] > 0.0f && noon[i] < 1.0f;
+    }
+    CHECK_EQ_INT(wrong, 0);
+    CHECK(full > 0);   /* In the open... */
+    CHECK(shaded > 0); /* ...and under the crowns. */
+    tile_light_free(&light);
+    map_free(&map);
+}
+
 int main(void)
 {
     RUN_TEST(test_short_rays_change_nothing);
@@ -312,5 +353,6 @@ int main(void)
     RUN_TEST(test_foliage_waits);
     RUN_TEST(test_sun_hours);
     RUN_TEST(test_noon_on_another_day);
+    RUN_TEST(test_noon_on_a_generated_world);
     return test_summary();
 }
