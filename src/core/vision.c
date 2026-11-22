@@ -117,6 +117,38 @@ void vision_free(Vision *vision)
 /* Columns the slow sweep checks per call. */
 #define SWEEP_COLUMNS 256
 
+/* refresh_column() for `count` (at most SWEEP_COLUMNS) columns that follow
+ * each other from the column `first`: a level after another from the top,
+ * each read in one stretch of memory rather than a tile per level. */
+static void refresh_run(Vision *vision, const Map *map, size_t first, int count)
+{
+    uint8_t tops[SWEEP_COLUMNS] = {0}; /* 0: no tracked tile found yet. */
+    size_t level = map_level_tile_count(map);
+    bool missing = true;
+    for (int z = map->depth - 1; z >= 0 && missing; z--) {
+        size_t base = (size_t)z * level + first;
+        const uint8_t *rock = map->rock + base, *terrain = map->terrain + base;
+        const uint8_t *structure = map->structure + base;
+        const uint16_t *water = map->water + base;
+        uint8_t here = (uint8_t)(z + 1);
+        uint8_t none = 0;
+        /* tracked_at() with no branch: the compiler does it many tiles at once. */
+        for (int i = 0; i < count; i++) {
+            bool tracked = (rock[i] | (terrain[i] ^ TERRAIN_OPEN) | structure[i] | water[i]) != 0;
+            uint8_t top = tops[i] != 0 ? tops[i] : (tracked ? here : 0);
+            tops[i] = top;
+            none |= (uint8_t)(top == 0);
+        }
+        missing = none != 0;
+    }
+    for (int i = 0; i < count; i++) {
+        vision->column_top[first + (size_t)i] = tops[i];
+        if (tops[i] > vision->top_level) {
+            vision->top_level = tops[i];
+        }
+    }
+}
+
 void vision_limit_casts(Vision *vision, bool limited)
 {
     vision->limited = limited;
@@ -161,10 +193,13 @@ void vision_update_map(Vision *vision, const Map *map)
     }
     /* What the logs miss (thin foliage coming and going): a slow sweep. */
     int columns = map->width * map->height;
-    for (int n = 0; n < SWEEP_COLUMNS && columns > 0; n++) {
-        int column = vision->sweep_column;
-        refresh_column(vision, map, column % map->width, column / map->width);
-        vision->sweep_column = column + 1 >= columns ? 0 : column + 1;
+    int left = columns > 0 ? SWEEP_COLUMNS : 0; /* Round a small map more than once. */
+    while (left > 0) {
+        int first = vision->sweep_column;
+        int run = columns - first < left ? columns - first : left;
+        refresh_run(vision, map, (size_t)first, run);
+        left -= run;
+        vision->sweep_column = first + run >= columns ? 0 : first + run;
     }
 }
 
@@ -178,9 +213,8 @@ typedef struct OpenSet {
     int count;
 } OpenSet;
 
-/* Takes [lo, hi] off the set when `block`; returns whether any of it was open
- * (a ray with such a slope reaches the tile). */
-static bool open_cut(OpenSet *set, float lo, float hi, bool block)
+/* open_cut() once [lo, hi] meets the span of the set. */
+static __attribute__((noinline)) bool open_cut_within(OpenSet *set, float lo, float hi, bool block)
 {
     bool hit = false;
     for (int i = 0; i < set->count; i++) {
@@ -219,6 +253,17 @@ static bool open_cut(OpenSet *set, float lo, float hi, bool block)
         }
     }
     return hit;
+}
+
+/* Takes [lo, hi] off the set when `block`; returns whether any of it was open
+ * (a ray with such a slope reaches the tile). The intervals are in order: one
+ * test for all of them most often, before the call. */
+static inline bool open_cut(OpenSet *set, float lo, float hi, bool block)
+{
+    if (set->count == 0 || hi <= set->lo[0] || lo >= set->hi[set->count - 1]) {
+        return false;
+    }
+    return open_cut_within(set, lo, hi, block);
 }
 
 /* Keeps only the slopes in [lo, hi]. */
@@ -279,17 +324,14 @@ static bool floor_blocks(uint8_t terrain)
  * any other when a ray reaches its floor (from above, or from below as a
  * ceiling): the floor is a plane at the bottom of the tile, which also stops
  * the ray when it is not thin foliage. What each hides is taken off the set. */
-static void look_at_tile(Cast *cast, OpenSet *set, size_t column, int z, float inv0, float inv1,
-                         int pass)
+static inline __attribute__((always_inline)) void look_at_solid(Cast *cast, OpenSet *set,
+                                                                size_t column, int z, size_t index,
+                                                                float inv0, float inv1, int pass)
 {
     const Map *map = cast->map;
-    size_t index = column + (size_t)z * cast->level_tiles;
     uint8_t rock = map->rock[index];
     uint8_t terrain = map->terrain[index];
     uint8_t structure = map->structure[index];
-    if (rock == 0 && terrain == TERRAIN_OPEN && structure == STRUCTURE_NONE) {
-        return; /* Open space. */
-    }
     bool own = column == cast->eye_column && z == cast->eye_level;
     bool solid = rock != 0 || (!own && (structure == STRUCTURE_WALL ||
                                         (structure == STRUCTURE_DOOR && map->doors[index] == 0)));
@@ -337,17 +379,29 @@ static void look_at_tile(Cast *cast, OpenSet *set, size_t column, int z, float i
     }
 }
 
-/* One column of a ray: distances t0 to t1 from the eye, along the ray. */
-static void look_at_column(Cast *cast, OpenSet *set, size_t column, float t0, float t1)
+/* look_at_solid() past open space, which has nothing to see nor hide (the
+ * test here, without a call: most of the tiles a ray goes by are open). */
+static inline void look_at_tile(Cast *cast, OpenSet *set, size_t column, int z, float inv0,
+                                float inv1, int pass)
+{
+    const Map *map = cast->map;
+    size_t index = column + (size_t)z * cast->level_tiles;
+    if (map->rock[index] == 0 && map->terrain[index] == TERRAIN_OPEN &&
+        map->structure[index] == STRUCTURE_NONE) {
+        return; /* Open space. */
+    }
+    look_at_solid(cast, set, column, z, index, inv0, inv1, pass);
+}
+
+/* One column of a ray: distances t0 to t1 from the eye, along the ray, and
+ * their inverses (inv0 from t0 no shorter than MIN_DISTANCE). */
+static void look_at_column(Cast *cast, OpenSet *set, size_t column, float t1, float inv0,
+                           float inv1)
 {
     int top = cast->vision->column_top[column];
     if (top == 0) {
         return;
     }
-    if (t0 < MIN_DISTANCE) {
-        t0 = MIN_DISTANCE;
-    }
-    float inv0 = 1.0f / t0, inv1 = 1.0f / t1;
     float highest = set->hi[set->count - 1], lowest = set->lo[0];
 
     if (highest >= 0.0f && top > cast->eye_level) {
@@ -391,25 +445,27 @@ static void cast_ray(Cast *cast, float ex, float ey, float tx, float ty)
     set.lo[0] = -SLOPE_INFINITY;
     set.hi[0] = SLOPE_INFINITY;
     float from = 0.0f;
+    float inv_from = 1.0f / MIN_DISTANCE; /* 1 / from, from no shorter than MIN_DISTANCE. */
     size_t width = (size_t)cast->vision->width;
     uint64_t steps = 0;
     for (;;) {
         float to = next_x < next_y ? next_x : next_y;
+        float inv = 1.0f / to; /* One division a step: the next column starts here. */
         if (to - from > MIN_STRETCH) {
             steps++;
-            look_at_column(cast, &set, (size_t)cy * width + (size_t)cx, from, to);
+            look_at_column(cast, &set, (size_t)cy * width + (size_t)cx, to, inv_from, inv);
             if (set.count == 0) {
                 break;
             }
             /* Nothing further can be seen above the highest tile, nor below
              * the lowest. */
-            float inv = 1.0f / to;
             open_clip(&set, -cast->eye_height * inv, (cast->max_height - cast->eye_height) * inv);
             if (set.count == 0) {
                 break;
             }
         }
         from = to;
+        inv_from = to < MIN_DISTANCE ? 1.0f / MIN_DISTANCE : inv;
         if (next_x < next_y) {
             cx += step_x;
             next_x += delta_x;

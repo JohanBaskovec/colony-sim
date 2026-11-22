@@ -481,6 +481,49 @@ static void test_map_changes(void)
     scene_free(&scene);
 }
 
+/* What the logs miss (thin foliage coming and going, written straight into
+ * the layers here): the slow sweep finds it, a few columns a call, going
+ * round the map (3600 columns: not a whole number of sweeps). Once round, the
+ * tops are what a fresh start works out. */
+static void test_sweep_finds_what_the_logs_miss(void)
+{
+    Scene scene;
+    REQUIRE(scene_init(&scene, 60, 60, 8));
+    for (int i = 0; i < 40; i++) {
+        put_rock(&scene, (i * 17) % 60, (i * 23) % 60, (i * 5) % 7);
+    }
+    REQUIRE(scene_start(&scene));
+    Map *map = &scene.map;
+    /* Crowns over the ground, water over a drop, rock taken away, a wall:
+     * none of it logged. */
+    for (int i = 0; i < 60; i++) {
+        size_t index = map_index(map, (i * 7) % 60, (i * 11) % 60, 3 + i % 5);
+        map->terrain[index] = i % 2 == 0 ? TERRAIN_FOLIAGE_SPARSE : TERRAIN_FOLIAGE_MEDIUM;
+    }
+    map->water[map_index(map, 59, 59, 6)] = 500; /* The last column of the map. */
+    map->water[map_index(map, 0, 0, 7)] = 500;   /* The first one. */
+    for (int i = 0; i < 40; i += 3) {
+        map->rock[map_index(map, (i * 17) % 60, (i * 23) % 60, (i * 5) % 7)] = ROCK_NONE;
+    }
+    map->structure[map_index(map, 30, 30, 5)] = STRUCTURE_WALL;
+    int columns = map->width * map->height;
+    for (int call = 0; call <= columns / 256 + 1; call++) {
+        vision_update_map(&scene.vision, map);
+    }
+    Vision fresh;
+    REQUIRE(vision_init(&fresh, map));
+    int differ = 0;
+    for (int i = 0; i < columns; i++) {
+        differ += scene.vision.column_top[i] != fresh.column_top[i];
+    }
+    CHECK_EQ_INT(differ, 0);
+    CHECK_EQ_INT(fresh.column_top[columns - 1], 7);
+    CHECK_EQ_INT(fresh.column_top[0], 8);
+    CHECK_EQ_INT(scene.vision.top_level, fresh.top_level);
+    vision_free(&fresh);
+    scene_free(&scene);
+}
+
 /* In a game: settlers are viewers, tracking changes nothing of the simulation. */
 static void test_game_tracks_settlers(void)
 {
@@ -723,6 +766,7 @@ int main(void)
     RUN_TEST(test_counts_match_fields);
     RUN_TEST(test_limited_viewer);
     RUN_TEST(test_map_changes);
+    RUN_TEST(test_sweep_finds_what_the_logs_miss);
     RUN_TEST(test_game_tracks_settlers);
     RUN_TEST(test_matches_brute_force);
     return test_summary();
