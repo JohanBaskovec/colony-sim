@@ -99,7 +99,8 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                           .length_cm = 40, .form = ITEM_FORM_RIGID},
     [ITEM_BLACKBERRIES] = {DEF("blackberries", N_("item.blackberries"), ITEM_CATEGORY_FOOD, 0.3f,
                                1.0f, 0.05f, 10, true, true),
-                           .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 3.0f, FRUIT_WATER},
+                           .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 3.0f, .soft = true,
+                           FRUIT_WATER},
     /* Damageable: a cobble used as a hammer wears out. */
     [ITEM_COBBLE] = {DEF("cobble", N_("item.cobble"), ITEM_CATEGORY_RESOURCES, 1.0f, 1.5f, 0.0f,
                          200, true, true),
@@ -200,10 +201,11 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_WILD_STRAWBERRIES] = {DEF("wild_strawberries", N_("item.wild_strawberries"),
                                     ITEM_CATEGORY_FOOD, 0.2f, 0.4f, 0.017f, 5, true, true),
                                 .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 2.0f,
-                                FRUIT_WATER},
+                                .soft = true, FRUIT_WATER},
     [ITEM_BILBERRIES] = {DEF("bilberries", N_("item.bilberries"), ITEM_CATEGORY_FOOD, 0.3f, 0.5f,
                              0.045f, 10, true, true),
-                         .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 4.0f, FRUIT_WATER},
+                         .length_cm = 0, .form = ITEM_FORM_LOOSE, .rot_days = 4.0f, .soft = true,
+                         FRUIT_WATER},
     /* Dry, with seeds in them: they keep for months. */
     [ITEM_ROSE_HIPS] = {DEF("rose_hips", N_("item.rose_hips"), ITEM_CATEGORY_FOOD, 0.15f, 0.4f,
                             0.06f, 50, true, true),
@@ -324,6 +326,14 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                             0.0f, 35, true, true),
                         .length_cm = 15, .form = ITEM_FORM_LIMP, /* A hank wound up. */
                         WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    /* Looped with the fingers from about 40 m of cord (docs/CONTAINERS.md §7.1):
+     * slung by its strap, it holds about 10 litres of nuts, roots, stones; berries
+     * would be crushed through its mesh. Folded, it takes little room. */
+    [ITEM_NET_BAG] = {DEF("net_bag", N_("item.net_bag"), ITEM_CATEGORY_TOOLS, 0.1f, 2.0f, 0.0f, 50,
+                          true, true),
+                      .length_cm = 40, .form = ITEM_FORM_LIMP, .strap = true,
+                      .container_litres = 10.0f, .net = true,
+                      WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,
                             0.0f, 25, true, true),
                         .length_cm = 30, .form = ITEM_FORM_RIGID, .container_litres = 2.0f,

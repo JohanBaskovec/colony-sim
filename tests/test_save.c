@@ -372,7 +372,7 @@ static void test_serialized_structs_keep_their_size(void)
         size_t size;
         size_t expected;
     } SIZES[] = {
-        {"Game", sizeof(Game), 2738360},
+        {"Game", sizeof(Game), 2738416},
         {"AllowedAreas", sizeof(AllowedAreas), 672},
         {"AllowedArea", sizeof(AllowedArea), 40},
         {"Map", sizeof(Map), 1096},
@@ -390,12 +390,12 @@ static void test_serialized_structs_keep_their_size(void)
         {"GatherZone", sizeof(GatherZone), 280},
         {"GatherOrder", sizeof(GatherOrder), 8},
         {"GatherGroupOrder", sizeof(GatherGroupOrder), 6},
-        {"Items", sizeof(Items), 11376},
+        {"Items", sizeof(Items), 11392},
         {"Item", sizeof(Item), 40},
         {"ItemStack", sizeof(ItemStack), 32},
         {"ItemId", sizeof(ItemId), 8},
         {"ItemMaker", sizeof(ItemMaker), 40},
-        {"Crowns", sizeof(Crowns), 576},
+        {"Crowns", sizeof(Crowns), 584},
         {"CrownItem", sizeof(CrownItem), 16},
         {"Corpses", sizeof(Corpses), 16},
         {"Corpse", sizeof(Corpse), 8048},
@@ -422,7 +422,7 @@ static void test_serialized_structs_keep_their_size(void)
         {"TileLightSweep", sizeof(TileLightSweep), 40},
         {"Vision", sizeof(Vision), 2696},
         {"VisionViewer", sizeof(VisionViewer), 40},
-        {"KnownWorld", sizeof(KnownWorld), 21280},
+        {"KnownWorld", sizeof(KnownWorld), 21304},
         {"KnownStation", sizeof(KnownStation), 4},
         {"KnownAnimal", sizeof(KnownAnimal), 32},
         {"Weather", sizeof(Weather), 48},

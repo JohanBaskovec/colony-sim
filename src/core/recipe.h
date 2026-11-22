@@ -49,6 +49,7 @@ typedef enum RecipeType {
     RECIPE_LIME_BARK,      /* Fresh lime poles peeled of their bark. */
     RECIPE_LIME_BAST,      /* Retted lime bark parted into bast strips. */
     RECIPE_LIME_CORD,      /* Bast twisted into two hanks of cord. */
+    RECIPE_NET_BAG,        /* Cord looped with the fingers into a bag. */
     RECIPE_COUNT
 } RecipeType;
 

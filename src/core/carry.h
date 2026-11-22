@@ -32,9 +32,9 @@ typedef enum CarryPlace {
     /* On the back by its straps: a pack basket (ItemDef.on_back), nothing beside
      * it on the shoulders. */
     CARRY_BACK,
-    /* In a container carried in a hand or on the back (a basket, a tray: ItemDef.container_litres,
-     * docs/CONTAINERS.md §7.2): a place of its own, filled with what is left of
-     * the load once the body's places are; never a place of the body. */
+    /* In a container carried in a hand, slung or on the back (a basket, a tray:
+     * ItemDef.container_litres, docs/CONTAINERS.md §7.2): a place of its own, filled with what is
+     * left of the load once the body's places are; never a place of the body. */
     CARRY_IN_CONTAINER,
     CARRY_PLACE_COUNT
 } CarryPlace;
@@ -141,6 +141,10 @@ bool carry_place_takes(CarryPlace place, ItemType type);
  * cord, stones), not long nor heavy ones. */
 bool carry_is_container(ItemType type);
 bool carry_container_takes(ItemType type);
+
+/* Whether a container holds items of a type: what containers take
+ * (carry_container_takes()), and no soft fruit in a net (ItemDef.net, soft). */
+bool carry_container_holds(ItemType container, ItemType type);
 
 /*
  * Arranges `kept` (kept_count items, at most CARRY_KEPT_MAX) and up to

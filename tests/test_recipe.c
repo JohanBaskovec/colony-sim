@@ -262,6 +262,24 @@ static void test_osier_weaves_faster_and_finer(void)
     CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_FRAME_BASKET, osier, axe), 50 + 20 + 10);
 }
 
+/* The looped net bag (docs/CONTAINERS.md §7.1): 8 hanks of cord, nettle or lime, by hand. */
+static void test_net_bag(void)
+{
+    const RecipeIngredient *cord = recipe_ingredient(RECIPE_NET_BAG, 0);
+    REQUIRE(cord != NULL);
+    CHECK_EQ_INT(cord->count, 8);
+    CHECK_EQ_INT(cord->types[0], ITEM_NETTLE_CORD);
+    CHECK_EQ_INT(cord->types[1], ITEM_LIME_CORD);
+    CHECK_EQ_INT(recipe_def(RECIPE_NET_BAG)->knowledge, KNOWLEDGE_BASKETRY);
+    CHECK(!item_types_any(recipe_tool_types(recipe_def(RECIPE_NET_BAG), 0)));
+    ItemStack hanks[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_LIME_CORD, 8, 50, 0)};
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_NET_BAG, hanks, (ItemStack){.type = ITEM_NONE}, 75.0, NULL,
+                              out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_NET_BAG);
+    CHECK(item_def(ITEM_NET_BAG)->strap && item_def(ITEM_NET_BAG)->net);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -401,6 +419,7 @@ int main(void)
     RUN_TEST(test_rod_and_bark_containers);
     RUN_TEST(test_osier_weaves_faster_and_finer);
     RUN_TEST(test_lime_bast_chain);
+    RUN_TEST(test_net_bag);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

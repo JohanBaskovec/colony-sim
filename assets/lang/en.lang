@@ -387,6 +387,7 @@ item.lime_poles = Lime poles
 item.lime_bark = Lime bark
 item.lime_bast = Lime bast
 item.lime_cord = Lime bast cord
+item.net_bag = Net bag
 item.flint_borer = Flint borer
 item.bark_tray = Folded bark tray
 item.settler_body = Settler's body
@@ -979,6 +980,7 @@ recipe.pack_basket = Pack basket
 recipe.lime_bark = Peel lime poles
 recipe.lime_bast = Part lime bast
 recipe.lime_cord = Lime bast cord
+recipe.net_bag = Looped net bag
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted

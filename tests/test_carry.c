@@ -425,6 +425,29 @@ static void test_the_back(void)
           load_in(&arrangement, CARRY_SHOULDERS) == 0);
 }
 
+/* A net bag hangs slung by its strap (docs/CONTAINERS.md §7.2): ten litres of nuts beside full
+ * hands, but no berries, crushed through its mesh. */
+static void test_the_net_bag(void)
+{
+    CarryBody body = standard_body();
+    CHECK(carry_is_container(ITEM_NET_BAG));
+    CHECK(carry_container_holds(ITEM_NET_BAG, ITEM_HAZELNUTS));
+    CHECK(!carry_container_holds(ITEM_NET_BAG, ITEM_BLACKBERRIES));
+    CHECK(!carry_container_holds(ITEM_NET_BAG, ITEM_BILBERRIES));
+    CHECK(carry_container_holds(ITEM_CATTAIL_BASKET, ITEM_BLACKBERRIES));
+    CHECK(!carry_container_holds(ITEM_FLAKE, ITEM_HAZELNUTS));
+    ItemType net[1] = {ITEM_NET_BAG};
+    CarryArrangement arrangement;
+    int nuts = carry_arrange(&body, net, 1, ITEM_HAZELNUTS, 500, &arrangement);
+    CHECK_EQ_INT(kept_in(&arrangement, CARRY_SLUNG, ITEM_NET_BAG), 1);
+    CHECK(load_in(&arrangement, CARRY_IN_CONTAINER) > 0);
+    CHECK_EQ_INT(nuts, capacity(ITEM_HAZELNUTS) + load_in(&arrangement, CARRY_IN_CONTAINER));
+    CHECK_EQ_INT(carry_capacity(&body, net, 1, ITEM_BLACKBERRIES), capacity(ITEM_BLACKBERRIES));
+    /* With a basket in a hand too, the berries go in the basket only. */
+    ItemType both[2] = {ITEM_NET_BAG, ITEM_CATTAIL_BASKET};
+    CHECK_EQ_INT(carry_capacity(&body, both, 2, ITEM_BLACKBERRIES), 20);
+}
+
 int main(void)
 {
     RUN_TEST(test_the_table_of_capacities);
@@ -438,5 +461,6 @@ int main(void)
     RUN_TEST(test_strength);
     RUN_TEST(test_containers);
     RUN_TEST(test_the_back);
+    RUN_TEST(test_the_net_bag);
     return test_summary();
 }

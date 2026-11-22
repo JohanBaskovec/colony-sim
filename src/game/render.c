@@ -1805,6 +1805,23 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
+    case ITEM_NET_BAG: {
+        /* A limp bag of open mesh, its strap looped over it. */
+        float cord = SDL_max(1.0f, floorf(w * 0.035f));
+        float x0 = tile->x + w * 0.28f, x1 = tile->x + w * 0.72f;
+        float y0 = tile->y + h * 0.42f, y1 = tile->y + h * 0.8f;
+        for (int i = 0; i <= 4; i++) {
+            float t = (float)i / 4.0f;
+            batch_bar(renderer, NETTLE_CORD_COLOR, x0 + (x1 - x0) * t, y0,
+                      x0 + (x1 - x0) * (1.0f - t), y1, cord);
+        }
+        batch_bar(renderer, shade(NETTLE_CORD_COLOR, -20), x0, y0, x1, y0, cord);
+        batch_bar(renderer, shade(NETTLE_CORD_COLOR, -20), x0, y0, tile->x + w * 0.5f,
+                  tile->y + h * 0.2f, cord);
+        batch_bar(renderer, shade(NETTLE_CORD_COLOR, -20), x1, y0, tile->x + w * 0.5f,
+                  tile->y + h * 0.2f, cord);
+        break;
+    }
     case ITEM_BARK_BOX: {
         /* A small round white box sewn up its side, its lid rimmed with a rod. */
         SDL_FRect body = {tile->x + floorf(w * 0.32f), tile->y + floorf(h * 0.4f),

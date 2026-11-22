@@ -332,8 +332,8 @@ their own, folded and unfolded the same way (§8).
   their own room and weight: **sub-places**. The hand holding a basket holds
   nothing else, but the basket takes the berries. *(Done: `CARRY_IN_CONTAINER`
   for what is held in a hand, docs/CONTAINERS.md §10 C4, and the **back**
-  (`CARRY_BACK`, the pack basket, C5: nothing on the shoulders beside it); a
-  slung net bag comes with C7. The Gear tab shows the container's load as a
+  (`CARRY_BACK`, the pack basket, C5: nothing on the shoulders beside it), and
+  the net bag slung (`CARRY_SLUNG`, C7: no soft fruit in its mesh). The Gear tab shows the container's load as a
   place, *In the container*, not yet nested under its container.)*
 - **Clothes**: a belt (a hand axe at the waist), clothes as places of their
   own. Carrying on the head (a basket). A sledge to drag.

@@ -353,6 +353,20 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                           .product_count = 2,
                           .dirt = 0,
                           .tool_use = TOOL_USE_NONE},
+    /* About 40 m of cord looped with the fingers, row after row (no needle, no
+     * knot): 8 h (docs/CONTAINERS.md §7.1). */
+    [RECIPE_NET_BAG] = {.id = "net_bag",
+                        .name_key = N_("recipe.net_bag"),
+                        .stations = CRAFTING_SPOT,
+                        .ingredients = {{{ITEM_NETTLE_CORD, ITEM_LIME_CORD}, 8, ITEM_WANT_ANY}},
+                        .input_min_quality = ITEM_QUALITY_WORST,
+                        .tools = {{ITEM_NONE}},
+                        .work = 20000.0f,
+                        .knowledge = KNOWLEDGE_BASKETRY,
+                        .min_level = 60.0f,
+                        .product = ITEM_NET_BAG,
+                        .dirt = 0,
+                        .tool_use = TOOL_USE_NONE},
 };
 
 #undef CRAFTING_SPOT

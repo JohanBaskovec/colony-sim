@@ -1322,6 +1322,58 @@ static void test_hauler_takes_the_pack_basket(void)
     game_shutdown(&game);
 }
 
+/* A net bag crushes berries (docs/CONTAINERS.md §7.2): a hauler of berries does not take the
+ * net bag lying close by, but the basket farther away. */
+static void test_hauler_leaves_the_net_bag_for_berries(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 14, 10, 0,
+              item_stack_make(ITEM_BLACKBERRIES, 30, TEST_QUALITY_FINE, 10));
+    items_add(&game.items, 10, 11, 0, item_stack_make(ITEM_NET_BAG, 1, TEST_QUALITY_FINE, 50));
+    items_add(&game.items, 6, 14, 0,
+              item_stack_make(ITEM_CATTAIL_BASKET, 1, TEST_QUALITY_FINE, 60));
+    stockpile_create(&game.stockpiles, &game.map, 20, 10, 25, 10, 0);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    CHECK_EQ_INT(first_delivery_in(&game, 20, 25, 4000), 20); /* The basket's. */
+    bool net = false;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        net |= colonist->tools[i].type == ITEM_NET_BAG;
+    }
+    CHECK(!net); /* Not taken along for the berries. */
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
+/* Nuts go in a net bag: the hauler takes it, slung, and brings back more. */
+static void test_hauler_takes_the_net_bag_for_nuts(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 14, 10, 0, item_stack_make(ITEM_HAZELNUTS, 120, TEST_QUALITY_FINE, 60));
+    items_add(&game.items, 10, 11, 0, item_stack_make(ITEM_NET_BAG, 1, TEST_QUALITY_FINE, 50));
+    stockpile_create(&game.stockpiles, &game.map, 20, 10, 25, 10, 0);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    int without = colonist_carry_capacity(colonist, ITEM_HAZELNUTS);
+    int most = 0;
+    for (int i = 0; i < 4000 && count_in(&game, 20, 10, 25, 10, ITEM_HAZELNUTS) == 0; i++) {
+        game_tick(&game);
+        if (colonist->carried.type == ITEM_HAZELNUTS && colonist->carried.count > most) {
+            most = colonist->carried.count;
+        }
+    }
+    CHECK(most >= 2 * without);
+    bool net = false;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        net |= colonist->tools[i].type == ITEM_NET_BAG;
+    }
+    CHECK(net);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 /* A basket wears while it holds a load (docs/CONTAINERS.md §7.3): worn out on the way, it breaks
  * and what no longer fits in hand falls at the hauler's feet. */
 static void test_a_worn_basket_breaks_and_drops_its_load(void)
@@ -1558,6 +1610,8 @@ int main(void)
     RUN_TEST(test_hauler_collects_several_stacks_per_trip);
     RUN_TEST(test_hauler_takes_a_basket_for_berries);
     RUN_TEST(test_hauler_takes_the_pack_basket);
+    RUN_TEST(test_hauler_leaves_the_net_bag_for_berries);
+    RUN_TEST(test_hauler_takes_the_net_bag_for_nuts);
     RUN_TEST(test_no_basket_for_one_trip);
     RUN_TEST(test_a_worn_basket_breaks_and_drops_its_load);
     RUN_TEST(test_collecting_stops_at_carrying_capacity);

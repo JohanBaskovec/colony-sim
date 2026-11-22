@@ -110,6 +110,7 @@ typedef enum ItemType {
     ITEM_LIME_BARK,      /* Strips of lime bark with their bast, to ret in water. */
     ITEM_LIME_BAST,      /* A bundle of bast strips: lacing, or twisted into cord. */
     ITEM_LIME_CORD,      /* A hank of lime bast cord, coarser than nettle's, about 5 m. */
+    ITEM_NET_BAG,        /* Looped of cord with the fingers: about 10 litres, slung. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,
@@ -333,7 +334,7 @@ typedef struct ItemDef {
     float bulk;    /* Room taken per item (see ITEM_TILE_BULK). */
     int length_cm; /* Its longest side; 0 for loose items (a heap has none). */
     ItemForm form;
-    bool strap;         /* Has a strap or a cord to sling it (none yet). */
+    bool strap;         /* Has a strap or a cord to sling it (the net bag). */
     float nutrition;    /* Food need restored by eating one item; 0 = not food. */
     int max_hit_points; /* Hit points of one item in perfect condition. */
     bool has_quality;   /* false: always ITEM_QUALITY_BEST. */
@@ -365,6 +366,10 @@ typedef struct ItemDef {
      * quality cap (recipe_work_factor(), recipe_quality_cap_of()). */
     float craft_work_factor;
     int craft_cap_bonus;
+    /* Soft fruit, crushed in a net (berries): ItemDef.net containers refuse it. */
+    bool soft;
+    /* A container of open mesh (the net bag): it holds no soft fruit. */
+    bool net;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every

@@ -2665,10 +2665,11 @@ static bool try_forced_haul_job(Colonist *colonist, const ColonistContext *conte
 }
 
 /* Whether the colonist carries a container (core/carry.h). */
-static bool carries_container(const Colonist *colonist)
+static bool carries_container(const Colonist *colonist, ItemType type)
 {
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
-        if (colonist->tools[i].count > 0 && carry_is_container((ItemType)colonist->tools[i].type)) {
+        if (colonist->tools[i].count > 0 &&
+            carry_container_holds((ItemType)colonist->tools[i].type, type)) {
             return true;
         }
     }
@@ -2689,15 +2690,17 @@ static int capacity_with_container(const Colonist *colonist, ItemType type, Item
     return arrange_kept(colonist, &set, type, UINT16_MAX, NULL);
 }
 
-/* The container lying on a tile (allowed, the roomiest), an empty stack when none. */
-static ItemStack container_at(const Items *items, int x, int y, int z)
+/* The container lying on a tile that holds items of `type` (allowed, the roomiest), an
+ * empty stack when none. */
+static ItemStack container_at(const Items *items, int x, int y, int z, ItemType type)
 {
     ItemStack groups[8];
     int count = items_forbidden(items, x, y, z) ? 0 : items_groups(items, x, y, z, groups, 8);
     ItemStack best = {.type = ITEM_NONE};
     for (int i = 0; i < count; i++) {
         const ItemDef *def = item_def((ItemType)groups[i].type);
-        if (!groups[i].forbidden && def != NULL && def->container_litres > 0.0f &&
+        if (!groups[i].forbidden && def != NULL &&
+            carry_container_holds((ItemType)groups[i].type, type) &&
             (best.type == ITEM_NONE ||
              def->container_litres > item_def((ItemType)best.type)->container_litres)) {
             best = groups[i];
@@ -2710,6 +2713,7 @@ typedef struct ContainerSearch {
     const Items *items;
     const Reservations *reservations;
     uint8_t self;
+    ItemType type; /* What it must hold. */
 } ContainerSearch;
 
 /* Search filter: a tile with a container lying on it nobody else is taking from. */
@@ -2717,7 +2721,7 @@ static bool is_container_spot(const Map *map, int x, int y, int z, void *userdat
 {
     (void)map;
     const ContainerSearch *search = userdata;
-    return container_at(search->items, x, y, z).type != ITEM_NONE &&
+    return container_at(search->items, x, y, z, search->type).type != ITEM_NONE &&
            !reservations_taken_by_other(search->reservations, RESERVATION_HAUL_SOURCE,
                                         (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
                                         search->self);
@@ -2729,7 +2733,7 @@ static bool is_container_spot(const Map *map, int x, int y, int z, void *userdat
 static void fetch_container_for_haul(Colonist *colonist, const ColonistContext *context)
 {
     ItemType type = (ItemType)colonist->haul_type;
-    if (!carry_container_takes(type) || carries_container(colonist) || context->no_tools) {
+    if (!carry_container_takes(type) || carries_container(colonist, type) || context->no_tools) {
         return;
     }
     TilePos source = colonist->target;
@@ -2737,7 +2741,7 @@ static void fetch_container_for_haul(Colonist *colonist, const ColonistContext *
     if (items_count_at(context->plan_items, source.x, source.y, source.z, type) <= without) {
         return; /* One trip takes it all. */
     }
-    ContainerSearch search = {context->plan_items, context->reservations, context->worker_id};
+    ContainerSearch search = {context->plan_items, context->reservations, context->worker_id, type};
     TilePos found;
     Path path = {0};
     if (!any_tile_reachable(context, current_tile(colonist), is_container_spot, &search,
@@ -2748,7 +2752,7 @@ static void fetch_container_for_haul(Colonist *colonist, const ColonistContext *
         path_free(&path);
         return;
     }
-    ItemStack container = container_at(context->plan_items, found.x, found.y, found.z);
+    ItemStack container = container_at(context->plan_items, found.x, found.y, found.z, type);
     if (capacity_with_container(colonist, type, (ItemType)container.type) < 2 * without) {
         path_free(&path);
         return;
@@ -2765,7 +2769,8 @@ static void fetch_container_for_haul(Colonist *colonist, const ColonistContext *
 static void take_haul_container(Colonist *colonist, const ColonistContext *context)
 {
     colonist->haul_fetching = false;
-    ItemStack container = container_at(context->items, colonist->x, colonist->y, colonist->z);
+    ItemStack container = container_at(context->items, colonist->x, colonist->y, colonist->z,
+                                       (ItemType)colonist->haul_type);
     if (colonist->x == colonist->fetch.x && colonist->y == colonist->fetch.y &&
         colonist->z == colonist->fetch.z && container.type != ITEM_NONE &&
         colonist_add_tool(colonist, (ItemStack){.type = container.type,
@@ -7002,7 +7007,7 @@ static void wear_container(Colonist *colonist, const ColonistContext *context)
     }
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
         if (colonist->tools[i].count == 0 ||
-            !carry_is_container((ItemType)colonist->tools[i].type)) {
+            !carry_container_holds((ItemType)colonist->tools[i].type, type)) {
             continue;
         }
         int before = colonist->tools_broken;

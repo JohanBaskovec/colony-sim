@@ -152,6 +152,13 @@ bool carry_container_takes(ItemType type)
            !carry_is_container(type);
 }
 
+bool carry_container_holds(ItemType container, ItemType type)
+{
+    const ItemDef *def = item_def(container);
+    return carry_is_container(container) && carry_container_takes(type) &&
+           !(def->net && item_def(type)->soft);
+}
+
 bool carry_place_takes(CarryPlace place, ItemType type)
 {
     if (place == CARRY_IN_CONTAINER) {
@@ -361,9 +368,9 @@ static const CarryPlace LOAD_ORDER[CARRY_PLACE_COUNT] = {
     CARRY_SLUNG,          CARRY_BACK,       CARRY_IN_CONTAINER,
 };
 
-/* How many more items of `type` the containers kept in a hand or on the back
- * take (their room, and the weight their places bear beside them), at most
- * `left`. */
+/* How many more items of `type` the containers kept in a hand, slung or on
+ * the back take (their room, and the weight their places bear beside them:
+ * once for the slung place, however many hang there), at most `left`. */
 static int container_room(const Search *search, const ItemType *kept, int kept_count, ItemType type,
                           int left)
 {
@@ -371,16 +378,21 @@ static int container_room(const Search *search, const ItemType *kept, int kept_c
         return 0;
     }
     float room = 0.0f, weight = 0.0f;
+    bool slung = false;
     for (int i = 0; i < kept_count; i++) {
         const ItemDef *def = item_def(kept[i]);
         int place = search->kept_place[i];
-        if (def->container_litres <= 0.0f ||
+        if (!carry_container_holds(kept[i], type) ||
             (place != CARRY_RIGHT_HAND && place != CARRY_LEFT_HAND && place != CARRY_BOTH_HANDS &&
-             place != CARRY_BACK)) {
+             place != CARRY_BACK && place != CARRY_SLUNG)) {
             continue;
         }
         room += def->container_litres * CARRY_CONTAINER_BULK_PER_LITRE;
-        weight += carry_place_weight_limit(search->body, (CarryPlace)place) - def->weight;
+        weight -= def->weight;
+        if (place != CARRY_SLUNG || !slung) {
+            weight += carry_place_weight_limit(search->body, (CarryPlace)place);
+        }
+        slung |= place == CARRY_SLUNG;
     }
     const ItemDef *def = item_def(type);
     int by_room = (int)floorf((room + ROOM_EPSILON) / def->bulk);

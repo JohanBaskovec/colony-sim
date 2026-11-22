@@ -535,7 +535,17 @@ rods and the pack basket; then the net bag.
      in the dew: about six game days in water, 144 hours). Bast is the bark box's
      other lacing (with nettle cord), lime cord the pack basket's other straps.
      The sap season gates the poles, not the peeling (a simplification).
-7. **C7 Net bag**: looped from nettle or lime cord.
+7. **C7 Net bag** *(built)*: looped from nettle or lime cord.
+   - *As built*: *Looped net bag* (Basketry 60): 8 hanks of nettle or lime cord, by
+     hand, 20,000 ticks (8 h). The bag: 0.1 kg, limp, with a strap (`ItemDef.strap`),
+     10 L, `ItemDef.net`. Slung (`CARRY_SLUNG`), its room joins the containers'
+     (`CARRY_IN_CONTAINER`, within what the slung place bears, counted once however
+     many hang there), the hands left free. It holds no soft fruit (`ItemDef.soft`:
+     blackberries, bilberries, wild strawberries): `carry_container_holds()` asks
+     both, and the haulers look only for a container that holds their load (a net
+     bag close by is passed over for a basket farther away when they carry berries,
+     taken for nuts). All the steps of `docs/CONTAINERS.md` are built; §11 lists
+     what comes later.
 
 Each step ends with a playable build, its unit tests, the translations
 (en, fr), and this document marked as built.
