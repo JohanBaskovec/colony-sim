@@ -2134,11 +2134,17 @@ typedef struct WorkSearch {
 enum { MEMO_OPEN_JOB, MEMO_OPEN_PICK };
 
 /* Gathering jobs a colonist may do: work type among `mask`, and knowledge. */
-static GatherJobMask gather_jobs_for(const Colonist *colonist, WorkTypeMask mask)
+/* The gathering jobs a colonist may take among the work types of `mask`: those it knows
+ * enough for, and, for those that bare hands cannot do (rods, poles), only while it carries a
+ * tool for them (with GameDebug.no_tools, any): it would stand there for ever otherwise. */
+static GatherJobMask gather_jobs_for(const Colonist *colonist, WorkTypeMask mask, bool no_tools)
 {
     GatherJobMask jobs = 0;
     for (int job = 0; job < GATHER_JOB_COUNT; job++) {
-        if ((mask & WORK_TYPE_BIT(gather_job_def((GatherJob)job)->work_type)) &&
+        ToolUse use = gather_job_def((GatherJob)job)->tool_use;
+        bool handy = no_tools || use == TOOL_USE_NONE || tool_type_factor(use, ITEM_NONE) > 0.0f ||
+                     colonist_tool_factor(colonist, use, item_types_all()) > 0.0f;
+        if ((mask & WORK_TYPE_BIT(gather_job_def((GatherJob)job)->work_type)) && handy &&
             colonist_can_gather(colonist, (GatherJob)job)) {
             jobs |= GATHER_JOB_BIT(job);
         }
@@ -2522,7 +2528,7 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
                                 WorkTypeMask mask, bool zones)
 {
     const Designations *designations = context->designations;
-    GatherJobMask jobs = zones ? gather_jobs_for(colonist, mask) : 0;
+    GatherJobMask jobs = zones ? gather_jobs_for(colonist, mask, context->no_tools) : 0;
     if (zones ? jobs == 0 || context->gather_zones->wanting_cells == 0
               : designations_count_for_work(designations, mask) == 0) {
         return false;
@@ -2974,7 +2980,7 @@ static bool try_start_work(Colonist *colonist, const ColonistContext *context, i
                 }
                 break;
             default: /* Mining, woodcutting, gathering: jobs in gathering zones. */
-                if (gathering_allowed && gather_jobs_for(colonist, bit) != 0) {
+                if (gathering_allowed && gather_jobs_for(colonist, bit, context->no_tools) != 0) {
                     searched_gathering = true;
                     if (try_designation_job(colonist, context, bit, true)) {
                         FOUND(SEARCH_GATHER);

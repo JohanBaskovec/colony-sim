@@ -932,6 +932,33 @@ static void test_a_carcass_is_butchered(void)
     game_shutdown(&game);
 }
 
+/* Rods are not cut by hand (docs/CONTAINERS.md §5): a gatherer carrying no edge leaves the
+ * order to whoever has one, rather than standing at the stool for ever; given a flake, it cuts. */
+static void test_rods_wait_for_an_edge(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    Plant *hazel = &game.map.plants[map_index(&game.map, 14, 10, 0)];
+    *hazel = (Plant){.type = PLANT_HAZEL, .growth = 1.0f};
+    plant_settle(hazel, GAME_START_DAY);
+    REQUIRE(plant_stock_available(hazel, 0) > 0);
+    int zone = gather_zone_create(&game.gather_zones, &game.map, 14, 10, 14, 10, 0);
+    gather_zone_set_enabled(&game.gather_zones, zone, GATHER_HAZEL_RODS, true);
+    gather_zone_set_mode(&game.gather_zones, zone, GATHER_HAZEL_RODS, GATHER_FOREVER);
+    run_ticks(&game, 2000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_HAZEL_RODS], 0);
+    CHECK(!(colonist->task == TASK_WORK && colonist->gathering)); /* Not stuck at it. */
+    colonist_add_tool(colonist, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    for (int i = 0; i < 6000 && game.items.totals[ITEM_HAZEL_RODS] == 0; i++) {
+        run_ticks(&game, 1);
+    }
+    CHECK((int)game.items.totals[ITEM_HAZEL_RODS] > 0);
+    game_shutdown(&game);
+}
+
 /* Nettle stems at their moisture (0 .. 1). */
 static ItemStack stems_at(float moisture)
 {
@@ -1532,6 +1559,7 @@ int main(void)
     RUN_TEST(test_lime_bast_wants_retted_bark);
     RUN_TEST(test_a_worn_basket_is_mended);
     RUN_TEST(test_a_carcass_is_butchered);
+    RUN_TEST(test_rods_wait_for_an_edge);
     RUN_TEST(test_a_tray_wants_pliable_bark);
     RUN_TEST(test_nettle_stems_become_fibre_then_cord);
     RUN_TEST(test_a_bill_without_pliable_bark_lets_the_next_one_go);
