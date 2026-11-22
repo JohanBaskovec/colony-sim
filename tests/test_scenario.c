@@ -122,6 +122,34 @@ static void test_scenarios(void)
     }
     CHECK_EQ_INT(game_check_items(&game).problems, 0);
     game_shutdown(&game);
+
+    /* Basketry: a crafting spot with a bill of trays and two of tools, bark (some of it dry)
+     * and twigs about, settlers who can make all three. */
+    REQUIRE(init_game(&game, 42, 200, 3));
+    CHECK(scenario_apply(&game, SCENARIO_BASKETRY));
+    int spots = 0;
+    for (int index = 0; index < WORKSTATION_MAX; index++) {
+        const Workstation *station = workstation_get_const(&game.workstations, index);
+        if (station == NULL) {
+            continue;
+        }
+        spots++;
+        CHECK_EQ_INT(station->type, WORKSTATION_CRAFTING_SPOT);
+        REQUIRE(station->bill_count == 3);
+        CHECK_EQ_INT(station->bills[0].recipe, RECIPE_BARK_TRAY);
+    }
+    CHECK_EQ_INT(spots, 1);
+    CHECK(game.items.totals[ITEM_BIRCH_BARK] > 0);
+    CHECK(game.items.totals[ITEM_TWIGS] > 0);
+    CHECK_EQ_INT(stockpile_count(&game), 1);
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
+        const Colonist *colonist = game_colonist_const(&game, game_colonist_id_at(&game, slot));
+        REQUIRE(colonist != NULL);
+        CHECK(colonist_can_craft(colonist, RECIPE_BARK_TRAY));
+        CHECK(colonist_can_craft(colonist, RECIPE_FLINT_BORER));
+    }
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
 }
 
 /* The same seed and scenario give the same game, ticks later. */

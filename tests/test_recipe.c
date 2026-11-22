@@ -16,18 +16,27 @@ static void test_definitions(void)
         REQUIRE(def != NULL);
         CHECK(def->id != NULL && def->name_key != NULL);
         CHECK(def->stations != 0);
-        CHECK(def->inputs[0] != ITEM_NONE);
-        CHECK(def->input_count >= 1);
+        CHECK(recipe_ingredient_count((RecipeType)recipe) >= 1);
+        for (int i = 0; i < recipe_ingredient_count((RecipeType)recipe); i++) {
+            CHECK(def->ingredients[i].types[0] != ITEM_NONE);
+            CHECK(def->ingredients[i].count >= 1);
+            /* No type is two ingredients at once. */
+            for (int j = 0; j < i; j++) {
+                CHECK_EQ_UINT(recipe_ingredient_types((RecipeType)recipe, i) &
+                                  recipe_ingredient_types((RecipeType)recipe, j),
+                              0);
+            }
+        }
         CHECK(def->work > 0.0f);
         CHECK(def->min_level >= KNOWLEDGE_MASTERY_LEVEL);
         CHECK(def->product != ITEM_NONE);
-        CHECK(recipe_inputs((RecipeType)recipe) & ITEM_TYPE_BIT(def->inputs[0]));
+        CHECK(recipe_inputs((RecipeType)recipe) & ITEM_TYPE_BIT(def->ingredients[0].types[0]));
     }
     CHECK(recipe_def(RECIPE_COUNT) == NULL);
     CHECK_EQ_UINT(recipe_inputs(RECIPE_COUNT), 0);
     /* Flint is preferred for flakes, a cobble for a chopper. */
-    CHECK_EQ_INT(recipe_def(RECIPE_FLAKES)->inputs[0], ITEM_FLINT);
-    CHECK_EQ_INT(recipe_def(RECIPE_CHOPPER)->inputs[0], ITEM_COBBLE);
+    CHECK_EQ_INT(recipe_def(RECIPE_FLAKES)->ingredients[0].types[0], ITEM_FLINT);
+    CHECK_EQ_INT(recipe_def(RECIPE_CHOPPER)->ingredients[0].types[0], ITEM_COBBLE);
     /* The chain can always start: knapping takes a plain cobble as a hammer. */
     CHECK_EQ_UINT(recipe_def(RECIPE_FLAKES)->tools[0], ITEM_TYPE_BIT(ITEM_COBBLE));
     CHECK_EQ_UINT(recipe_def(RECIPE_CHOPPER)->tools[0], ITEM_TYPE_BIT(ITEM_COBBLE));
@@ -82,6 +91,52 @@ static void test_quality_cap_from_materials(void)
     REQUIRE(recipe_craft(RECIPE_FLAKES, stone(ITEM_FLINT, TEST_QUALITY_FINE), 100.0, NULL, out) ==
             1);
     CHECK_EQ_INT(out[0].quality, TEST_QUALITY_SUPERB);
+}
+
+/* docs/CONTAINERS.md §9: a recipe of several ingredients, each with its count and the
+ * moisture it wants; the shaping tool counts for a quarter of the quality cap. */
+static void test_several_ingredients(void)
+{
+    CHECK_EQ_INT(recipe_ingredient_count(RECIPE_FLAKES), 1);
+    CHECK_EQ_INT(recipe_ingredient_count(RECIPE_BARK_TRAY), 2);
+    CHECK_EQ_INT(recipe_ingredient_count(RECIPE_COUNT), 0);
+    CHECK(recipe_ingredient(RECIPE_BARK_TRAY, 2) == NULL);
+    CHECK(recipe_ingredient(RECIPE_BARK_TRAY, -1) == NULL);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_TRAY, 0)->moisture, ITEM_WANT_WET);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_TRAY, 1)->count, 2);
+    CHECK_EQ_INT(recipe_ingredient_of(RECIPE_BARK_TRAY, ITEM_BIRCH_BARK), 0);
+    CHECK_EQ_INT(recipe_ingredient_of(RECIPE_BARK_TRAY, ITEM_TWIGS), 1);
+    CHECK_EQ_INT(recipe_ingredient_of(RECIPE_BARK_TRAY, ITEM_FLINT), -1);
+    CHECK_EQ_UINT(recipe_inputs(RECIPE_BARK_TRAY),
+                  ITEM_TYPE_BIT(ITEM_BIRCH_BARK) | ITEM_TYPE_BIT(ITEM_TWIGS));
+    ItemStack bark = item_stack_make(ITEM_BIRCH_BARK, 1, 40, 0);
+    ItemStack twigs = item_stack_make(ITEM_TWIGS, 2, 60, 0);
+    CHECK(recipe_accepts_ingredient(RECIPE_BARK_TRAY, 0, bark));
+    CHECK(!recipe_accepts_ingredient(RECIPE_BARK_TRAY, 1, bark));
+    CHECK(recipe_accepts_input(RECIPE_BARK_TRAY, twigs));
+
+    /* The cap: the materials' average quality weighted by count, the shaping tool for a
+     * quarter, + 20. Twigs have no quality of their own: only the bark counts. */
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {bark, twigs};
+    ItemStack none = {.type = ITEM_NONE};
+    ItemStack flake = item_stack_make(ITEM_FLAKE, 1, 80, 0);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_BARK_TRAY, inputs, none), 40 + 20);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_BARK_TRAY, inputs, flake),
+                 (40 * 3 + 80) / 4 + ITEM_QUALITY_CAP_BONUS);
+    /* A tool that only cuts does not shape: spears ignore it. */
+    ItemStack branches[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_BRANCHES, 1, 40, 0)};
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_THROWING_SPEAR, branches, flake), 60);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_WOODEN_SCRAPER, branches, flake), 70);
+
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_BARK_TRAY, inputs, flake, 100.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_BARK_TRAY);
+    CHECK_EQ_INT(out[0].count, 1);
+    CHECK_EQ_INT(out[0].quality, 70); /* A master's 95, held at the cap. */
+    /* A borer is a flake retouched: one flake in, one borer out. */
+    REQUIRE(recipe_craft(RECIPE_FLINT_BORER, flake, 75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_FLINT_BORER);
+    CHECK_EQ_INT(out[0].count, 1);
 }
 
 static void test_products(void)
@@ -184,6 +239,7 @@ int main(void)
     RUN_TEST(test_inputs_and_levels);
     RUN_TEST(test_quality_cap_from_materials);
     RUN_TEST(test_products);
+    RUN_TEST(test_several_ingredients);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

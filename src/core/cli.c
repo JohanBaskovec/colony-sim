@@ -48,7 +48,7 @@ const char *cli_usage(void)
                                                   "bench_simulation:\n"
                                                   "                  0 none, 1 gathering, 2 "
                                                   "unreachable jobs, 3 "
-                                                  "construction, 4 feuds, 5 cooking.\n"
+                                                  "construction, 4 feuds, 5 cooking, 6 basketry.\n"
                                                   "  --debug <list>  Cheats on from the start, "
                                                   "separated by commas: "
                                                   "instant_build,\n"

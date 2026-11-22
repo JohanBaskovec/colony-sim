@@ -870,6 +870,63 @@ static void test_moisture_definitions(void)
     CHECK(item_moisture_state_key(ITEM_MOISTURE_NONE) == NULL);
 }
 
+/* The moisture a use wants (docs/CONTAINERS.md §9.2): dry, green (near fresh), wet (not
+ * dry: pliable, fresh or softened again). */
+static void test_moisture_wants(void)
+{
+    float fresh = item_fresh_moisture(ITEM_BIRCH_BARK);
+    float settled = item_reference_moisture(ITEM_BIRCH_BARK);
+    float dry_below = item_def(ITEM_BIRCH_BARK)->water.dry_below;
+    float room = item_def(ITEM_BIRCH_BARK)->water.room;
+    for (int want = 0; want < ITEM_WANT_COUNT; want++) {
+        CHECK(item_moisture_fits(ITEM_BIRCH_BARK, fresh, (ItemMoistureWant)want) ==
+              (want != ITEM_WANT_DRY));
+    }
+    CHECK(item_moisture_fits(ITEM_BIRCH_BARK, settled, ITEM_WANT_DRY));
+    CHECK(!item_moisture_fits(ITEM_BIRCH_BARK, settled, ITEM_WANT_WET));
+    CHECK(!item_moisture_fits(ITEM_BIRCH_BARK, settled, ITEM_WANT_GREEN));
+    CHECK(item_moisture_fits(ITEM_BIRCH_BARK, settled, ITEM_WANT_ANY));
+    /* Drying out, still pliable but no longer green. */
+    float drying = dry_below + 0.01f;
+    CHECK(item_moisture_fits(ITEM_BIRCH_BARK, drying, ITEM_WANT_WET));
+    CHECK(!item_moisture_fits(ITEM_BIRCH_BARK, drying, ITEM_WANT_GREEN));
+    CHECK(!item_moisture_green(ITEM_BIRCH_BARK, drying));
+    CHECK(item_moisture_green(ITEM_BIRCH_BARK,
+                              settled + ITEM_GREEN_SHARE * (fresh - settled) + 0.001f));
+    /* Soaked again: wet, and green too (as moist as it was fresh). */
+    CHECK(item_moisture_fits(ITEM_BIRCH_BARK, room, ITEM_WANT_WET));
+    /* What takes no water is always dry, never green nor wet. */
+    CHECK(item_moisture_fits(ITEM_FLINT, 0.0f, ITEM_WANT_DRY));
+    CHECK(!item_moisture_fits(ITEM_FLINT, 0.0f, ITEM_WANT_GREEN));
+    CHECK(!item_moisture_fits(ITEM_FLINT, 0.0f, ITEM_WANT_WET));
+    CHECK(!item_moisture_fits(ITEM_BIRCH_BARK, fresh, ITEM_WANT_COUNT));
+}
+
+/* A choice wanting wet items picks the wet ones of a tile, leaves the dry. */
+static void test_chosen_by_moisture(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 8, 1));
+    ItemStack dry = item_stack_make(ITEM_BIRCH_BARK, 2, ITEM_QUALITY_STANDARD, 0);
+    item_stack_set_moisture(&dry, 0.1f);
+    ItemStack wet = item_stack_make(ITEM_BIRCH_BARK, 1, ITEM_QUALITY_STANDARD, 0);
+    item_stack_set_moisture(&wet, 0.5f);
+    items_add(&items, 2, 2, 0, dry);
+    items_add(&items, 2, 2, 0, wet);
+    ItemChoice choice = ITEM_CHOICE_ANY;
+    choice.moisture = ITEM_WANT_WET;
+    CHECK_EQ_INT(items_count_chosen(&items, 2, 2, 0, ITEM_BIRCH_BARK, choice), 1);
+    ItemStack load = {.type = ITEM_NONE};
+    CHECK_EQ_INT(items_pick_up_chosen(&items, 2, 2, 0, ITEM_BIRCH_BARK, 3, choice, &load), 1);
+    CHECK(item_moisture_fits(ITEM_BIRCH_BARK, item_stack_moisture(load), ITEM_WANT_WET));
+    CHECK_EQ_INT(items_count_at(&items, 2, 2, 0, ITEM_BIRCH_BARK), 2);
+    CHECK_EQ_INT(items_count_chosen(&items, 2, 2, 0, ITEM_BIRCH_BARK, choice), 0);
+    choice.moisture = ITEM_WANT_DRY;
+    CHECK_EQ_INT(items_count_chosen(&items, 2, 2, 0, ITEM_BIRCH_BARK, choice), 2);
+    items_use_up(&items, &load, load.count);
+    items_free(&items);
+}
+
 static void test_moisture_of_stacks(void)
 {
     Items items;
@@ -1692,6 +1749,8 @@ int main(void)
     RUN_TEST(test_rot_progress_merges);
     RUN_TEST(test_moisture_definitions);
     RUN_TEST(test_moisture_of_stacks);
+    RUN_TEST(test_moisture_wants);
+    RUN_TEST(test_chosen_by_moisture);
     RUN_TEST(test_grass_dries);
     RUN_TEST(test_logs_season_slowly);
     RUN_TEST(test_rot_by_moisture);

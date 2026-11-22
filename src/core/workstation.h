@@ -162,11 +162,13 @@ typedef struct Workstation {
     int number; /* Unique, never reused: tells a station from a later one in the same slot. */
     Bill bills[WORKSTATION_BILL_MAX];
     int bill_count;
-    /* Craft in progress: its recipe (RECIPE_COUNT: none), the input put down
-     * on the station (a settler's load: its items, each as it was, used up
-     * when the craft is done) and the work done. */
+    /* Craft in progress: its recipe (RECIPE_COUNT: none), its ingredients put
+     * down on the station (work_inputs[i] for the recipe's ingredient i: a
+     * settler's load or what lay in the work zone, its items each as it was,
+     * used up when the craft is done; the first is never empty while a craft
+     * is under way: workstation_crafting()) and the work done. */
     uint8_t work_recipe;
-    ItemStack work_input;
+    ItemStack work_inputs[RECIPE_INGREDIENT_MAX];
     float work_progress;
     /* The input came out of nothing (workstation_start_free_craft()): it is
      * not given back when the craft is called off. */
@@ -195,6 +197,12 @@ typedef struct Workstation {
     BillDefaults defaults;
     bool defaults_saved;
 } Workstation;
+
+/* Whether a craft is under way on the station (its ingredients are on it). */
+static inline bool workstation_crafting(const Workstation *station)
+{
+    return station->work_inputs[0].count > 0;
+}
 
 typedef struct Workstations {
     int width;
@@ -254,11 +262,12 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
                        int y, int z);
 
 /*
- * Removes a station. The input of a craft in progress (unless free) is given back in
- * `returned`; returns the number of stacks (0 or 1). The caller drops them
+ * Removes a station. The ingredients of a craft in progress (unless free) are given back in
+ * `returned`; returns the number of stacks (0 .. RECIPE_INGREDIENT_MAX). The caller drops them
  * (items_drop_load(): a load, its items as they were).
  */
-int workstations_remove(Workstations *workstations, int index, ItemStack returned[1]);
+int workstations_remove(Workstations *workstations, int index,
+                        ItemStack returned[RECIPE_INGREDIENT_MAX]);
 
 /* Forbids or allows a station (see Workstation.forbidden); a change counts
  * in Workstations.revision. Returns whether it changed. */
@@ -297,11 +306,12 @@ int workstation_add_bill(Workstations *workstations, int index, RecipeType recip
  * is a new bill's, and nothing is done yet. Returns its index, or -1. */
 int workstation_add_bill_from(Workstations *workstations, int index, const Bill *draft);
 
-/* Removes a bill; later bills move up. The input of a craft in progress for
- * this recipe is given back in `returned` when no other bill makes it
- * (returns whether it was; a free input is not given back: the craft is
+/* Removes a bill; later bills move up. The ingredients of a craft in progress for
+ * this recipe are given back in `returned` when no other bill makes it
+ * (returns how many stacks; free ingredients are not given back: the craft is
  * just called off). */
-bool workstation_remove_bill(Workstations *workstations, int index, int bill, ItemStack *returned);
+int workstation_remove_bill(Workstations *workstations, int index, int bill,
+                            ItemStack returned[RECIPE_INGREDIENT_MAX]);
 
 /* Changing a bill on its own (a draft, or a station's: see below). Invalid
  * values are refused (false), the same as for the station's. */
@@ -354,43 +364,52 @@ bool bill_accepts_worker(const Bill *bill, double level, EntityId who);
 bool bill_wants_more(const Bill *bill, int stored);
 
 /*
- * Whether enough of an input type the bill allows lies in the colony
- * (`totals`: items lying per type), once the tools still to fetch (`tools`:
- * one item of each non-empty set, 0 for none) have taken theirs: knapping
- * with a cobble as a hammer needs a second stone to knap.
+ * Whether enough of a type the bill allows lies in the colony for each of
+ * the recipe's ingredients (`totals`: items lying per type), once the tools
+ * still to fetch (`tools`: one item of each non-empty set, 0 for none) have
+ * taken theirs: knapping with a cobble as a hammer needs a second stone to
+ * knap. (The moisture the ingredients must have is not looked at.)
  */
 bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
                     const ItemTypeMask tools[RECIPE_TOOL_MAX]);
 
+/* Whether a bill of the station not paused gathers items of a type in its work zone: an
+ * ingredient of a recipe of several, laid there one load at a time until the craft can start
+ * (docs/CONTAINERS.md §9). Haulers leave them while the station is worked at. */
+bool workstation_gathers(const Workstation *station, ItemType type);
+
 /*
- * Starts a craft of `recipe` with `input` (the station must hold no other
- * input): a load, whose items the station holds from then on (the caller
- * empties its own copy), or numbers. Returns false, changing nothing, if one
- * is already in progress.
+ * Starts a craft of `recipe` with its ingredients (inputs[i] for ingredient
+ * i, each of a type it takes: the station must hold no other craft): loads,
+ * whose items the station holds from then on (the caller empties its own
+ * copies), or numbers. Returns false, changing nothing, if one is already in
+ * progress or an ingredient is missing.
  */
 bool workstation_start_craft(Workstations *workstations, int index, RecipeType recipe,
-                             ItemStack input);
+                             const ItemStack inputs[RECIPE_INGREDIENT_MAX]);
 
-/* The input a free craft of a bill gets (the debug cheat
- * GameDebug.free_crafts): the recipe's count of the first input type the
+/* The ingredients a free craft of a bill gets (the debug cheat
+ * GameDebug.free_crafts): for each ingredient, its count of the first type the
  * bill allows, of standard quality (or the least the recipe takes), in perfect
- * condition. Empty when the bill allows none. */
-ItemStack bill_free_input(const Bill *bill);
+ * condition. False (some empty) when the bill allows no type of one of them. */
+bool bill_free_inputs(const Bill *bill, ItemStack out[RECIPE_INGREDIENT_MAX]);
 
-/* Starts a craft of a bill's recipe with its free input (bill_free_input()),
- * which is not given back if the craft is called off. Fails like
- * workstation_start_craft(), or when the bill allows no input. */
+/* Starts a craft of a bill's recipe with its free ingredients (bill_free_inputs()),
+ * which are not given back if the craft is called off. Fails like
+ * workstation_start_craft(), or when the bill allows no type of an ingredient. */
 bool workstation_start_free_craft(Workstations *workstations, int index, int bill);
 
 /*
  * Adds work to the craft in progress. When it is complete, the products are
  * dropped on the station's tile, the bill `bill` (or the first one of the
  * same recipe if that one changed) counts it, and true is returned. Products
- * come from the worker's `level` (see recipe_craft()), and are marked as made
- * by `maker` (items_maker_register(), 0: by nobody).
+ * come from the worker's `level` and the tool it works with (of the recipe's
+ * first set, for a tool that shapes the material: recipe_craft_with()), and
+ * are marked as made by `maker` (items_maker_register(), 0: by nobody).
  */
 bool workstation_add_craft_work(Workstations *workstations, int index, int bill, Items *items,
-                                const Map *map, float work, double level, Rng *rng, uint16_t maker);
+                                const Map *map, float work, double level, ItemStack tool, Rng *rng,
+                                uint16_t maker);
 
 uint64_t workstations_hash(const Workstations *workstations, uint64_t hash);
 

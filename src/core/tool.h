@@ -24,6 +24,10 @@ typedef enum ToolUse {
     TOOL_USE_WOODWORKING, /* Shaping wood: spears. */
     TOOL_USE_BUILDING,    /* Construction sites and workstations. */
     TOOL_USE_DIGGING,     /* Digging roots up. */
+    /* Fibre work (docs/CONTAINERS.md §5). */
+    TOOL_USE_CUTTING,  /* Cutting stems, leaves and bark, trimming. */
+    TOOL_USE_SCRAPING, /* Cleaning the bark off fibre without cutting it. */
+    TOOL_USE_PIERCING, /* Piercing bark to sew it. */
     TOOL_USE_COUNT
 } ToolUse;
 

@@ -59,6 +59,8 @@ static const char *const KNOWLEDGE_TOPIC_KEYS[KNOWLEDGE_COUNT] = {
     [KNOWLEDGE_SPEAR_HUNTING] = N_("topic.knowledge.spear_hunting"),
     [KNOWLEDGE_BUTCHERING] = N_("topic.knowledge.butchering"),
     [KNOWLEDGE_BASIC_SHELTERS] = N_("topic.knowledge.basic_shelters"),
+    [KNOWLEDGE_CORDAGE] = N_("topic.knowledge.cordage"),
+    [KNOWLEDGE_BASKETRY] = N_("topic.knowledge.basketry"),
 };
 
 static const char *const KNOWHOW_KEYS[KNOWLEDGE_COUNT] = {
@@ -69,6 +71,8 @@ static const char *const KNOWHOW_KEYS[KNOWLEDGE_COUNT] = {
     [KNOWLEDGE_SPEAR_HUNTING] = N_("knowhow.spear_hunting"),
     [KNOWLEDGE_BUTCHERING] = N_("knowhow.butchering"),
     [KNOWLEDGE_BASIC_SHELTERS] = N_("knowhow.basic_shelters"),
+    [KNOWLEDGE_CORDAGE] = N_("knowhow.cordage"),
+    [KNOWLEDGE_BASKETRY] = N_("knowhow.basketry"),
 };
 
 static const char *const STORY_KEYS[EXPERIENCE_TYPE_COUNT] = {

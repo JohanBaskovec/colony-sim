@@ -28,6 +28,19 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
                           {[ITEM_HAND_AXE] = 0.5f,
                            [ITEM_DIGGING_STICK] = 1.0f,
                            [ITEM_DIGGING_STICK_HARDENED] = 1.0f}},
+    [TOOL_USE_CUTTING] = {"cutting",
+                          N_("tool_use.cutting"),
+                          0.5f,
+                          {[ITEM_CHOPPER] = 0.7f, [ITEM_FLAKE] = 1.0f, [ITEM_HAND_AXE] = 0.9f}},
+    /* A flake cuts the fibre it should only clean (fingernails do it slowly). */
+    [TOOL_USE_SCRAPING] = {"scraping",
+                           N_("tool_use.scraping"),
+                           0.3f,
+                           {[ITEM_FLAKE] = 0.6f, [ITEM_WOODEN_SCRAPER] = 1.0f}},
+    [TOOL_USE_PIERCING] = {"piercing",
+                           N_("tool_use.piercing"),
+                           0.0f,
+                           {[ITEM_FLAKE] = 0.4f, [ITEM_FLINT_BORER] = 1.0f}},
 };
 
 /* Speed factor of a tool of the worst and of the best quality, linear in

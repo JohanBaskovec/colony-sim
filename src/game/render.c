@@ -184,6 +184,8 @@ static const SDL_Color PROGRESS_COLOR = {120, 220, 110, 255};
 static const SDL_Color SELECTION_COLOR = {255, 255, 255, 255};
 static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
 static const SDL_Color HARDENED_SPEAR_COLOR = {128, 88, 52, 255};
+static const SDL_Color BIRCH_BARK_COLOR = {232, 226, 212, 255}; /* Its white outer side. */
+static const SDL_Color BIRCH_BARK_INNER_COLOR = {196, 132, 84, 255};
 static const SDL_Color PIT_COLOR = {46, 38, 34, 255};
 static const SDL_Color ASH_COLOR = {98, 94, 90, 255};
 static const SDL_Color FLAME_COLOR = {240, 118, 34, 255};
@@ -1647,6 +1649,63 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
+    case ITEM_BIRCH_BARK: {
+        /* Two curled white sheets, the brown inner side showing at their edge,
+         * with the dark lenticel streaks of birch bark. */
+        for (int i = 0; i < 2; i++) {
+            SDL_FRect sheet = {tile->x + floorf(w * (0.16f + 0.1f * (float)i)),
+                               tile->y + floorf(h * (0.34f + 0.16f * (float)i)), floorf(w * 0.56f),
+                               SDL_max(2.0f, floorf(h * 0.2f))};
+            fill_outlined(renderer, sheet, shade(BIRCH_BARK_COLOR, -i * 12));
+            SDL_FRect inner = {sheet.x, sheet.y + sheet.h - SDL_max(1.0f, floorf(sheet.h * 0.3f)),
+                               sheet.w, SDL_max(1.0f, floorf(sheet.h * 0.3f))};
+            batch_quad(renderer, BIRCH_BARK_INNER_COLOR, &inner);
+            for (int streak = 0; streak < 3; streak++) {
+                SDL_FRect mark = {sheet.x + floorf(sheet.w * (0.2f + 0.25f * (float)streak)),
+                                  sheet.y + 1.0f, SDL_max(1.0f, floorf(sheet.w * 0.12f)),
+                                  SDL_max(1.0f, floorf(sheet.h * 0.18f))};
+                batch_quad(renderer, (SDL_Color){60, 56, 52, 255}, &mark);
+            }
+        }
+        break;
+    }
+    case ITEM_BARK_TRAY: {
+        /* A shallow white box, its folded corners pinned with twigs. */
+        SDL_FRect body = {tile->x + floorf(w * 0.2f), tile->y + floorf(h * 0.44f), floorf(w * 0.6f),
+                          SDL_max(2.0f, floorf(h * 0.26f))};
+        fill_outlined(renderer, body, BIRCH_BARK_COLOR);
+        SDL_FRect inside = {body.x + 2.0f, body.y + 1.0f, SDL_max(1.0f, body.w - 4.0f),
+                            SDL_max(1.0f, floorf(body.h * 0.4f))};
+        batch_quad(renderer, BIRCH_BARK_INNER_COLOR, &inside);
+        float pin = SDL_max(1.0f, floorf(w * 0.05f));
+        for (int i = 0; i < 2; i++) {
+            float x = i == 0 ? body.x - pin * 0.5f : body.x + body.w - pin * 0.5f;
+            batch_bar(renderer, TWIG_COLOR, x, body.y - pin * 2.0f, x, body.y + body.h + pin, pin);
+        }
+        break;
+    }
+    case ITEM_WOODEN_SCRAPER: {
+        /* A short flat stick, one end rounded off into a blunt blade. */
+        float thickness = SDL_max(1.0f, floorf(h * 0.14f));
+        SDL_FRect handle = {tile->x + floorf(w * 0.22f), tile->y + floorf(h * 0.48f),
+                            floorf(w * 0.4f), thickness};
+        fill_outlined(renderer, handle, SPEAR_COLOR);
+        SDL_FRect blade = {handle.x + handle.w, handle.y - floorf(thickness * 0.3f),
+                           floorf(w * 0.16f), thickness + floorf(thickness * 0.6f)};
+        fill_outlined(renderer, blade, shade(SPEAR_COLOR, 18));
+        break;
+    }
+    case ITEM_FLINT_BORER: {
+        /* A small flake drawn out into a point. */
+        float thickness = SDL_max(1.0f, floorf(h * 0.12f));
+        SDL_FRect base = {tile->x + floorf(w * 0.34f), tile->y + floorf(h * 0.44f),
+                          floorf(w * 0.2f), thickness * 2.0f};
+        fill_outlined(renderer, base, FLAKE_COLOR);
+        batch_bar(renderer, shade(FLAKE_COLOR, -20), base.x + base.w, base.y + thickness,
+                  base.x + base.w + floorf(w * 0.18f), base.y + thickness,
+                  SDL_max(1.0f, thickness * 0.6f));
+        break;
+    }
     case ITEM_DIGGING_STICK:
     case ITEM_DIGGING_STICK_HARDENED: {
         /* A short stout stick with a point; darker once hardened in the fire. */
@@ -2258,7 +2317,7 @@ void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, in
 static float craft_fraction(const Workstation *station)
 {
     const RecipeDef *recipe = recipe_def((RecipeType)station->work_recipe);
-    if (recipe == NULL || station->work_input.type == ITEM_NONE) {
+    if (recipe == NULL || station->work_inputs[0].type == ITEM_NONE) {
         return 0.0f;
     }
     return clampf(station->work_progress / recipe->work, 0.0f, 1.0f);
@@ -2382,14 +2441,14 @@ static void render_known_workstations(SDL_Renderer *renderer, const Game *game,
             Workstation remembered = {.type = (uint8_t)(picture->type_plus_one - 1),
                                       .burning = picture->burning,
                                       .fuel = (float)picture->fuel * 0.1f};
-            remembered.work_input.type = picture->input;
+            remembered.work_inputs[0].type = picture->input;
             SDL_FRect tile = tile_rect(camera, x, y);
             render_station_shape(renderer, &tile, (WorkstationType)remembered.type, 255);
             if (hearth_is(&remembered)) {
                 render_hearth_fire(renderer, &tile, &remembered);
             }
-            if (remembered.work_input.type != ITEM_NONE) {
-                render_item_stack(renderer, &tile, (ItemType)remembered.work_input.type);
+            if (remembered.work_inputs[0].type != ITEM_NONE) {
+                render_item_stack(renderer, &tile, (ItemType)remembered.work_inputs[0].type);
                 batch_flush(renderer);
             }
             int index = vision_seen(&game->vision, x, y, z) ? workstation_at(workstations, x, y, z)
@@ -2430,8 +2489,8 @@ void render_workstations(SDL_Renderer *renderer, const Game *game, const Camera 
         if (hearth_is(station)) {
             render_hearth_fire(renderer, &tile, station);
         }
-        if (station->work_input.type != ITEM_NONE) {
-            render_item_stack(renderer, &tile, (ItemType)station->work_input.type);
+        if (station->work_inputs[0].type != ITEM_NONE) {
+            render_item_stack(renderer, &tile, (ItemType)station->work_inputs[0].type);
             batch_flush(renderer);
         }
         progress_bar(renderer, &tile, craft_fraction(station));

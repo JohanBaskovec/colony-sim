@@ -152,6 +152,20 @@ typedef struct SourceSearch {
 
 static bool is_haul_source(const Map *map, int x, int y, int z, void *userdata);
 
+/* Whether items of a type lying on a tile wait there for a craft: the tile of a station someone
+ * else works at, which gathers that ingredient (workstation_gathers()). */
+static bool laid_for_a_craft(const HaulWorld *world, int x, int y, int z, ItemType type)
+{
+    if (world->workstations == NULL) {
+        return false;
+    }
+    const Workstation *station =
+        workstation_get_const(world->workstations, workstation_at(world->workstations, x, y, z));
+    return station != NULL && workstation_gathers(station, type) &&
+           reservations_taken_by_other(world->reservations, RESERVATION_STATION,
+                                       (TilePos){(int16_t)x, (int16_t)y, (int16_t)z}, world->self);
+}
+
 bool haul_any_job_possible(const HaulWorld *world)
 {
     if (world->stockpiles->used_count == 0) {
@@ -225,6 +239,7 @@ static ItemStack haulable_group(const HaulWorld *world, const StorageLevels *sto
         if (count > 0 && items_mixed(world->items, x, y, z)) {
             int current = stockpile_storage_priority(world->stockpiles, x, y, z, groups[0]);
             if (storage->levels[groups[0].type] != 0 &&
+                !laid_for_a_craft(world, x, y, z, (ItemType)groups[0].type) &&
                 has_better_level(levels_for(world, storage, groups[0], x, y, z), current)) {
                 return groups[0];
             }
@@ -232,7 +247,8 @@ static ItemStack haulable_group(const HaulWorld *world, const StorageLevels *sto
         }
     }
     for (int i = 0; i < count; i++) {
-        if (storage->levels[groups[i].type] == 0 || groups[i].forbidden) {
+        if (storage->levels[groups[i].type] == 0 || groups[i].forbidden ||
+            laid_for_a_craft(world, x, y, z, (ItemType)groups[i].type)) {
             continue;
         }
         int current = stockpile_storage_priority(world->stockpiles, x, y, z, groups[i]);
@@ -348,7 +364,8 @@ static bool is_extra_source(const Map *map, int x, int y, int z, void *userdata)
     /* The load's group: allowed items, as the load is. */
     ItemStack stack = items_get_group(world->items, x, y, z, search->load);
     if (stack.type == ITEM_NONE || !stockpile_accepts(search->zone, stack) ||
-        !stockpile_in_radius(search->zone, x, y, z)) {
+        !stockpile_in_radius(search->zone, x, y, z) ||
+        laid_for_a_craft(world, x, y, z, (ItemType)stack.type)) {
         return false;
     }
     if (stockpile_forbidden_at(world->stockpiles, x, y, z)) {

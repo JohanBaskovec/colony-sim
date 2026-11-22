@@ -50,7 +50,7 @@ ctest --preset headless -R test_game.test_plant_conditions  # one function of a 
 COLONY_TEST_ONLY=test_plant_conditions ./build/headless/tests/test_game  # the same, by hand
 ctest --preset debug -L i18n          # translation checks only (label)
 ./build/headless/bench/bench_pathfinding 200 2000   # benchmark (use an optimized build for real numbers)
-./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times (processor time: steady on a busy machine), percentiles, slowest ticks, state hash (3: construction, 5: cooking), heaps, rot, bills, items check
+./build/release/bench/bench_simulation 64 10 1      # 64 colonists, 10 days, scenario 1: tick times (processor time: steady on a busy machine), percentiles, slowest ticks, state hash (3: construction, 5: cooking, 6: basketry), heaps, rot, bills, items check
 BENCH_CHECK_ITEMS=1 ./build/headless-release/bench/bench_simulation 12 4 5  # also checks the items every in-game hour (game_check_items()), stops at the first problem
 cmake --preset headless-release && cmake --build --preset headless-release  # optimized core + benchmarks, no SDL (for simulations)
 ./build/headless-release/bench/bench_social 8 10 4  # social life of 8 settlers for 10 days, scenario 4 (two feuding clans): chats, arguments, brawls, apologies, company per day, opinions (setup after the seed: discord, feud, abrasive, kind, loners, sociable)

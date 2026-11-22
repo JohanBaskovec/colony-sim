@@ -628,7 +628,7 @@ static void test_remembers_workstations(void)
         game_tick(&game);
     }
     CHECK(!game_tile_seen(&game, sx, sy, z));
-    workstations_remove(&game.workstations, index, (ItemStack[1]){0});
+    workstations_remove(&game.workstations, index, (ItemStack[RECIPE_INGREDIENT_MAX]){0});
     for (int i = 0; i < 30; i++) {
         game_tick(&game);
     }

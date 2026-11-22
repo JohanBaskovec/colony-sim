@@ -38,6 +38,18 @@ static void test_type_factors(void)
     CHECK_NEAR(tool_type_factor(TOOL_USE_NONE, ITEM_NONE), 1.0, 1e-6);
     CHECK_NEAR(tool_type_factor(TOOL_USE_NONE, ITEM_FLAKE), 1.0, 1e-6);
     CHECK_NEAR(tool_type_factor(TOOL_USE_BUILDING, ITEM_TYPE_COUNT), 0.0, 1e-6);
+    /* Fibre work (docs/CONTAINERS.md §5): a flake cuts, a dull wooden edge scrapes fibre
+     * clean (a flake is a poor scraper, fingernails worse), a borer pierces bark. */
+    CHECK_NEAR(tool_type_factor(TOOL_USE_CUTTING, ITEM_FLAKE), 1.0, 1e-6);
+    CHECK_NEAR(tool_type_factor(TOOL_USE_CUTTING, ITEM_NONE), 0.5, 1e-6);
+    CHECK_NEAR(tool_type_factor(TOOL_USE_SCRAPING, ITEM_WOODEN_SCRAPER), 1.0, 1e-6);
+    CHECK(tool_type_factor(TOOL_USE_SCRAPING, ITEM_FLAKE) <
+          tool_type_factor(TOOL_USE_SCRAPING, ITEM_WOODEN_SCRAPER));
+    CHECK(tool_type_factor(TOOL_USE_SCRAPING, ITEM_NONE) <
+          tool_type_factor(TOOL_USE_SCRAPING, ITEM_FLAKE));
+    CHECK_NEAR(tool_type_factor(TOOL_USE_PIERCING, ITEM_FLINT_BORER), 1.0, 1e-6);
+    CHECK_NEAR(tool_type_factor(TOOL_USE_PIERCING, ITEM_NONE), 0.0, 1e-6);
+    CHECK_NEAR(tool_type_factor(TOOL_USE_PIERCING, ITEM_WOODEN_SCRAPER), 0.0, 1e-6);
 }
 
 static void test_quality_factors(void)

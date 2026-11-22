@@ -640,7 +640,7 @@ static void test_fire_hardening(void)
     run_ticks(&game, 600, true);
     CHECK(crafter->task != TASK_CRAFT);
     CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 1);
-    CHECK_EQ_INT(hearth(&game, index)->work_input.count, 0);
+    CHECK_EQ_INT(hearth(&game, index)->work_inputs[0].count, 0);
 
     /* Lit: the spear is hardened, its quality and condition kept. */
     REQUIRE(hearth_light(&game.workstations, index));
@@ -657,7 +657,7 @@ static void test_fire_hardening(void)
     run_ticks(&game, 200, true);
     CHECK(crafter->task != TASK_CRAFT);
     CHECK_NEAR(hearth(&game, index)->work_progress, progress, 1e-4);
-    CHECK_EQ_INT(hearth(&game, index)->work_input.type, ITEM_THROWING_SPEAR);
+    CHECK_EQ_INT(hearth(&game, index)->work_inputs[0].type, ITEM_THROWING_SPEAR);
 
     workstation_get(&game.workstations, index)->fuel = HEARTH_FUEL_CAPACITY;
     REQUIRE(hearth_light(&game.workstations, index));

@@ -30,153 +30,189 @@
 #define CUTTING_TOOL (ITEM_TYPE_BIT(ITEM_FLAKE) | ITEM_TYPE_BIT(ITEM_HAND_AXE))
 
 static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
-    [RECIPE_CHOPPER] = {"chopper",
-                        N_("recipe.chopper"),
-                        CRAFTING_SPOT,
-                        {ITEM_COBBLE, ITEM_FLINT},
-                        1,
-                        ITEM_QUALITY_WORST,
-                        {HAMMER, 0},
-                        250.0f,
-                        KNOWLEDGE_STONE_KNAPPING,
-                        50.0f,
-                        ITEM_CHOPPER,
-                        6,
-                        TOOL_USE_KNAPPING},
-    [RECIPE_FLAKES] = {"flakes",
-                       N_("recipe.flakes"),
-                       CRAFTING_SPOT,
-                       {ITEM_FLINT, ITEM_COBBLE},
-                       1,
-                       ITEM_QUALITY_WORST,
-                       {HAMMER, 0},
-                       375.0f,
-                       KNOWLEDGE_STONE_KNAPPING,
-                       55.0f,
-                       ITEM_FLAKE,
-                       8,
-                       TOOL_USE_KNAPPING},
-    [RECIPE_HAND_AXE] = {"hand_axe",
-                         N_("recipe.hand_axe"),
-                         CRAFTING_SPOT,
-                         {ITEM_FLINT, ITEM_COBBLE},
-                         1,
-                         ITEM_QUALITY_WORST,
-                         {HAMMER, 0},
-                         2500.0f,
-                         KNOWLEDGE_STONE_KNAPPING,
-                         70.0f,
-                         ITEM_HAND_AXE,
-                         12,
-                         TOOL_USE_KNAPPING},
+    [RECIPE_CHOPPER] = {.id = "chopper",
+                        .name_key = N_("recipe.chopper"),
+                        .stations = CRAFTING_SPOT,
+                        .ingredients = {{{ITEM_COBBLE, ITEM_FLINT}, 1, ITEM_WANT_ANY}},
+                        .input_min_quality = ITEM_QUALITY_WORST,
+                        .tools = {HAMMER, 0},
+                        .work = 250.0f,
+                        .knowledge = KNOWLEDGE_STONE_KNAPPING,
+                        .min_level = 50.0f,
+                        .product = ITEM_CHOPPER,
+                        .dirt = 6,
+                        .tool_use = TOOL_USE_KNAPPING},
+    [RECIPE_FLAKES] = {.id = "flakes",
+                       .name_key = N_("recipe.flakes"),
+                       .stations = CRAFTING_SPOT,
+                       .ingredients = {{{ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_WANT_ANY}},
+                       .input_min_quality = ITEM_QUALITY_WORST,
+                       .tools = {HAMMER, 0},
+                       .work = 375.0f,
+                       .knowledge = KNOWLEDGE_STONE_KNAPPING,
+                       .min_level = 55.0f,
+                       .product = ITEM_FLAKE,
+                       .dirt = 8,
+                       .tool_use = TOOL_USE_KNAPPING},
+    [RECIPE_HAND_AXE] = {.id = "hand_axe",
+                         .name_key = N_("recipe.hand_axe"),
+                         .stations = CRAFTING_SPOT,
+                         .ingredients = {{{ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_WANT_ANY}},
+                         .input_min_quality = ITEM_QUALITY_WORST,
+                         .tools = {HAMMER, 0},
+                         .work = 2500.0f,
+                         .knowledge = KNOWLEDGE_STONE_KNAPPING,
+                         .min_level = 70.0f,
+                         .product = ITEM_HAND_AXE,
+                         .dirt = 12,
+                         .tool_use = TOOL_USE_KNAPPING},
     /* Spears want straight branches: standard quality or better. */
-    [RECIPE_THROWING_SPEAR] = {"throwing_spear",
-                               N_("recipe.throwing_spear"),
-                               CRAFTING_SPOT,
-                               {ITEM_BRANCHES, ITEM_NONE},
-                               1,
-                               ITEM_QUALITY_STANDARD,
-                               {CUTTING_TOOL, 0},
-                               3750.0f,
-                               KNOWLEDGE_SPEAR_MAKING,
-                               50.0f,
-                               ITEM_THROWING_SPEAR,
-                               4,
-                               TOOL_USE_WOODWORKING},
-    [RECIPE_THRUSTING_SPEAR] = {"thrusting_spear",
-                                N_("recipe.thrusting_spear"),
-                                CRAFTING_SPOT,
-                                {ITEM_BRANCHES, ITEM_NONE},
-                                2,
-                                ITEM_QUALITY_STANDARD,
-                                {ITEM_TYPE_BIT(ITEM_HAND_AXE), ITEM_TYPE_BIT(ITEM_FLAKE)},
-                                6250.0f,
-                                KNOWLEDGE_SPEAR_MAKING,
-                                60.0f,
-                                ITEM_THRUSTING_SPEAR,
-                                6,
-                                TOOL_USE_WOODWORKING},
+    [RECIPE_THROWING_SPEAR] = {.id = "throwing_spear",
+                               .name_key = N_("recipe.throwing_spear"),
+                               .stations = CRAFTING_SPOT,
+                               .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                               .input_min_quality = ITEM_QUALITY_STANDARD,
+                               .tools = {CUTTING_TOOL, 0},
+                               .work = 3750.0f,
+                               .knowledge = KNOWLEDGE_SPEAR_MAKING,
+                               .min_level = 50.0f,
+                               .product = ITEM_THROWING_SPEAR,
+                               .dirt = 4,
+                               .tool_use = TOOL_USE_WOODWORKING},
+    [RECIPE_THRUSTING_SPEAR] = {.id = "thrusting_spear",
+                                .name_key = N_("recipe.thrusting_spear"),
+                                .stations = CRAFTING_SPOT,
+                                .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 2, ITEM_WANT_ANY}},
+                                .input_min_quality = ITEM_QUALITY_STANDARD,
+                                .tools = {ITEM_TYPE_BIT(ITEM_HAND_AXE), ITEM_TYPE_BIT(ITEM_FLAKE)},
+                                .work = 6250.0f,
+                                .knowledge = KNOWLEDGE_SPEAR_MAKING,
+                                .min_level = 60.0f,
+                                .product = ITEM_THRUSTING_SPEAR,
+                                .dirt = 6,
+                                .tool_use = TOOL_USE_WOODWORKING},
     /* Drying and charring a wooden point over the fire. */
-    [RECIPE_HARDEN_THROWING_SPEAR] = {"harden_throwing_spear",
-                                      N_("recipe.harden_throwing_spear"),
-                                      OPEN_HEARTH,
-                                      {ITEM_THROWING_SPEAR, ITEM_NONE},
-                                      1,
-                                      ITEM_QUALITY_WORST,
-                                      {0, 0},
-                                      750.0f,
-                                      KNOWLEDGE_FIRE,
-                                      55.0f,
-                                      ITEM_THROWING_SPEAR_HARDENED,
-                                      0,
-                                      TOOL_USE_NONE},
-    [RECIPE_HARDEN_THRUSTING_SPEAR] = {"harden_thrusting_spear",
-                                       N_("recipe.harden_thrusting_spear"),
-                                       OPEN_HEARTH,
-                                       {ITEM_THRUSTING_SPEAR, ITEM_NONE},
-                                       1,
-                                       ITEM_QUALITY_WORST,
-                                       {0, 0},
-                                       750.0f,
-                                       KNOWLEDGE_FIRE,
-                                       55.0f,
-                                       ITEM_THRUSTING_SPEAR_HARDENED,
-                                       0,
-                                       TOOL_USE_NONE},
+    [RECIPE_HARDEN_THROWING_SPEAR] =
+        {.id = "harden_throwing_spear",
+         .name_key = N_("recipe.harden_throwing_spear"),
+         .stations = OPEN_HEARTH,
+         .ingredients = {{{ITEM_THROWING_SPEAR, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {0, 0},
+         .work = 750.0f,
+         .knowledge = KNOWLEDGE_FIRE,
+         .min_level = 55.0f,
+         .product = ITEM_THROWING_SPEAR_HARDENED,
+         .dirt = 0,
+         .tool_use = TOOL_USE_NONE},
+    [RECIPE_HARDEN_THRUSTING_SPEAR] =
+        {.id = "harden_thrusting_spear",
+         .name_key = N_("recipe.harden_thrusting_spear"),
+         .stations = OPEN_HEARTH,
+         .ingredients = {{{ITEM_THRUSTING_SPEAR, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {0, 0},
+         .work = 750.0f,
+         .knowledge = KNOWLEDGE_FIRE,
+         .min_level = 55.0f,
+         .product = ITEM_THRUSTING_SPEAR_HARDENED,
+         .dirt = 0,
+         .tool_use = TOOL_USE_NONE},
     /* A stout branch, its end cut to a point: part of gathering. */
-    [RECIPE_DIGGING_STICK] = {"digging_stick",
-                              N_("recipe.digging_stick"),
-                              CRAFTING_SPOT,
-                              {ITEM_BRANCHES, ITEM_NONE},
-                              1,
-                              ITEM_QUALITY_WORST,
-                              {CUTTING_TOOL, 0},
-                              375.0f,
-                              KNOWLEDGE_GATHERING,
-                              50.0f,
-                              ITEM_DIGGING_STICK,
-                              2,
-                              TOOL_USE_WOODWORKING},
-    [RECIPE_HARDEN_DIGGING_STICK] = {"harden_digging_stick",
-                                     N_("recipe.harden_digging_stick"),
-                                     OPEN_HEARTH,
-                                     {ITEM_DIGGING_STICK, ITEM_NONE},
-                                     1,
-                                     ITEM_QUALITY_WORST,
-                                     {0, 0},
-                                     750.0f,
-                                     KNOWLEDGE_FIRE,
-                                     55.0f,
-                                     ITEM_DIGGING_STICK_HARDENED,
-                                     0,
-                                     TOOL_USE_NONE},
+    [RECIPE_DIGGING_STICK] = {.id = "digging_stick",
+                              .name_key = N_("recipe.digging_stick"),
+                              .stations = CRAFTING_SPOT,
+                              .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                              .input_min_quality = ITEM_QUALITY_WORST,
+                              .tools = {CUTTING_TOOL, 0},
+                              .work = 375.0f,
+                              .knowledge = KNOWLEDGE_GATHERING,
+                              .min_level = 50.0f,
+                              .product = ITEM_DIGGING_STICK,
+                              .dirt = 2,
+                              .tool_use = TOOL_USE_WOODWORKING},
+    [RECIPE_HARDEN_DIGGING_STICK] =
+        {.id = "harden_digging_stick",
+         .name_key = N_("recipe.harden_digging_stick"),
+         .stations = OPEN_HEARTH,
+         .ingredients = {{{ITEM_DIGGING_STICK, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {0, 0},
+         .work = 750.0f,
+         .knowledge = KNOWLEDGE_FIRE,
+         .min_level = 55.0f,
+         .product = ITEM_DIGGING_STICK_HARDENED,
+         .dirt = 0,
+         .tool_use = TOOL_USE_NONE},
     /* Roots roasted in the embers: more of their starch is digested. */
-    [RECIPE_ROAST_RHIZOMES] = {"roast_rhizomes",
-                               N_("recipe.roast_rhizomes"),
-                               OPEN_HEARTH,
-                               {ITEM_CATTAIL_RHIZOMES, ITEM_NONE},
-                               4,
-                               ITEM_QUALITY_WORST,
-                               {0, 0},
-                               250.0f,
-                               KNOWLEDGE_FIRE,
-                               50.0f,
-                               ITEM_ROASTED_RHIZOMES,
-                               0,
-                               TOOL_USE_NONE},
-    [RECIPE_ROAST_CARROTS] = {"roast_carrots",
-                              N_("recipe.roast_carrots"),
-                              OPEN_HEARTH,
-                              {ITEM_WILD_CARROTS, ITEM_NONE},
-                              4,
-                              ITEM_QUALITY_WORST,
-                              {0, 0},
-                              250.0f,
-                              KNOWLEDGE_FIRE,
-                              50.0f,
-                              ITEM_ROASTED_CARROTS,
-                              0,
-                              TOOL_USE_NONE},
+    [RECIPE_ROAST_RHIZOMES] =
+        {.id = "roast_rhizomes",
+         .name_key = N_("recipe.roast_rhizomes"),
+         .stations = OPEN_HEARTH,
+         .ingredients = {{{ITEM_CATTAIL_RHIZOMES, ITEM_NONE}, 4, ITEM_WANT_ANY}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {0, 0},
+         .work = 250.0f,
+         .knowledge = KNOWLEDGE_FIRE,
+         .min_level = 50.0f,
+         .product = ITEM_ROASTED_RHIZOMES,
+         .dirt = 0,
+         .tool_use = TOOL_USE_NONE},
+    [RECIPE_ROAST_CARROTS] = {.id = "roast_carrots",
+                              .name_key = N_("recipe.roast_carrots"),
+                              .stations = OPEN_HEARTH,
+                              .ingredients = {{{ITEM_WILD_CARROTS, ITEM_NONE}, 4, ITEM_WANT_ANY}},
+                              .input_min_quality = ITEM_QUALITY_WORST,
+                              .tools = {0, 0},
+                              .work = 250.0f,
+                              .knowledge = KNOWLEDGE_FIRE,
+                              .min_level = 50.0f,
+                              .product = ITEM_ROASTED_CARROTS,
+                              .dirt = 0,
+                              .tool_use = TOOL_USE_NONE},
+    /* A branch split and its edge rounded: the blade shapes it (docs/CONTAINERS.md §5). */
+    [RECIPE_WOODEN_SCRAPER] = {.id = "wooden_scraper",
+                               .name_key = N_("recipe.wooden_scraper"),
+                               .stations = CRAFTING_SPOT,
+                               .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                               .input_min_quality = ITEM_QUALITY_WORST,
+                               .tools = {CUTTING_TOOL, 0},
+                               .tool_shapes = true,
+                               .work = 750.0f,
+                               .knowledge = KNOWLEDGE_CORDAGE,
+                               .min_level = 50.0f,
+                               .product = ITEM_WOODEN_SCRAPER,
+                               .dirt = 3,
+                               .tool_use = TOOL_USE_WOODWORKING},
+    /* A sharp flake retouched to a point with the hammer stone. */
+    [RECIPE_FLINT_BORER] = {.id = "flint_borer",
+                            .name_key = N_("recipe.flint_borer"),
+                            .stations = CRAFTING_SPOT,
+                            .ingredients = {{{ITEM_FLAKE, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                            .input_min_quality = ITEM_QUALITY_WORST,
+                            .tools = {HAMMER, 0},
+                            .work = 500.0f,
+                            .knowledge = KNOWLEDGE_STONE_KNAPPING,
+                            .min_level = 60.0f,
+                            .product = ITEM_FLINT_BORER,
+                            .dirt = 2,
+                            .tool_use = TOOL_USE_KNAPPING},
+    /* A sheet of bark scored, folded at the corners and pinned with twigs:
+     * pliable bark only (fresh, or softened in water), dry bark cracks. */
+    [RECIPE_BARK_TRAY] = {.id = "bark_tray",
+                          .name_key = N_("recipe.bark_tray"),
+                          .stations = CRAFTING_SPOT,
+                          .ingredients = {{{ITEM_BIRCH_BARK, ITEM_NONE}, 1, ITEM_WANT_WET},
+                                          {{ITEM_TWIGS, ITEM_NONE}, 2, ITEM_WANT_ANY}},
+                          .input_min_quality = ITEM_QUALITY_WORST,
+                          .tools = {ITEM_TYPE_BIT(ITEM_FLAKE), 0},
+                          .tool_shapes = true,
+                          .work = 1250.0f,
+                          .knowledge = KNOWLEDGE_BASKETRY,
+                          .min_level = 50.0f,
+                          .product = ITEM_BARK_TRAY,
+                          .dirt = 2,
+                          .tool_use = TOOL_USE_CUTTING},
 };
 
 #undef CRAFTING_SPOT
@@ -189,24 +225,70 @@ const RecipeDef *recipe_def(RecipeType recipe)
     return (unsigned)recipe < RECIPE_COUNT ? &RECIPE_DEFS[recipe] : NULL;
 }
 
-ItemTypeMask recipe_inputs(RecipeType recipe)
+const RecipeIngredient *recipe_ingredient(RecipeType recipe, int index)
 {
     const RecipeDef *def = recipe_def(recipe);
+    return def != NULL && index >= 0 && index < RECIPE_INGREDIENT_MAX &&
+                   def->ingredients[index].count > 0
+               ? &def->ingredients[index]
+               : NULL;
+}
+
+int recipe_ingredient_count(RecipeType recipe)
+{
+    int count = 0;
+    while (recipe_ingredient(recipe, count) != NULL) {
+        count++;
+    }
+    return count;
+}
+
+ItemTypeMask recipe_ingredient_types(RecipeType recipe, int index)
+{
+    const RecipeIngredient *ingredient = recipe_ingredient(recipe, index);
     ItemTypeMask mask = 0;
-    for (int i = 0; def != NULL && i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        if (def->inputs[i] != ITEM_NONE) {
-            mask |= ITEM_TYPE_BIT(def->inputs[i]);
+    for (int i = 0; ingredient != NULL && i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        if (ingredient->types[i] != ITEM_NONE) {
+            mask |= ITEM_TYPE_BIT(ingredient->types[i]);
         }
     }
     return mask;
 }
 
-bool recipe_accepts_input(RecipeType recipe, ItemStack stack)
+ItemTypeMask recipe_inputs(RecipeType recipe)
+{
+    ItemTypeMask mask = 0;
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        mask |= recipe_ingredient_types(recipe, i);
+    }
+    return mask;
+}
+
+int recipe_ingredient_of(RecipeType recipe, ItemType type)
+{
+    if ((unsigned)type >= ITEM_TYPE_COUNT || type == ITEM_NONE) {
+        return -1;
+    }
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        if (recipe_ingredient_types(recipe, i) & ITEM_TYPE_BIT(type)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool recipe_accepts_ingredient(RecipeType recipe, int index, ItemStack stack)
 {
     const RecipeDef *def = recipe_def(recipe);
     return def != NULL && stack.type != ITEM_NONE &&
-           (recipe_inputs(recipe) & ITEM_TYPE_BIT(stack.type)) &&
+           (recipe_ingredient_types(recipe, index) & ITEM_TYPE_BIT(stack.type)) &&
            stack.quality >= def->input_min_quality;
+}
+
+bool recipe_accepts_input(RecipeType recipe, ItemStack stack)
+{
+    return recipe_accepts_ingredient(recipe, recipe_ingredient_of(recipe, (ItemType)stack.type),
+                                     stack);
 }
 
 bool recipe_doable_at(RecipeType recipe, double level)
@@ -218,21 +300,55 @@ bool recipe_doable_at(RecipeType recipe, double level)
 /* Knapping a cobble rather than flint: it counts as a crude stone (this
  * quality) whatever its own. */
 #define COBBLE_KNAPPING_QUALITY 10
+/* A tool that shapes the material counts for this share of the average
+ * quality that caps the products (docs/CONTAINERS.md §6). */
+#define SHAPING_TOOL_SHARE 0.25
 
 static bool knaps_a_cobble(const RecipeDef *def, ItemStack input)
 {
     return def->knowledge == KNOWLEDGE_STONE_KNAPPING && input.type == ITEM_COBBLE;
 }
 
-ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
+/* The quality an ingredient counts for in the cap. */
+static int material_quality(const RecipeDef *def, ItemStack input)
+{
+    return knaps_a_cobble(def, input) ? COBBLE_KNAPPING_QUALITY : input.quality;
+}
+
+ItemQuality recipe_quality_cap_of(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIENT_MAX],
+                                  ItemStack tool)
 {
     const RecipeDef *def = recipe_def(recipe);
-    const ItemDef *material = item_def((ItemType)input.type);
-    if (def == NULL || material == NULL || !material->has_quality) {
+    if (def == NULL) {
         return ITEM_QUALITY_BEST;
     }
-    int base = knaps_a_cobble(def, input) ? COBBLE_KNAPPING_QUALITY : input.quality;
-    return clampi(base + ITEM_QUALITY_CAP_BONUS, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+    double sum = 0.0;
+    long count = 0;
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        const ItemDef *material = item_def((ItemType)inputs[i].type);
+        if (inputs[i].count > 0 && material != NULL && material->has_quality) {
+            sum += (double)material_quality(def, inputs[i]) * inputs[i].count;
+            count += inputs[i].count;
+        }
+    }
+    const ItemDef *shaping = item_def((ItemType)tool.type);
+    bool tool_counts =
+        def->tool_shapes && tool.count > 0 && shaping != NULL && shaping->has_quality;
+    if (count == 0 && !tool_counts) {
+        return ITEM_QUALITY_BEST; /* Nothing caps it. */
+    }
+    double base = count > 0 ? sum / (double)count : (double)tool.quality;
+    if (tool_counts && count > 0) {
+        base = (1.0 - SHAPING_TOOL_SHARE) * base + SHAPING_TOOL_SHARE * (double)tool.quality;
+    }
+    int cap = (int)floor(base + 0.5);
+    return clampi(cap + ITEM_QUALITY_CAP_BONUS, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+}
+
+ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
+{
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {input};
+    return recipe_quality_cap_of(recipe, inputs, (ItemStack){.type = ITEM_NONE});
 }
 
 bool recipe_needs_fire(RecipeType recipe)
@@ -267,11 +383,11 @@ static ItemStack product(ItemType type, int count, double level, Rng *rng, ItemQ
     return stack;
 }
 
-/* The products of recipe_craft(), before the wood species. */
-static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack input, double level,
-                          Rng *rng, ItemStack out[RECIPE_PRODUCT_MAX])
+/* The products of recipe_craft_with(), before the wood species: `input` is the
+ * main ingredient (the first), `cap` the products' best quality. */
+static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack input, ItemQuality cap,
+                          double level, Rng *rng, ItemStack out[RECIPE_PRODUCT_MAX])
 {
-    ItemQuality cap = recipe_quality_cap(recipe, input);
     switch (recipe) {
     case RECIPE_FLAKES:
         out[0] = product(ITEM_FLAKE, FLAKES_BASE + steps_above_mastery(level), level, rng, cap);
@@ -301,7 +417,7 @@ static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack inp
         /* One roasted root per raw one, keeping no longer than the raw ones
          * would have (as long, though: a root about to rot does not rot
          * sooner for being roasted). */
-        out[0] = product(def->product, def->input_count, level, rng, cap);
+        out[0] = product(def->product, def->ingredients[0].count, level, rng, cap);
         float hours = item_stack_rot_hours(input, 1.0f);
         if (out[0].count > 0 && hours >= 0.0f) {
             int most = item_hit_points_lasting(def->product, hours);
@@ -315,33 +431,53 @@ static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack inp
     }
 }
 
-int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
-                 ItemStack out[RECIPE_PRODUCT_MAX])
+/* The species of the first wooden ingredient (0 when none is wooden). */
+static WoodMask ingredient_woods(const ItemStack inputs[RECIPE_INGREDIENT_MAX])
+{
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        const ItemDef *material = item_def((ItemType)inputs[i].type);
+        if (inputs[i].count > 0 && material != NULL && material->wooden) {
+            return inputs[i].woods;
+        }
+    }
+    return 0;
+}
+
+int recipe_craft_with(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIENT_MAX],
+                      ItemStack tool, double level, Rng *rng, ItemStack out[RECIPE_PRODUCT_MAX])
 {
     const RecipeDef *def = recipe_def(recipe);
     if (def == NULL) {
         return 0;
     }
-    int count = craft_products(recipe, def, input, level, rng, out);
+    ItemQuality cap = recipe_quality_cap_of(recipe, inputs, tool);
+    int count = craft_products(recipe, def, inputs[0], cap, level, rng, out);
     /* What is made of wood keeps every species of its material
      * (docs/TREES.md §6); a new shaft is as good as its wood makes it, within
      * the material's cap (hardening keeps the shaft's quality). */
     bool hardening = recipe == RECIPE_HARDEN_THROWING_SPEAR ||
                      recipe == RECIPE_HARDEN_THRUSTING_SPEAR ||
                      recipe == RECIPE_HARDEN_DIGGING_STICK;
+    WoodMask woods = ingredient_woods(inputs);
     for (int i = 0; i < count; i++) {
         if (!item_def((ItemType)out[i].type)->wooden) {
             continue;
         }
-        out[i].woods = item_def((ItemType)input.type)->wooden ? input.woods : 0;
+        out[i].woods = woods;
         if (!hardening && out[i].count > 0) {
             int quality = out[i].quality + wood_shafts(out[i].woods);
-            int cap = recipe_quality_cap(recipe, input);
             out[i].quality = (uint8_t)clampi(quality, ITEM_QUALITY_WORST,
                                              quality > out[i].quality ? cap : ITEM_QUALITY_BEST);
         }
     }
     return count;
+}
+
+int recipe_craft(RecipeType recipe, ItemStack input, double level, Rng *rng,
+                 ItemStack out[RECIPE_PRODUCT_MAX])
+{
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {input};
+    return recipe_craft_with(recipe, inputs, (ItemStack){.type = ITEM_NONE}, level, rng, out);
 }
 
 ItemStack recipe_average_product(RecipeType recipe, ItemType input, int input_quality,
@@ -352,19 +488,26 @@ ItemStack recipe_average_product(RecipeType recipe, ItemType input, int input_qu
     if (def == NULL) {
         return none;
     }
-    if (input == ITEM_NONE) {
-        input = def->inputs[0];
-    }
-    const ItemDef *material = item_def(input);
-    ItemStack stack = none;
-    if (input != ITEM_NONE && material != NULL) {
-        stack = item_stack_make(input, def->input_count,
-                                clampi(input_quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST),
-                                material->max_hit_points);
-        stack.woods = material->wooden ? woods : 0;
+    int given = input != ITEM_NONE ? recipe_ingredient_of(recipe, input) : -1;
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {{.type = ITEM_NONE}};
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        const RecipeIngredient *ingredient = recipe_ingredient(recipe, i);
+        if (ingredient == NULL) {
+            continue;
+        }
+        ItemType type = i == given ? input : ingredient->types[0];
+        const ItemDef *material = item_def(type);
+        if (type == ITEM_NONE || material == NULL) {
+            continue;
+        }
+        inputs[i] = item_stack_make(type, ingredient->count,
+                                    clampi(input_quality, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST),
+                                    material->max_hit_points);
+        inputs[i].woods = material->wooden ? woods : 0;
     }
     ItemStack made[RECIPE_PRODUCT_MAX];
-    int count = recipe_craft(recipe, stack, level, NULL, made);
+    int count =
+        recipe_craft_with(recipe, inputs, (ItemStack){.type = ITEM_NONE}, level, NULL, made);
     for (int i = 0; i < count; i++) {
         if (made[i].type == def->product) {
             return made[i];

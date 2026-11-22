@@ -13,6 +13,9 @@ static const KnowledgeDef KNOWLEDGE_DEFS[KNOWLEDGE_COUNT] = {
     [KNOWLEDGE_SPEAR_HUNTING] = {"spear_hunting", N_("knowledge.spear_hunting"), true},
     [KNOWLEDGE_BUTCHERING] = {"butchering", N_("knowledge.butchering"), true},
     [KNOWLEDGE_BASIC_SHELTERS] = {"basic_shelters", N_("knowledge.basic_shelters"), true},
+    /* Starting knowledges while their chains are tested (docs/CONTAINERS.md §8). */
+    [KNOWLEDGE_CORDAGE] = {"cordage", N_("knowledge.cordage"), true},
+    [KNOWLEDGE_BASKETRY] = {"basketry", N_("knowledge.basketry"), true},
 };
 
 const KnowledgeDef *knowledge_def(KnowledgeType knowledge)

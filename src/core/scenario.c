@@ -251,6 +251,80 @@ static void setup_cooking(Game *game, const Colonist *first)
     gather_forever(game, land, GATHER_CATTAIL_RHIZOMES);
 }
 
+/* A built crafting spot near (x, y, z), -1 if no tile is free. */
+static int crafting_spot(Game *game, int x, int y, int z)
+{
+    int sx, sy;
+    if (!free_tile(game, x, y, z, 16, true, &sx, &sy)) {
+        return -1;
+    }
+    map_remove_plant(&game->map, sx, sy, z);
+    return workstations_place(&game->workstations, &game->map, WORKSTATION_CRAFTING_SPOT, sx, sy,
+                              z);
+}
+
+static void setup_basketry(Game *game, const Colonist *first)
+{
+    if (first == NULL) {
+        return;
+    }
+    int x = first->x, y = first->y, z = first->z;
+    static const KnowledgeType NEEDED[] = {KNOWLEDGE_BASKETRY, KNOWLEDGE_CORDAGE,
+                                           KNOWLEDGE_STONE_KNAPPING};
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        Colonist *colonist = game_colonist(game, game_colonist_id_at(game, slot));
+        for (size_t k = 0; colonist != NULL && k < sizeof(NEEDED) / sizeof(NEEDED[0]); k++) {
+            if (colonist_knowledge_level(colonist, NEEDED[k]) < 65.0) {
+                colonist_set_knowledge_level(colonist, NEEDED[k], 65.0);
+            }
+        }
+    }
+    Workstations *stations = &game->workstations;
+    int spot = crafting_spot(game, x + 4, y, z);
+    if (spot < 0) {
+        return;
+    }
+    int trays = workstation_add_bill(stations, spot, RECIPE_BARK_TRAY);
+    workstation_set_bill_mode(stations, spot, trays, BILL_DO_TIMES);
+    workstation_set_bill_target(stations, spot, trays, BILL_TARGET_MAX);
+    static const RecipeType FEW[] = {RECIPE_WOODEN_SCRAPER, RECIPE_FLINT_BORER};
+    for (size_t i = 0; i < sizeof(FEW) / sizeof(FEW[0]); i++) {
+        int bill = workstation_add_bill(stations, spot, FEW[i]);
+        workstation_set_bill_mode(stations, spot, bill, BILL_DO_TIMES);
+        workstation_set_bill_target(stations, spot, bill, 3);
+    }
+    /* Heaps around: bark (every fourth heap dried out), twigs, and what the tools need. */
+    for (int i = 0; i < 16; i++) {
+        int hx, hy;
+        if (!free_tile(game, x + (i % 4) * 5 - 8, y + (i / 4) * 5 - 8, z, 6, false, &hx, &hy)) {
+            continue;
+        }
+        switch (i % 4) {
+        case 0: {
+            ItemStack bark = item_stack_make(ITEM_BIRCH_BARK, 3 + i % 3, 40 + (i * 7) % 40, 0);
+            if (i % 8 == 4) {
+                item_stack_set_moisture(&bark, 0.1f);
+            }
+            items_add(&game->items, hx, hy, z, bark);
+            break;
+        }
+        case 1: items_add(&game->items, hx, hy, z, item_stack_pristine(ITEM_TWIGS, 8)); break;
+        case 2:
+            items_add(&game->items, hx, hy, z, item_stack_make(ITEM_FLAKE, 2, 50 + i, 0));
+            items_add(&game->items, hx, hy, z, item_stack_pristine(ITEM_COBBLE, 2));
+            break;
+        default:
+            items_add(&game->items, hx, hy, z,
+                      item_stack_make(ITEM_BRANCHES, 2, ITEM_QUALITY_STANDARD, 0));
+            break;
+        }
+    }
+    int sx, sy;
+    if (free_tile(game, x, y + 12, z, 10, false, &sx, &sy)) {
+        stockpile_create(&game->stockpiles, &game->map, sx - 3, sy - 2, sx + 3, sy + 2, z);
+    }
+}
+
 bool scenario_apply(Game *game, Scenario scenario)
 {
     if ((unsigned)scenario >= SCENARIO_COUNT) {
@@ -266,6 +340,7 @@ bool scenario_apply(Game *game, Scenario scenario)
         game_debug_feud(game);
         break;
     case SCENARIO_COOKING: setup_cooking(game, first); break;
+    case SCENARIO_BASKETRY: setup_basketry(game, first); break;
     default: break;
     }
     return true;

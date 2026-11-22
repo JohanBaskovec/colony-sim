@@ -22,6 +22,11 @@
 /* Mixed into the game seed for the stream colonist looks are rolled from. */
 #define GAME_APPEARANCE_SEED 0x5eed1ce5a77ea12aULL
 #define GAME_ATTRIBUTES_SEED 0xa77a1b07e5c0de5bULL
+/* ...and the stream of the starting knowledges added after the first seven. */
+#define GAME_LATER_KNOWLEDGE_SEED 0x1a7e4b0ed6e5ca1fULL
+/* Starting knowledges rolled from the game's stream, as they always were; those after
+ * come from GAME_LATER_KNOWLEDGE_SEED, so that adding one changes nothing else. */
+#define GAME_FIRST_KNOWLEDGES (KNOWLEDGE_BASIC_SHELTERS + 1)
 /* Relationships are brought up to date once an hour, at this tick of it. */
 #define GAME_SOCIAL_UPDATE_PHASE 7
 /* Preferred: drinkable water within this travel cost of the spawn point. */
@@ -142,10 +147,14 @@ EntityId game_spawn_colonist(Game *game, int x, int y, int z)
     colonist->needs[NEED_WATER] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->needs[NEED_REST] = 0.6f + 0.4f * rng_next_float(&game->rng);
     colonist->timer = rng_range_i32(&game->rng, 0, COLONIST_IDLE_MAX_TICKS);
+    Rng later;
+    rng_seed(&later, game->seed ^ GAME_LATER_KNOWLEDGE_SEED,
+             ((uint64_t)id.generation << 32) | id.index);
     for (int knowledge = 0; knowledge < KNOWLEDGE_COUNT; knowledge++) {
         if (knowledge_def((KnowledgeType)knowledge)->starting) {
+            Rng *rng = knowledge < GAME_FIRST_KNOWLEDGES ? &game->rng : &later;
             colonist_set_knowledge_level(colonist, (KnowledgeType)knowledge,
-                                         knowledge_random_starting_level(&game->rng));
+                                         knowledge_random_starting_level(rng));
         }
     }
     colonist_set_strength(colonist, colonist_random_strength(&game->rng, colonist->age));
@@ -2931,7 +2940,7 @@ static void clear_caved_in(Game *game, TilePos tile)
     }
     int station = workstation_at(&game->workstations, x, y, z);
     if (station != WORKSTATION_NONE) {
-        ItemStack returned[1];
+        ItemStack returned[RECIPE_INGREDIENT_MAX];
         int count = workstations_remove(&game->workstations, station, returned);
         for (int i = 0; i < count; i++) {
             drop_beside(game, x, y, z, returned[i]);
@@ -3171,13 +3180,17 @@ ItemsCheck game_check_items(const Game *game)
     /* The inputs of crafts in progress and the materials delivered to sites. */
     for (int index = 0; index < WORKSTATION_MAX; index++) {
         const Workstation *station = &game->workstations.list[index];
-        if (station->used && station->work_input.held != 0) {
-            if (!items_check_load(&game->items, station->work_input)) {
+        for (int i = 0; station->used && i < RECIPE_INGREDIENT_MAX; i++) {
+            const ItemStack *input = &station->work_inputs[i];
+            if (input->count <= 0 || input->held == 0) {
+                continue;
+            }
+            if (!items_check_load(&game->items, *input)) {
                 check.problems++;
                 check.first =
                     check.first != NULL ? check.first : "a craft's input is not its items";
             }
-            held += station->work_input.count;
+            held += input->count;
         }
     }
     for (int index = 0; index < CONSTRUCTION_MAX; index++) {
@@ -4566,10 +4579,11 @@ BillEstimate game_bill_estimate(const Game *game, const Bill *bill)
     if (estimate.crafters == 0) {
         return estimate;
     }
-    ItemType input = ITEM_NONE;
+    ItemType input = ITEM_NONE; /* The main ingredient's first type the bill allows. */
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES && input == ITEM_NONE; i++) {
-        if (def->inputs[i] != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(def->inputs[i]))) {
-            input = def->inputs[i];
+        ItemType type = def->ingredients[0].types[i];
+        if (type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type))) {
+            input = type;
         }
     }
     estimate.low =
@@ -4621,7 +4635,8 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
         return false;
     }
     if (game->debug.free_crafts) {
-        return bill_free_input(bill).count > 0;
+        ItemStack free[RECIPE_INGREDIENT_MAX];
+        return bill_free_inputs(bill, free);
     }
     /* Tools nobody carries yet will be taken from what lies around. */
     ItemTypeMask tools[RECIPE_TOOL_MAX] = {0};
@@ -4651,7 +4666,9 @@ bool game_hearth_lacks(const Game *game, const Workstation *station, HearthIngre
         }
     }
     ItemChoice choice = ITEM_CHOICE_ANY;
-    choice.dry = hearth_ingredient_dry(ingredient); /* Wet twigs are no kindling. */
+    choice.moisture = hearth_ingredient_dry(ingredient)
+                          ? ITEM_WANT_DRY
+                          : ITEM_WANT_ANY; /* Wet twigs are no kindling. */
     return !items_any_chosen(game_view_items(game), hearth_ingredient_types(ingredient), choice);
 }
 
@@ -4707,7 +4724,7 @@ bool game_remove_workstation(Game *game, int index)
         return false;
     }
     int x = station->x, y = station->y, z = station->z;
-    ItemStack returned[1];
+    ItemStack returned[RECIPE_INGREDIENT_MAX];
     int count = workstations_remove(&game->workstations, index, returned);
     for (int i = 0; i < count; i++) {
         items_drop_load(&game->items, &game->map, x, y, z, &returned[i]);
@@ -4736,9 +4753,10 @@ bool game_remove_bill(Game *game, int station_index, int bill)
         return false;
     }
     int x = station->x, y = station->y, z = station->z;
-    ItemStack returned;
-    if (workstation_remove_bill(&game->workstations, station_index, bill, &returned)) {
-        items_drop_load(&game->items, &game->map, x, y, z, &returned);
+    ItemStack returned[RECIPE_INGREDIENT_MAX];
+    int count = workstation_remove_bill(&game->workstations, station_index, bill, returned);
+    for (int i = 0; i < count; i++) {
+        items_drop_load(&game->items, &game->map, x, y, z, &returned[i]);
     }
     return true;
 }

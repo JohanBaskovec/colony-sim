@@ -353,6 +353,7 @@ item.throwing_spear_hardened.of_wood = Fire-hardened {0} throwing spear
 item.thrusting_spear_hardened.of_wood = Fire-hardened {0} thrusting spear
 item.digging_stick.of_wood = {0} digging stick
 item.digging_stick_hardened.of_wood = Fire-hardened {0} digging stick
+item.wooden_scraper.of_wood = {0} scraper
 item.roasted_rhizomes = Roasted rhizomes
 item.roasted_carrots = Roasted wild carrots
 item.wood_sorrel = Wood sorrel leaves
@@ -366,6 +367,10 @@ item.moss = Moss
 item.bracken = Bracken
 item.heather = Heather
 item.reeds = Reeds
+item.birch_bark = Birch bark
+item.wooden_scraper = Wooden scraper
+item.flint_borer = Flint borer
+item.bark_tray = Folded bark tray
 item.settler_body = Settler's body
 item.roe_deer_carcass = Roe deer carcass
 item.red_deer_carcass = Red deer carcass
@@ -393,6 +398,9 @@ tool_use.knapping = Knapping
 tool_use.woodworking = Woodworking
 tool_use.building = Building
 tool_use.digging = Digging
+tool_use.cutting = Cutting
+tool_use.scraping = Scraping fibre
+tool_use.piercing = Piercing
 item.form.rigid = rigid
 item.form.bundle = bundle
 item.form.loose = loose pieces
@@ -420,6 +428,8 @@ knowledge.spear_making = Spear making
 knowledge.spear_hunting = Spear hunting
 knowledge.butchering = Butchering
 knowledge.basic_shelters = Basic shelters
+knowledge.cordage = Cordage and fibres
+knowledge.basketry = Basketry
 
 # Seasons
 season.spring = Spring
@@ -923,6 +933,9 @@ recipe.digging_stick = Digging stick
 recipe.harden_digging_stick = Harden a digging stick in the fire
 recipe.roast_rhizomes = Roast cattail rhizomes
 recipe.roast_carrots = Roast wild carrots
+recipe.wooden_scraper = Wooden scraper
+recipe.flint_borer = Flint borer
+recipe.bark_tray = Folded bark tray
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted
@@ -933,6 +946,20 @@ recipe.either = {0} or {1}
 recipe.either_three = {0}, {1} or {2}
 # {0}, {1} = both needed
 recipe.both = {0} and {1}
+# Three ingredients, all needed
+recipe.all_three = {0}, {1} and {2}
+# {0} = ingredient with its count (recipe.ingredient), wanted dry
+recipe.ingredient_dry = {0}, dry
+# Tooltip of an ingredient wanted dry
+recipe.ingredient_dry.tip = The ingredient must have dried out: fresh, it is still too damp.
+# {0} = ingredient with its count, wanted green: freshly cut, not yet dried out
+recipe.ingredient_green = {0}, green
+# Tooltip of an ingredient wanted green
+recipe.ingredient_green.tip = The ingredient must be freshly cut: once dried out, it no longer does.
+# {0} = ingredient with its count, wanted not dry: still fresh, or softened in water
+recipe.ingredient_wet = {0}, pliable
+# Tooltip of an ingredient wanted pliable
+recipe.ingredient_wet.tip = The ingredient must be fresh, or soaked in water if it has dried out.
 
 # Workstation inspector
 forbid.forbid = Forbid
@@ -1956,6 +1983,8 @@ topic.knowledge.spear_making = spear making
 topic.knowledge.spear_hunting = hunting with spears
 topic.knowledge.butchering = butchering
 topic.knowledge.basic_shelters = building shelters
+topic.knowledge.cordage = twisting cord
+topic.knowledge.basketry = basket making
 knowhow.fire = how to make fire
 knowhow.stone_knapping = how to knap stone
 knowhow.gathering = where the good things to gather grow
@@ -1963,6 +1992,8 @@ knowhow.spear_making = how to make a spear
 knowhow.spear_hunting = how to hunt with a spear
 knowhow.butchering = how to butcher game
 knowhow.basic_shelters = how to build a shelter
+knowhow.cordage = how to twist a strong cord
+knowhow.basketry = how to weave a basket
 story.killed_animal = killing {0}
 story.attacked_by_animal = being attacked by {0}
 story.saw_death = seeing {0} die

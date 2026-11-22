@@ -88,7 +88,7 @@ static void test_placing_and_removing(void)
     CHECK_EQ_INT(stations.used_count, 1);
 
     /* A spot is made of nothing: nothing comes back. */
-    ItemStack returned[1];
+    ItemStack returned[RECIPE_INGREDIENT_MAX];
     int number = station->number;
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
     CHECK(workstation_get(&stations, index) == NULL);
@@ -220,11 +220,11 @@ static void test_bills(void)
         CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_CHOPPER), i);
     }
     CHECK_EQ_INT(workstation_add_bill(&stations, knapping, RECIPE_CHOPPER), -1);
-    ItemStack returned;
-    CHECK(!workstation_remove_bill(&stations, knapping, 0, &returned));
+    ItemStack returned[RECIPE_INGREDIENT_MAX];
+    CHECK(!workstation_remove_bill(&stations, knapping, 0, returned));
     CHECK_EQ_INT(station->bill_count, WORKSTATION_BILL_MAX - 1);
     CHECK_EQ_INT(station->bills[0].recipe, RECIPE_CHOPPER);
-    CHECK(!workstation_remove_bill(&stations, knapping, WORKSTATION_BILL_MAX, &returned));
+    CHECK(!workstation_remove_bill(&stations, knapping, WORKSTATION_BILL_MAX, returned));
     free_world(&map, &stations, &items);
 }
 
@@ -292,31 +292,88 @@ static void test_crafting(void)
     int bill = workstation_add_bill(&stations, index, RECIPE_FLAKES);
     ItemStack flint = item_stack_make(ITEM_FLINT, 1, TEST_QUALITY_FINE, 0);
 
+    CHECK(!workstation_start_craft(
+        &stations, index, RECIPE_FLAKES,
+        (ItemStack[RECIPE_INGREDIENT_MAX]){item_stack_pristine(ITEM_WOOD, 1)}));
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES,
+                                    (ItemStack[RECIPE_INGREDIENT_MAX]){flint}));
     CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES,
-                                   item_stack_pristine(ITEM_WOOD, 1)));
-    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, flint));
-    CHECK(!workstation_start_craft(&stations, index, RECIPE_FLAKES, flint)); /* Busy. */
+                                   (ItemStack[RECIPE_INGREDIENT_MAX]){flint})); /* Busy. */
 
     float needed = recipe_def(RECIPE_FLAKES)->work;
     CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed * 0.5f, 55.0,
-                                      NULL, 0));
+                                      (ItemStack){.type = ITEM_NONE}, NULL, 0));
     CHECK(workstation_add_craft_work(&stations, index, bill, &items, &map, needed * 0.5f, 55.0,
-                                     NULL, 0));
+                                     (ItemStack){.type = ITEM_NONE}, NULL, 0));
     ItemStack flakes = items_get(&items, 3, 4, 0);
     CHECK_EQ_INT(flakes.type, ITEM_FLAKE);
     CHECK_EQ_INT(flakes.count, 3);
     const Workstation *station = workstation_get_const(&stations, index);
     CHECK_EQ_INT(station->bills[bill].done, 1);
-    CHECK_EQ_INT(station->work_input.count, 0);
+    CHECK_EQ_INT(station->work_inputs[0].count, 0);
     CHECK_EQ_INT(station->work_recipe, RECIPE_COUNT);
-    CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed, 55.0, NULL, 0));
+    CHECK(!workstation_add_craft_work(&stations, index, bill, &items, &map, needed, 55.0,
+                                      (ItemStack){.type = ITEM_NONE}, NULL, 0));
 
     /* The input of an unfinished craft comes back with its bill. */
-    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, flint));
-    ItemStack returned = {0};
-    CHECK(workstation_remove_bill(&stations, index, bill, &returned));
-    CHECK_EQ_INT(returned.type, ITEM_FLINT);
-    CHECK_EQ_INT(workstation_get_const(&stations, index)->work_input.count, 0);
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES,
+                                    (ItemStack[RECIPE_INGREDIENT_MAX]){flint}));
+    ItemStack returned[RECIPE_INGREDIENT_MAX] = {0};
+    CHECK_EQ_INT(workstation_remove_bill(&stations, index, bill, returned), 1);
+    CHECK_EQ_INT(returned[0].type, ITEM_FLINT);
+    CHECK_EQ_INT(workstation_get_const(&stations, index)->work_inputs[0].count, 0);
+    free_world(&map, &stations, &items);
+}
+
+/* A craft of several ingredients holds a stack of each, all of them needed to start, each
+ * given back when it is called off; the extra stacks count in the state hash. */
+static void test_crafting_several_ingredients(void)
+{
+    Map map;
+    Workstations stations;
+    Items items;
+    REQUIRE(init_world(&map, &stations, &items));
+    int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
+    int bill = workstation_add_bill(&stations, index, RECIPE_BARK_TRAY);
+    REQUIRE(bill >= 0);
+    CHECK_EQ_UINT(workstation_get_const(&stations, index)->bills[bill].inputs,
+                  recipe_inputs(RECIPE_BARK_TRAY));
+    ItemStack bark = item_stack_make(ITEM_BIRCH_BARK, 1, ITEM_QUALITY_STANDARD, 0);
+    ItemStack twigs = item_stack_make(ITEM_TWIGS, 2, ITEM_QUALITY_STANDARD, 0);
+    CHECK(!workstation_start_craft(&stations, index, RECIPE_BARK_TRAY,
+                                   (ItemStack[RECIPE_INGREDIENT_MAX]){bark}));
+    CHECK(!workstation_start_craft(&stations, index, RECIPE_BARK_TRAY,
+                                   (ItemStack[RECIPE_INGREDIENT_MAX]){twigs, bark}));
+    uint64_t idle = workstations_hash(&stations, HASH_FNV1A64_INIT);
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_BARK_TRAY,
+                                    (ItemStack[RECIPE_INGREDIENT_MAX]){bark, twigs}));
+    const Workstation *station = workstation_get_const(&stations, index);
+    CHECK(workstation_crafting(station));
+    CHECK_EQ_INT(station->work_inputs[1].count, 2);
+    uint64_t busy = workstations_hash(&stations, HASH_FNV1A64_INIT);
+    CHECK(busy != idle);
+    stations.list[index].work_inputs[1].count = 3; /* The second stack is hashed too. */
+    CHECK(workstations_hash(&stations, HASH_FNV1A64_INIT) != busy);
+    stations.list[index].work_inputs[1].count = 2;
+
+    ItemStack returned[RECIPE_INGREDIENT_MAX] = {0};
+    CHECK_EQ_INT(workstation_remove_bill(&stations, index, bill, returned), 2);
+    CHECK_EQ_INT(returned[0].type, ITEM_BIRCH_BARK);
+    CHECK_EQ_INT(returned[1].type, ITEM_TWIGS);
+    CHECK_EQ_INT(returned[1].count, 2);
+    CHECK(!workstation_crafting(station));
+    CHECK_EQ_INT(station->work_inputs[1].count, 0);
+
+    /* Made: a tray on the station, the bill counts it. */
+    bill = workstation_add_bill(&stations, index, RECIPE_BARK_TRAY);
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_BARK_TRAY,
+                                    (ItemStack[RECIPE_INGREDIENT_MAX]){bark, twigs}));
+    CHECK(workstation_add_craft_work(
+        &stations, index, bill, &items, &map, recipe_def(RECIPE_BARK_TRAY)->work, 75.0,
+        item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15), NULL, 0));
+    CHECK_EQ_INT(items_count_at(&items, 3, 4, 0, ITEM_BARK_TRAY), 1);
+    CHECK_EQ_INT(station->bills[bill].done, 1);
+    CHECK_EQ_INT(station->work_inputs[1].count, 0);
     free_world(&map, &stations, &items);
 }
 
@@ -333,12 +390,14 @@ static void test_crafting_with_a_load(void)
     ItemStack load = {.type = ITEM_NONE};
     items_add(&items, 8, 8, 0, item_stack_make(ITEM_FLINT, 1, TEST_QUALITY_FINE, 0));
     REQUIRE(items_pick_up(&items, 8, 8, 0, 1, &load) == 1);
-    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, load));
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES,
+                                    (ItemStack[RECIPE_INGREDIENT_MAX]){load}));
     const Workstation *station = workstation_get_const(&stations, index);
-    CHECK(station->work_input.held == load.held);
+    CHECK(station->work_inputs[0].held == load.held);
     CHECK_EQ_INT(items.held_count, 1);
     CHECK(workstation_add_craft_work(&stations, index, bill, &items, &map,
-                                     recipe_def(RECIPE_FLAKES)->work, 55.0, NULL, 0));
+                                     recipe_def(RECIPE_FLAKES)->work, 55.0,
+                                     (ItemStack){.type = ITEM_NONE}, NULL, 0));
     CHECK_EQ_INT(items.held_count, 0);
     CHECK_EQ_INT(items.totals[ITEM_FLINT], 0);
     CHECK_EQ_INT(items_check(&items).problems, 0);
@@ -347,11 +406,12 @@ static void test_crafting_with_a_load(void)
     load = (ItemStack){.type = ITEM_NONE};
     items_add(&items, 8, 8, 0, item_stack_make(ITEM_FLINT, 1, TEST_QUALITY_SUPERB, 0));
     REQUIRE(items_pick_up(&items, 8, 8, 0, 1, &load) == 1);
-    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES, load));
-    ItemStack returned = {0};
-    REQUIRE(workstation_remove_bill(&stations, index, bill, &returned));
-    CHECK(returned.held == load.held);
-    items_drop_load(&items, &map, 3, 5, 0, &returned);
+    REQUIRE(workstation_start_craft(&stations, index, RECIPE_FLAKES,
+                                    (ItemStack[RECIPE_INGREDIENT_MAX]){load}));
+    ItemStack returned[RECIPE_INGREDIENT_MAX] = {0};
+    REQUIRE(workstation_remove_bill(&stations, index, bill, returned) == 1);
+    CHECK(returned[0].held == load.held);
+    items_drop_load(&items, &map, 3, 5, 0, &returned[0]);
     CHECK_EQ_INT(items_get_of(&items, 3, 5, 0, ITEM_TYPE_BIT(ITEM_FLINT)).quality,
                  TEST_QUALITY_SUPERB);
     CHECK_EQ_INT(items.held_count, 0);
@@ -508,7 +568,7 @@ static void test_saved_bill_defaults(void)
     CHECK_EQ_INT(next.min_level, 30);
     CHECK_EQ_INT(next.max_level, 70);
     /* Taken away with the station: a new one starts plain. */
-    ItemStack returned[1];
+    ItemStack returned[RECIPE_INGREDIENT_MAX];
     workstations_remove(&stations, spot, returned);
     int again = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     REQUIRE(again != WORKSTATION_NONE);
@@ -525,6 +585,7 @@ int main(void)
     RUN_TEST(test_bill_drafts);
     RUN_TEST(test_saved_bill_defaults);
     RUN_TEST(test_crafting);
+    RUN_TEST(test_crafting_several_ingredients);
     RUN_TEST(test_crafting_with_a_load);
     RUN_TEST(test_bill_inputs_after_tools);
     RUN_TEST(test_hash);

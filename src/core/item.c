@@ -236,6 +236,26 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                         false, true),
                     .length_cm = 200, .form = ITEM_FORM_BUNDLE,
                     WATER(0.6f, 0.75f, 1.0f, 80.0f, 0.2f)},
+    /* A sheet about 40 × 60 cm. Pliable fresh (worked within a day or so of
+     * peeling) or once softened in water again; brittle dry. Its betulin
+     * keeps it from rotting. */
+    [ITEM_BIRCH_BARK] = {DEF("birch_bark", N_("item.birch_bark"), ITEM_CATEGORY_RESOURCES, 0.15f,
+                             2.0f, 0.0f, 20, true, true),
+                         .length_cm = 60, .form = ITEM_FORM_BUNDLE,
+                         WATER(0.45f, 0.6f, 1.0f, 36.0f, 0.25f)},
+    [ITEM_WOODEN_SCRAPER] = {DEF("wooden_scraper", N_("item.wooden_scraper"), ITEM_CATEGORY_TOOLS,
+                                 0.15f, 0.6f, 0.0f, 40, true, true),
+                             .length_cm = 20, .form = ITEM_FORM_RIGID, .wooden = true,
+                             .wood_name_key = N_("item.wooden_scraper.of_wood"), TOOL_WATER},
+    [ITEM_FLINT_BORER] = {DEF("flint_borer", N_("item.flint_borer"), ITEM_CATEGORY_TOOLS, 0.02f,
+                              0.1f, 0.0f, 20, true, true),
+                          .length_cm = 5, .form = ITEM_FORM_RIGID},
+    /* Holds about 2 litres; a container to carry in from step C4 of
+     * docs/CONTAINERS.md (a tool until then). */
+    [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,
+                            0.0f, 25, true, true),
+                        .length_cm = 30, .form = ITEM_FORM_RIGID,
+                        WATER(0.15f, 0.5f, 1.0f, 36.0f, 0.25f)},
     [ITEM_SETTLER_BODY] = {DEF("settler_body", N_("item.settler_body"), ITEM_CATEGORY_BODIES, 65.0f,
                                1000.0f, 0.0f, 100, false, true),
                            .length_cm = 170, .form = ITEM_FORM_LIMP, .rot_days = 10.0f},
@@ -484,6 +504,30 @@ ItemMoistureState item_moisture_state(ItemType type, float moisture)
     }
     return moisture >= ITEM_DEFS[type].water.room - SOAKED_MARGIN ? ITEM_MOISTURE_SOAKED
                                                                   : ITEM_MOISTURE_WET;
+}
+
+bool item_moisture_green(ItemType type, float moisture)
+{
+    if (!item_takes_water(type) || item_moisture_dry(type, moisture)) {
+        return false;
+    }
+    float settled = item_reference_moisture(type), fresh = ITEM_DEFS[type].water.fresh;
+    return moisture >= settled + ITEM_GREEN_SHARE * (fresh - settled);
+}
+
+bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want)
+{
+    switch (want) {
+    case ITEM_WANT_ANY: return true;
+    case ITEM_WANT_DRY: return item_moisture_dry(type, moisture);
+    case ITEM_WANT_GREEN: return item_moisture_green(type, moisture);
+    case ITEM_WANT_WET: {
+        ItemMoistureState state = item_moisture_state(type, moisture);
+        return state == ITEM_MOISTURE_WET || state == ITEM_MOISTURE_SOAKED;
+    }
+    case ITEM_WANT_COUNT: break;
+    }
+    return false;
 }
 
 const char *item_moisture_state_key(ItemMoistureState state)
@@ -1624,7 +1668,8 @@ static bool chosen(const Item *item, const ItemStack *stack, ItemChoice choice)
 {
     return item_matches(item, stack) && item->quality >= choice.min_quality &&
            item->quality <= choice.max_quality &&
-           (!choice.dry || item_moisture_dry((ItemType)item->type, item_moisture(item)));
+           item_moisture_fits((ItemType)item->type, item_moisture(item),
+                              (ItemMoistureWant)choice.moisture);
 }
 
 int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, ItemChoice choice)
@@ -1732,7 +1777,7 @@ int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int c
                          ItemChoice choice, ItemStack *load)
 {
     if (choice.min_quality <= ITEM_QUALITY_WORST && choice.max_quality >= ITEM_QUALITY_BEST &&
-        !choice.soonest_rot && choice.woods == 0 && !choice.dry) {
+        !choice.soonest_rot && choice.woods == 0 && choice.moisture == ITEM_WANT_ANY) {
         return items_pick_up_of(items, x, y, z, ITEM_TYPE_BIT(type), count, load);
     }
     if (!in_bounds(items, x, y, z) || count <= 0) {

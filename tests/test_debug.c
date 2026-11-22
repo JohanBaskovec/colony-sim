@@ -160,13 +160,24 @@ static void test_bill_free_input(void)
 {
     Bill bill = {.recipe = RECIPE_HAND_AXE, .inputs = recipe_inputs(RECIPE_HAND_AXE)};
     const RecipeDef *def = recipe_def(RECIPE_HAND_AXE);
-    ItemStack input = bill_free_input(&bill);
-    CHECK_EQ_INT(input.type, def->inputs[0]);
-    CHECK_EQ_INT(input.count, def->input_count);
-    CHECK(input.quality >= ITEM_QUALITY_STANDARD);
-    CHECK(recipe_accepts_input(RECIPE_HAND_AXE, input));
-    bill.inputs = 0; /* Every input refused. */
-    CHECK_EQ_INT(bill_free_input(&bill).count, 0);
+    ItemStack inputs[RECIPE_INGREDIENT_MAX];
+    REQUIRE(bill_free_inputs(&bill, inputs));
+    CHECK_EQ_INT(inputs[0].type, def->ingredients[0].types[0]);
+    CHECK_EQ_INT(inputs[0].count, def->ingredients[0].count);
+    CHECK(inputs[0].quality >= ITEM_QUALITY_STANDARD);
+    CHECK(recipe_accepts_input(RECIPE_HAND_AXE, inputs[0]));
+    CHECK_EQ_INT(inputs[1].count, 0); /* A single ingredient. */
+    bill.inputs = 0;                  /* Every input refused. */
+    CHECK(!bill_free_inputs(&bill, inputs));
+    /* Several ingredients: a stack of each. */
+    Bill tray = {.recipe = RECIPE_BARK_TRAY, .inputs = recipe_inputs(RECIPE_BARK_TRAY)};
+    REQUIRE(bill_free_inputs(&tray, inputs));
+    CHECK_EQ_INT(inputs[0].type, ITEM_BIRCH_BARK);
+    CHECK_EQ_INT(inputs[0].count, 1);
+    CHECK_EQ_INT(inputs[1].type, ITEM_TWIGS);
+    CHECK_EQ_INT(inputs[1].count, 2);
+    tray.inputs = ITEM_TYPE_BIT(ITEM_BIRCH_BARK); /* No twigs allowed. */
+    CHECK(!bill_free_inputs(&tray, inputs));
 }
 
 /* A knapper with a hammer, a knapping spot with a hand axe bill, and no flint
@@ -216,16 +227,16 @@ static void test_free_input_is_not_given_back(void)
         int index = knapping_without_flint(&game, &knapper);
         game_set_free_crafts(&game, true);
         const Workstation *station = workstation_get_const(&game.workstations, index);
-        for (int i = 0; i < 600 && station->work_input.count == 0; i++) {
+        for (int i = 0; i < 600 && station->work_inputs[0].count == 0; i++) {
             run_ticks(&game, 1);
         }
-        REQUIRE(station->work_input.count > 0);
+        REQUIRE(station->work_inputs[0].count > 0);
         CHECK(station->free_input);
         if (remove_station) {
             CHECK(game_remove_workstation(&game, index));
         } else {
             CHECK(game_remove_bill(&game, index, 0));
-            CHECK_EQ_INT(station->work_input.count, 0);
+            CHECK_EQ_INT(station->work_inputs[0].count, 0);
             CHECK(!station->free_input);
         }
         CHECK_EQ_INT((int)game.items.totals[ITEM_FLINT], 0);
@@ -244,12 +255,13 @@ static void test_free_input_is_not_given_back(void)
     REQUIRE(workstation_start_free_craft(&stations, index, 0));
     CHECK(stations.list[index].free_input);
     CHECK(!workstation_start_free_craft(&stations, index, 0)); /* Already one. */
-    ItemStack returned[1];
+    ItemStack returned[RECIPE_INGREDIENT_MAX];
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 0);
     index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 2, 2, 0);
     workstation_add_bill(&stations, index, RECIPE_HAND_AXE);
-    REQUIRE(workstation_start_craft(&stations, index, RECIPE_HAND_AXE,
-                                    item_stack_pristine(ITEM_FLINT, 1)));
+    REQUIRE(workstation_start_craft(
+        &stations, index, RECIPE_HAND_AXE,
+        (ItemStack[RECIPE_INGREDIENT_MAX]){item_stack_pristine(ITEM_FLINT, 1)}));
     CHECK(!stations.list[index].free_input);
     CHECK_EQ_INT(workstations_remove(&stations, index, returned), 1);
     CHECK_EQ_INT(returned[0].type, ITEM_FLINT);

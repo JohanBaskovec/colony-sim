@@ -56,7 +56,7 @@ void known_copy_tile(KnownWorld *known, const Map *map, const Items *items, cons
     picture->type_plus_one = (uint8_t)(station->type + 1);
     picture->burning = station->burning;
     picture->fuel = (uint8_t)(tenths < 0.0f ? 0.0f : tenths > 255.0f ? 255.0f : tenths);
-    picture->input = station->work_input.type;
+    picture->input = station->work_inputs[0].type;
 }
 
 void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const Dirt *dirt,
@@ -123,7 +123,7 @@ void known_copy_run(KnownWorld *known, const Map *map, const Items *items, const
         picture->type_plus_one = (uint8_t)(station->type + 1);
         picture->burning = station->burning;
         picture->fuel = (uint8_t)(tenths < 0.0f ? 0.0f : tenths > 255.0f ? 255.0f : tenths);
-        picture->input = station->work_input.type;
+        picture->input = station->work_inputs[0].type;
     }
 }
 

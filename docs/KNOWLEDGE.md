@@ -12,7 +12,9 @@ at a time as development reaches them.
 **Current scope**: the knowledge system, and the seven **starting
 knowledges** every first settler has: Fire, Stone knapping, Gathering, Spear
 making, Spear hunting, Butchering, Basic shelters. Other knowledges are
-detailed when they are developed.
+detailed when they are developed. *For now Cordage and fibres and Basketry
+are starting knowledges too, while containers are tested
+(`docs/CONTAINERS.md` §8).*
 
 ## Contents
 
@@ -279,7 +281,10 @@ other perfect things are always 100).
 2. It is capped at **the average quality of the materials + 20**: a master
    knapper with a coarse flint (quality 10) makes at best a hand axe of 30.
    Materials without quality never cap. A cobble knapped instead of flint
-   counts as 10.
+   counts as 10. With several ingredients, the average is weighted by count.
+   In a recipe whose tool **shapes** the material (scraping fibre, piercing
+   bark: `docs/CONTAINERS.md` §6), the tool counts in that average for a
+   quarter: a poor scraper spoils good fibre.
 3. Made things come out at 100% hit points, except for failures.
 
 Items of the same type stack whatever their quality: the stack keeps the
@@ -380,6 +385,11 @@ on the side that does the least harm (see `core/tree.h`).
 - A recipe has: ingredients, tools needed (worn, not consumed), workstation,
   work (ticks), knowledge and minimum level, products and by-products,
   failure chance if any.
+- **Several ingredients** (`docs/CONTAINERS.md` §9): up to three kinds, each
+  with its count, alternatives and the moisture it must have (dry, green,
+  wet). A settler carries one load at a time: the crafter brings each kind
+  to the station and lays it in its work zone, then the craft starts with
+  what lies there and what is in hand.
 - Unfinished work is kept on the station and resumes, like orders today.
 - **Tools of a recipe** are fetched like ingredients, but not consumed: the
   crafter picks the tool up (the best available one), works with it, and
@@ -396,8 +406,11 @@ on the side that does the least harm (see `core/tree.h`).
 ## 3. Start of a game
 
 - The first settlers bring **nothing**: no tools, no food, no materials.
-- Each has a level rolled between **50 and 80** in each of the seven starting
-  knowledges (`50 + 30 × (sum of two dice 0..5) / 10`) *(tuning)*, and
+- Each has a level rolled between **50 and 80** in each of the starting
+  knowledges (seven, nine while containers are tested) (`50 + 30 × (sum of two dice 0..5) / 10`) *(tuning)*
+  (the knowledges added after the first seven are rolled from a stream of
+  their own per settler, `GAME_LATER_KNOWLEDGE_SEED`: adding one does not
+  change the rest of a game), and
   **1 to 30** points in three to six other knowledges, picked among those the
   starting knowledges influence (§1.5): they have "heard of" bows, cord or
   tanning. Nobody starts above 50 outside the starting knowledges.

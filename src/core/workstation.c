@@ -195,16 +195,37 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
     return WORKSTATION_NONE;
 }
 
-int workstations_remove(Workstations *workstations, int index, ItemStack returned[1])
+/* The ingredients of the craft under way, unless free, into `returned`: how many stacks. */
+static int given_back(const Workstation *station, ItemStack returned[RECIPE_INGREDIENT_MAX])
+{
+    int count = 0;
+    for (int i = 0; !station->free_input && i < RECIPE_INGREDIENT_MAX; i++) {
+        if (station->work_inputs[i].count > 0) {
+            returned[count++] = station->work_inputs[i];
+        }
+    }
+    return count;
+}
+
+/* No craft under way any more. */
+static void clear_craft(Workstation *station)
+{
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        station->work_inputs[i] = (ItemStack){.type = ITEM_NONE};
+    }
+    station->work_recipe = RECIPE_COUNT;
+    station->work_progress = 0.0f;
+    station->free_input = false;
+}
+
+int workstations_remove(Workstations *workstations, int index,
+                        ItemStack returned[RECIPE_INGREDIENT_MAX])
 {
     Workstation *station = workstation_get(workstations, index);
     if (station == NULL) {
         return 0;
     }
-    int count = 0;
-    if (station->work_input.count > 0 && !station->free_input) {
-        returned[count++] = station->work_input;
-    }
+    int count = given_back(station, returned);
     workstations->at[index_of(workstations, station->x, station->y, station->z)] = 0;
     memset(station, 0, sizeof(*station));
     workstations->used_count--;
@@ -361,11 +382,12 @@ int workstation_add_bill_from(Workstations *workstations, int index, const Bill 
     return station->bill_count++;
 }
 
-bool workstation_remove_bill(Workstations *workstations, int index, int bill, ItemStack *returned)
+int workstation_remove_bill(Workstations *workstations, int index, int bill,
+                            ItemStack returned[RECIPE_INGREDIENT_MAX])
 {
     Workstation *station = workstation_get(workstations, index);
     if (get_bill(workstations, index, bill) == NULL) {
-        return false;
+        return 0;
     }
     uint8_t recipe = station->bills[bill].recipe;
     memmove(&station->bills[bill], &station->bills[bill + 1],
@@ -374,19 +396,15 @@ bool workstation_remove_bill(Workstations *workstations, int index, int bill, It
     workstations->revision++;
     for (int i = 0; i < station->bill_count; i++) {
         if (station->bills[i].recipe == recipe) {
-            return false; /* Another bill can finish the craft in progress. */
+            return 0; /* Another bill can finish the craft in progress. */
         }
     }
-    if (station->work_recipe != recipe || station->work_input.count == 0) {
-        return false;
+    if (station->work_recipe != recipe || !workstation_crafting(station)) {
+        return 0;
     }
-    bool given_back = !station->free_input;
-    *returned = station->work_input;
-    station->work_input = (ItemStack){.type = ITEM_NONE};
-    station->work_recipe = RECIPE_COUNT;
-    station->work_progress = 0.0f;
-    station->free_input = false;
-    return given_back;
+    int count = given_back(station, returned);
+    clear_craft(station);
+    return count;
 }
 
 bool bill_set_mode(Bill *bill, BillMode mode)
@@ -576,7 +594,8 @@ bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
     if (def == NULL) {
         return false;
     }
-    ItemTypeMask inputs = bill->inputs & recipe_inputs((RecipeType)bill->recipe);
+    RecipeType recipe = (RecipeType)bill->recipe;
+    ItemTypeMask inputs = bill->inputs & recipe_inputs(recipe);
     long left[ITEM_TYPE_COUNT];
     memcpy(left, totals, sizeof(left));
     /* Each tool still to fetch takes one item: of a type the bill does not
@@ -598,48 +617,85 @@ bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
             left[best]--;
         }
     }
-    for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        if ((inputs & ITEM_TYPE_BIT(type)) && left[type] >= def->input_count) {
+    /* Each ingredient wants enough of one of its types (two kinds of one
+     * recipe never share a type). */
+    for (int i = 0; i < recipe_ingredient_count(recipe); i++) {
+        ItemTypeMask types = inputs & recipe_ingredient_types(recipe, i);
+        bool enough = false;
+        for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && !enough; type++) {
+            enough = (types & ITEM_TYPE_BIT(type)) && left[type] >= def->ingredients[i].count;
+        }
+        if (!enough) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool workstation_start_craft(Workstations *workstations, int index, RecipeType recipe,
+                             const ItemStack inputs[RECIPE_INGREDIENT_MAX])
+{
+    Workstation *station = workstation_get(workstations, index);
+    int count = recipe_ingredient_count(recipe);
+    if (station == NULL || workstation_crafting(station) || count == 0) {
+        return false;
+    }
+    for (int i = 0; i < count; i++) {
+        if (inputs[i].count <= 0 || !recipe_accepts_ingredient(recipe, i, inputs[i])) {
+            return false;
+        }
+    }
+    station->work_recipe = (uint8_t)recipe;
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        station->work_inputs[i] = i < count ? inputs[i] : (ItemStack){.type = ITEM_NONE};
+    }
+    station->work_progress = 0.0f;
+    station->free_input = false;
+    return true;
+}
+
+bool workstation_gathers(const Workstation *station, ItemType type)
+{
+    for (int i = 0; station->used && i < station->bill_count; i++) {
+        const Bill *bill = &station->bills[i];
+        RecipeType recipe = (RecipeType)bill->recipe;
+        if (!bill->paused && recipe_ingredient_count(recipe) > 1 &&
+            recipe_ingredient_of(recipe, type) >= 0 && (bill->inputs & ITEM_TYPE_BIT(type))) {
             return true;
         }
     }
     return false;
 }
 
-bool workstation_start_craft(Workstations *workstations, int index, RecipeType recipe,
-                             ItemStack input)
+bool bill_free_inputs(const Bill *bill, ItemStack out[RECIPE_INGREDIENT_MAX])
 {
-    Workstation *station = workstation_get(workstations, index);
-    if (station == NULL || station->work_input.count > 0 || !recipe_accepts_input(recipe, input)) {
-        return false;
-    }
-    station->work_recipe = (uint8_t)recipe;
-    station->work_input = input;
-    station->work_progress = 0.0f;
-    station->free_input = false;
-    return true;
-}
-
-ItemStack bill_free_input(const Bill *bill)
-{
-    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
-    for (int i = 0; def != NULL && i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        ItemType type = def->inputs[i];
-        if (type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type))) {
-            int quality = def->input_min_quality > ITEM_QUALITY_STANDARD
-                              ? (int)def->input_min_quality
-                              : (int)ITEM_QUALITY_STANDARD;
-            return item_stack_make(type, def->input_count, quality, UINT16_MAX);
+    RecipeType recipe = (RecipeType)bill->recipe;
+    const RecipeDef *def = recipe_def(recipe);
+    int count = recipe_ingredient_count(recipe);
+    bool all = count > 0;
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        out[i] = item_stack_make(ITEM_NONE, 0, 0, 0);
+        for (int alt = 0; i < count && alt < RECIPE_INPUT_ALTERNATIVES; alt++) {
+            ItemType type = def->ingredients[i].types[alt];
+            if (type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type))) {
+                int quality = def->input_min_quality > ITEM_QUALITY_STANDARD
+                                  ? (int)def->input_min_quality
+                                  : (int)ITEM_QUALITY_STANDARD;
+                out[i] = item_stack_make(type, def->ingredients[i].count, quality, UINT16_MAX);
+                break;
+            }
         }
+        all = all && (i >= count || out[i].count > 0);
     }
-    return item_stack_make(ITEM_NONE, 0, 0, 0);
+    return all;
 }
 
 bool workstation_start_free_craft(Workstations *workstations, int index, int bill)
 {
     Bill *entry = get_bill(workstations, index, bill);
-    if (entry == NULL || !workstation_start_craft(workstations, index, (RecipeType)entry->recipe,
-                                                  bill_free_input(entry))) {
+    ItemStack inputs[RECIPE_INGREDIENT_MAX];
+    if (entry == NULL || !bill_free_inputs(entry, inputs) ||
+        !workstation_start_craft(workstations, index, (RecipeType)entry->recipe, inputs)) {
         return false;
     }
     workstations->list[index].free_input = true;
@@ -647,10 +703,11 @@ bool workstation_start_free_craft(Workstations *workstations, int index, int bil
 }
 
 bool workstation_add_craft_work(Workstations *workstations, int index, int bill, Items *items,
-                                const Map *map, float work, double level, Rng *rng, uint16_t maker)
+                                const Map *map, float work, double level, ItemStack tool, Rng *rng,
+                                uint16_t maker)
 {
     Workstation *station = workstation_get(workstations, index);
-    if (station == NULL || station->work_input.count == 0) {
+    if (station == NULL || !workstation_crafting(station)) {
         return false;
     }
     RecipeType recipe = (RecipeType)station->work_recipe;
@@ -659,18 +716,18 @@ bool workstation_add_craft_work(Workstations *workstations, int index, int bill,
         return false;
     }
     ItemStack products[RECIPE_PRODUCT_MAX];
-    int count = recipe_craft(recipe, station->work_input, level, rng, products);
+    int count = recipe_craft_with(recipe, station->work_inputs, tool, level, rng, products);
     for (int i = 0; i < count; i++) {
         products[i].maker = maker;
         items_drop(items, map, station->x, station->y, station->z, products[i]);
     }
-    if (station->work_input.held != 0) { /* Its items are used up. */
-        items_use_up(items, &station->work_input, station->work_input.count);
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        ItemStack *input = &station->work_inputs[i];
+        if (input->count > 0 && input->held != 0) { /* Its items are used up. */
+            items_use_up(items, input, input->count);
+        }
     }
-    station->work_input = (ItemStack){.type = ITEM_NONE};
-    station->work_recipe = RECIPE_COUNT;
-    station->work_progress = 0.0f;
-    station->free_input = false;
+    clear_craft(station);
     if (bill < 0 || bill >= station->bill_count || station->bills[bill].recipe != recipe) {
         bill = -1;
         for (int i = 0; i < station->bill_count && bill < 0; i++) {
@@ -698,10 +755,18 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
             hash = hash_fnv1a64(hash, &station->z, sizeof(station->z));
         }
         hash = hash_fnv1a64(hash, &station->work_progress, sizeof(station->work_progress));
-        ItemStack input = station->work_input;
+        ItemStack input = station->work_inputs[0];
         int32_t craft[6] = {station->work_recipe, input.type,       input.quality,
                             input.count,          input.hit_points, input.progress};
         hash = hash_fnv1a64(hash, craft, sizeof(craft));
+        for (int i = 1; i < RECIPE_INGREDIENT_MAX; i++) { /* (Hashes of one kind stay.) */
+            ItemStack more = station->work_inputs[i];
+            if (more.count > 0) {
+                int32_t also[5] = {more.type, more.quality, more.count, more.hit_points,
+                                   more.progress};
+                hash = hash_fnv1a64(hash, also, sizeof(also));
+            }
+        }
         if (station->free_input) { /* (Only then: hashes stay as they were without it.) */
             hash = hash_fnv1a64(hash, &station->free_input, sizeof(station->free_input));
         }
@@ -789,7 +854,9 @@ void workstations_serialize(Serializer *s, Workstations *stations)
         }
         ser_int_in(s, &station->bill_count, 0, WORKSTATION_BILL_MAX);
         ser_u8(s, &station->work_recipe);
-        item_stack_serialize(s, &station->work_input);
+        for (int input = 0; input < RECIPE_INGREDIENT_MAX; input++) {
+            item_stack_serialize(s, &station->work_inputs[input]);
+        }
         ser_float(s, &station->work_progress);
         ser_bool(s, &station->free_input);
         ser_float(s, &station->fuel);

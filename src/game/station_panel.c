@@ -67,11 +67,14 @@ typedef struct Action {
 } Action;
 
 /* "Flint or cobble", "Hand axe and sharp flake": one or two names joined
- * (three: "Dry grass, moss or bracken", recipe.either_three). */
+ * (three: "Dry grass, moss or bracken", recipe.either_three; with "and",
+ * recipe.all_three). */
 static void join_names(char *out, size_t size, const char *key, const char *names[3], int count)
 {
     if (count >= 3) {
-        TR_FORMAT(out, size, tr("recipe.either_three"), names[0], names[1], names[2]);
+        const char *three =
+            SDL_strcmp(key, "recipe.both") == 0 ? "recipe.all_three" : "recipe.either_three";
+        TR_FORMAT(out, size, tr(three), names[0], names[1], names[2]);
     } else if (count == 2) {
         TR_FORMAT(out, size, tr(key), names[0], names[1]);
     } else {
@@ -92,24 +95,60 @@ static void either_names(char *out, size_t size, ItemTypeMask types)
     join_names(out, size, "recipe.either", names, count);
 }
 
-/* "Flint or cobble ×1 (quality 50 or better)": the recipe's ingredient, only
- * the input types of `allowed` (in the recipe's order of preference). */
-static void ingredient_text(char *out, size_t size, RecipeType recipe, ItemTypeMask allowed)
+/* Why an ingredient must be dry, green or pliable (the tooltip of its row); NULL when it
+ * may be in any state. */
+static const char *ingredient_tip(RecipeType recipe, int ingredient)
 {
-    const RecipeDef *def = recipe_def(recipe);
+    static const char *const TIP_KEYS[ITEM_WANT_COUNT] = {
+        [ITEM_WANT_DRY] = N_("recipe.ingredient_dry.tip"),
+        [ITEM_WANT_GREEN] = N_("recipe.ingredient_green.tip"),
+        [ITEM_WANT_WET] = N_("recipe.ingredient_wet.tip"),
+    };
+    ItemMoistureWant moisture = recipe_ingredient(recipe, ingredient)->moisture;
+    if ((unsigned)moisture >= ITEM_WANT_COUNT || TIP_KEYS[moisture] == NULL) {
+        return NULL;
+    }
+    return tr(TIP_KEYS[moisture]);
+}
+
+/* "Birch bark ×1, green": one ingredient of a recipe, only the types of
+ * `allowed` (in the recipe's order of preference), as dry or wet as it is wanted. */
+static void one_ingredient_text(char *out, size_t size, RecipeType recipe, int ingredient,
+                                ItemTypeMask allowed)
+{
+    const RecipeIngredient *wanted = recipe_ingredient(recipe, ingredient);
     char names[TEXT_SIZE], count[16], text[TEXT_SIZE];
     const char *inputs[3] = {NULL, NULL, NULL};
     int input_count = 0;
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        if (def->inputs[i] != ITEM_NONE && (allowed & ITEM_TYPE_BIT(def->inputs[i]))) {
-            inputs[input_count++] = tr(item_def(def->inputs[i])->name_key);
+        ItemType type = wanted->types[i];
+        if (type != ITEM_NONE && (allowed & ITEM_TYPE_BIT(type))) {
+            inputs[input_count++] = tr(item_def(type)->name_key);
         }
     }
     join_names(names, sizeof(names), "recipe.either", inputs, input_count);
-    tr_integer(count, sizeof(count), def->input_count);
+    tr_integer(count, sizeof(count), wanted->count);
     TR_FORMAT(out, size, tr("recipe.ingredient"), names, count);
+    static const char *const MOISTURE_KEYS[ITEM_WANT_COUNT] = {
+        [ITEM_WANT_DRY] = N_("recipe.ingredient_dry"),
+        [ITEM_WANT_GREEN] = N_("recipe.ingredient_green"),
+        [ITEM_WANT_WET] = N_("recipe.ingredient_wet"),
+    };
+    if ((unsigned)wanted->moisture < ITEM_WANT_COUNT && MOISTURE_KEYS[wanted->moisture] != NULL) {
+        SDL_strlcpy(text, out, sizeof(text));
+        TR_FORMAT(out, size, tr(MOISTURE_KEYS[wanted->moisture]), text);
+    }
+}
+
+/* "Flint or cobble ×1 (quality 50 or better)": one of the recipe's ingredients, only the
+ * types of `allowed` (in the recipe's order of preference), with the quality it must have. */
+static void ingredient_text(char *out, size_t size, RecipeType recipe, int ingredient,
+                            ItemTypeMask allowed)
+{
+    const RecipeDef *def = recipe_def(recipe);
+    one_ingredient_text(out, size, recipe, ingredient, allowed);
     if (def->input_min_quality > ITEM_QUALITY_WORST) {
-        char quality[16];
+        char quality[16], text[TEXT_SIZE];
         hud_quality_text(quality, sizeof(quality), def->input_min_quality);
         SDL_strlcpy(text, out, sizeof(text));
         TR_FORMAT(out, size, tr("recipe.ingredient_quality"), text, quality);
@@ -261,28 +300,34 @@ static void bill_mode_row(UiLayout *layout, const Game *game, const Bill *bill, 
     layout->y += layout->row;
 }
 
-/* One check box per input type, when the recipe has a choice. */
+/* One check box per type of an ingredient, for each ingredient of the recipe
+ * that has a choice (all on one row). */
 static void bill_inputs_row(UiLayout *layout, const Bill *bill, int index, Action *action)
 {
-    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
-    int alternatives = 0;
+    RecipeType recipe = (RecipeType)bill->recipe;
+    ItemType boxes[RECIPE_INGREDIENT_MAX * RECIPE_INPUT_ALTERNATIVES];
+    int box_count = 0;
     float width = 0.0f;
-    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        if (def->inputs[i] != ITEM_NONE) {
-            alternatives++;
-            width += ui_checkbox_width(layout->ui, tr(item_def(def->inputs[i])->name_key)) + GAP;
+    for (int ingredient = 0; ingredient < recipe_ingredient_count(recipe); ingredient++) {
+        const RecipeIngredient *wanted = recipe_ingredient(recipe, ingredient);
+        if (wanted->types[1] == ITEM_NONE) {
+            continue; /* No choice. */
+        }
+        for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
+            if (wanted->types[i] != ITEM_NONE) {
+                boxes[box_count++] = wanted->types[i];
+                width +=
+                    ui_checkbox_width(layout->ui, tr(item_def(wanted->types[i])->name_key)) + GAP;
+            }
         }
     }
-    if (alternatives < 2) {
+    if (box_count == 0) {
         return;
     }
     ui_layout_measure(layout, width - GAP);
     float x = layout->x;
-    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        ItemType type = def->inputs[i];
-        if (type == ITEM_NONE) {
-            continue;
-        }
+    for (int i = 0; i < box_count; i++) {
+        ItemType type = boxes[i];
         const char *name = tr(item_def(type)->name_key);
         float box_width = ui_checkbox_width(layout->ui, name);
         bool allowed = (bill->inputs & ITEM_TYPE_BIT(type)) != 0;
@@ -439,9 +484,18 @@ static void bill_header_row(UiLayout *layout, const Game *game, const Workstatio
 /* The ingredients still allowed; red when nothing suitable lies in the colony. */
 static void bill_ingredients_row(UiLayout *layout, const Game *game, const Bill *bill)
 {
+    RecipeType recipe = (RecipeType)bill->recipe;
     char text[TEXT_SIZE];
-    ingredient_text(text, sizeof(text), (RecipeType)bill->recipe, bill->inputs);
-    problem_row(layout, text, bill_lacks_input(game, bill), false, tr("station.warning.no_input"));
+    bool lacks = bill_lacks_input(game, bill);
+    for (int i = 0; i < recipe_ingredient_count(recipe); i++) {
+        SDL_FRect row = {layout->x, layout->y, layout->width, layout->row};
+        ingredient_text(text, sizeof(text), recipe, i, bill->inputs);
+        problem_row(layout, text, lacks, false, tr("station.warning.no_input"));
+        const char *tip = ingredient_tip(recipe, i);
+        if (!lacks && tip != NULL && layout->draw && ui_hovered(layout->ui, row)) {
+            ui_tooltip(layout->ui, &tip, 1);
+        }
+    }
 }
 
 /* The tools, red when one cannot be had. */
@@ -592,16 +646,30 @@ static void bill_quality_row(UiLayout *layout, const Bill *bill, int index, Acti
     layout->y += layout->row;
 }
 
-/* The first wooden ingredient of a recipe (ITEM_NONE: none). */
-static ItemType wooden_input(const RecipeDef *def)
+/* The first wooden ingredient type of a recipe (ITEM_NONE: none). */
+static ItemType wooden_input(RecipeType recipe)
 {
-    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        const ItemDef *input = item_def(def->inputs[i]);
-        if (def->inputs[i] != ITEM_NONE && input != NULL && input->wooden) {
-            return def->inputs[i];
+    for (int ingredient = 0; ingredient < recipe_ingredient_count(recipe); ingredient++) {
+        const RecipeIngredient *wanted = recipe_ingredient(recipe, ingredient);
+        for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
+            const ItemDef *input = item_def(wanted->types[i]);
+            if (wanted->types[i] != ITEM_NONE && input != NULL && input->wooden) {
+                return wanted->types[i];
+            }
         }
     }
     return ITEM_NONE;
+}
+
+/* Whether some ingredient of a recipe comes in two types or more (a choice for the bill). */
+static bool ingredient_choice(RecipeType recipe)
+{
+    for (int ingredient = 0; ingredient < recipe_ingredient_count(recipe); ingredient++) {
+        if (recipe_ingredient(recipe, ingredient)->types[1] != ITEM_NONE) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /* The species the wooden ingredients of a bill may be of (docs/TREES.md
@@ -832,7 +900,7 @@ static void progress_row(UiLayout *layout, const Workstation *station)
 {
     char text[TEXT_SIZE], percent[32];
     const RecipeDef *current = recipe_def((RecipeType)station->work_recipe);
-    if (current != NULL && station->work_input.count > 0) {
+    if (current != NULL && workstation_crafting(station)) {
         item_info_percent_text(percent, sizeof(percent), station->work_progress / current->work);
         TR_FORMAT(text, sizeof(text), tr("station.in_progress"), tr(current->name_key), percent);
         ui_layout_label(layout, text, 0.0f, false);
@@ -918,7 +986,6 @@ static Workstation as_known(const Game *game, const Workstation *station);
 static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workstation *known,
                                const Bill *bill, int index)
 {
-    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
     Action *action = &rows->action;
     float row_y = layout->y;
     item_info_heading(layout, "bill.heading.goal");
@@ -939,16 +1006,16 @@ static void bill_settings_rows(UiLayout *layout, StationRows *rows, const Workst
     row_y = layout->y;
     bill_radius_row(layout, rows->app, rows->station, bill, index, action);
     save_default_button(layout, row_y, known, bill, index, BILL_SETTING_RADIUS, action);
-    if (def->inputs[0] != ITEM_NONE) {
+    if (recipe_ingredient_count((RecipeType)bill->recipe) > 0) {
         row_y = layout->y;
         bill_quality_row(layout, bill, index, action);
         save_default_button(layout, row_y, known, bill, index, BILL_SETTING_QUALITY, action);
     }
-    ItemType wooden = wooden_input(def);
+    ItemType wooden = wooden_input((RecipeType)bill->recipe);
     if (wooden != ITEM_NONE) {
         bill_wood_row(layout, rows->game, bill, index, wooden, &rows->action);
     }
-    if (def->inputs[1] != ITEM_NONE) {
+    if (ingredient_choice((RecipeType)bill->recipe)) {
         layout->y += GAP;
         item_info_heading(layout, "bill.heading.choice");
         bill_inputs_row(layout, bill, index, &rows->action);
@@ -1092,17 +1159,21 @@ static void add_rows(UiLayout *layout, void *userdata)
     float product_size = SDL_roundf(layout->row * 1.3f);
     float cost_size = SDL_roundf(layout->row * 0.9f);
     float row_height = SDL_max(product_size, cost_size + line) + 4.0f;
-    float slash = ui_text_width(ui, "/");
+    float slash = SDL_max(ui_text_width(ui, "/"), ui_text_width(ui, "+")); /* Separators. */
     /* Columns: the picture, the name, the price. */
     float name_width = 0.0f, cost_width = 0.0f;
     for (int i = 0; i < count; i++) {
         const RecipeDef *def = recipe_def(recipes[i]);
         name_width = SDL_max(name_width, ui_text_width(ui, tr(def->name_key)));
         float width = 0.0f;
-        for (int input = 0; input < RECIPE_INPUT_ALTERNATIVES; input++) {
-            if (def->inputs[input] != ITEM_NONE) {
+        for (int cell = 0; cell < RECIPE_INGREDIENT_MAX * RECIPE_INPUT_ALTERNATIVES; cell++) {
+            int ingredient = cell / RECIPE_INPUT_ALTERNATIVES;
+            const RecipeIngredient *wanted = recipe_ingredient(recipes[i], ingredient);
+            ItemType type =
+                wanted != NULL ? wanted->types[cell % RECIPE_INPUT_ALTERNATIVES] : ITEM_NONE;
+            if (type != ITEM_NONE) {
                 char number[16];
-                tr_integer(number, sizeof(number), def->input_count);
+                tr_integer(number, sizeof(number), wanted->count);
                 width += (width > 0.0f ? slash + GAP : 0.0f) +
                          SDL_max(cost_size, ui_text_width(ui, number));
             }
@@ -1129,20 +1200,25 @@ static void add_rows(UiLayout *layout, void *userdata)
                               def->product);
             ui_label(ui, tr(def->name_key), row.x + name_x, SDL_floorf(middle - line * 0.5f));
             float x = row.x + cost_x;
-            bool first = true;
-            for (int input = 0; input < RECIPE_INPUT_ALTERNATIVES; input++) {
-                ItemType type = def->inputs[input];
+            int previous = -1; /* Ingredient of the cell before. */
+            for (int at = 0; at < RECIPE_INGREDIENT_MAX * RECIPE_INPUT_ALTERNATIVES; at++) {
+                int ingredient = at / RECIPE_INPUT_ALTERNATIVES;
+                const RecipeIngredient *wanted = recipe_ingredient(recipe, ingredient);
+                ItemType type =
+                    wanted != NULL ? wanted->types[at % RECIPE_INPUT_ALTERNATIVES] : ITEM_NONE;
                 if (type == ITEM_NONE) {
                     continue;
                 }
                 char number[16];
-                tr_integer(number, sizeof(number), def->input_count);
+                tr_integer(number, sizeof(number), wanted->count);
                 float cell = SDL_max(cost_size, ui_text_width(ui, number));
-                if (!first) {
-                    ui_label_dim(ui, "/", x, SDL_floorf(middle - line * 0.5f));
+                if (previous >= 0) {
+                    /* "/" between the types of an ingredient, "+" between ingredients. */
+                    ui_label_dim(ui, previous == ingredient ? "/" : "+", x,
+                                 SDL_floorf(middle - line * 0.5f));
                     x += slash + GAP;
                 }
-                first = false;
+                previous = ingredient;
                 float top = SDL_roundf(middle - (cost_size + line) * 0.5f);
                 SDL_FRect picture = {SDL_roundf(x + (cell - cost_size) * 0.5f), top, cost_size,
                                      cost_size};
@@ -1262,8 +1338,17 @@ static void making_rows(UiLayout *layout, RecipeType recipe)
     } else {
         item_info_row(layout, "station.recipe.knowledge", tr("station.recipe.none"), false);
     }
-    ingredient_text(text, sizeof(text), recipe, recipe_inputs(recipe));
-    item_info_row(layout, "station.recipe.ingredients", text, false);
+    for (int i = 0; i < recipe_ingredient_count(recipe); i++) {
+        /* One row an ingredient, the label on the first only: a long line would widen the
+         * window. */
+        const char *tip = ingredient_tip(recipe, i);
+        ingredient_text(text, sizeof(text), recipe, i, recipe_inputs(recipe));
+        SDL_FRect row = ui_layout_pair(layout, i == 0 ? tr("station.recipe.ingredients") : "", text,
+                                       layout->ui->theme.colors[THEME_TEXT], tip != NULL);
+        if (tip != NULL && layout->draw && ui_hovered(layout->ui, row)) {
+            ui_tooltip(layout->ui, &tip, 1);
+        }
+    }
     duration_text(text, sizeof(text), def->work);
     item_info_row(layout, "station.recipe.time", text, false);
 }

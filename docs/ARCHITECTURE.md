@@ -56,7 +56,7 @@ simulation:
 | `gather_zone`| Gathering zones: tiles, one order per resource (wood, each wild food, grass and fibres: gather N, until N in the colony or N days of food, forever; full harvest only) and per group of resources (wood, food, fibres: limits each of its resources), a zone priority, the jobs tiles offer (picking and digging, careful ones for skilled gatherers), what they give |
 | `hauling`    | Queries: which stack needs hauling (any group of a tile), best storage tile for it (one group per storage tile) |
 | `item_move`  | Item moves ordered by the player: the items of a tile, or one item, → chosen tile (`ItemMoves`, 64 orders), room at a destination, pruning |
-| `recipe`     | Recipes: stations, inputs in preference order, tools, work, knowledge and minimum level; products, quality cap from materials, failures |
+| `recipe`     | Recipes: stations, up to three ingredients (each with its types in preference order, count and wanted moisture), tools (the first may shape the product), work, knowledge and minimum level; products, quality cap from materials and the shaping tool, failures |
 | `workstation`| Workstations (crafting spot, open hearth): definitions (materials, construction work), bills, the craft in progress, a hearth's fire state |
 | `hearth`     | The fire of an open hearth: fuel values, fuel wanted, burning, lighting rules, light around burning hearths, the hours of fireside stories |
 | `structure`  | Structure definitions (grass bed, ground bedding, grass and branch wall, branch screen): materials, work, knowledge, movement cost, rest factor, length in tiles and `Direction`, hit points, wear and refresh; hit points by quality, quality cap from the materials |
@@ -819,8 +819,8 @@ holding the same group alone, and items dropped keep off the storage tiles
 they would mix (`items_set_drop_filter()`, set by the game to
 `haul_drop_filter()`: a load put down, berries picked from a bramble on a
 stored heap, a craft's products). The holders of items keep the very items
-too: a settler's load, the input of a craft in progress
-(`Workstation.work_input`) and the materials delivered to a site
+too: a settler's load, the ingredients of a craft in progress
+(`Workstation.work_inputs`, a stack per ingredient) and the materials delivered to a site
 (`ConstructionSite.delivered`, `construction_deliver_load()`), given back as
 they were when the craft or the site is called off and used up when it is
 done (`items_load_move()`); a hearth's fuel is kilograms, burnt as it goes.
@@ -867,9 +867,10 @@ alone refreshes the tile's summary without a new stamp: the pictures of the
 known world keep what they saw until the tile changes otherwise. It weighs
 (`item_stack_mass()`: dry matter plus water; carrying plans stay at
 `ItemDef.weight`), makes fuel burn worse (`hearth_moisture_factor()`), tinder,
-kindling and grass for building must be dry (`ItemChoice.dry`,
+kindling and grass for building must be dry, a recipe's ingredient as dry, green or
+pliable as it wants (`ItemChoice.moisture`, an `ItemMoistureWant`: `item_moisture_fits()`;
 `items_chosen_type()`, `items_any_chosen()`, `hearth_ingredient_dry()`,
-`structure_material_dry()`), and it sets the speed of rot
+`structure_material_dry()`, `RecipeIngredient.moisture`), and it sets the speed of rot
 (`item_rot_moisture_factor()`: ×1 fresh, ×0.1 dried, ×1.5 soaked).
 
 `ItemStack.eaten` (bodies only, 0 when whole; averaged on merges, hashed only
@@ -1064,7 +1065,10 @@ positions from −1 to +1, kept as integers in thousandths and drawn by
 `game_spawn_colonist()` on a bell curve (twelve uniform draws, standard
 deviation 0.3) from a stream of their own (`GAME_ATTRIBUTES_SEED`, settler
 slot and generation), so that neither the game's random stream nor the other
-settlers depend on them. Effects are continuous: a factor 2^p on walking
+settlers depend on them. The starting levels of the knowledges added after the
+first seven (Cordage and fibres, Basketry) come the same way from a stream of their
+own (`GAME_LATER_KNOWLEDGE_SEED`): adding a knowledge leaves the rest of a game as it
+was. Effects are continuous: a factor 2^p on walking
 (`walk()`), work pace (`colonist_work_speed()`), learning
 (`colonist_learn()`), sleep (the rest gained) and appetite (the food need
 falling); cold and heat tolerance shift by up to 5 °C the comfortable range
@@ -2121,6 +2125,16 @@ stack. `plan_station_job()` goes to the station first when the zone holds someth
 the craft lacks (known items), takes it there, and fetches only what is still missing
 from farther; `arrive_at_station()` plans again if something is still lacking.
 
+A recipe of **several ingredients** (`docs/CONTAINERS.md` §9: a bark tray of bark and
+twigs) keeps the one-load rule of carrying: its ingredients stay in the work zone
+until the craft starts. The crafter fetches the first ingredient the zone and its
+hands do not hold enough of (`missing_ingredient()`: per ingredient, the allowed type
+that lacks the fewest), carries the load to the station and lays it on its tile, then
+fetches the next; once the zone holds them all, `start_from_zone()` takes each
+ingredient's count from the zone's tiles into a stack of its own and starts the craft.
+Recipes of one ingredient go on as before (taken into the hands, the zone's heap
+included), so that their behaviour and the state hash are unchanged.
+
 Bills are worked through from the top: a crafter takes the first one that
 is not paused, wants more, whose recipe it knows at a level the bill accepts
 (`colonist_fits_bill()`), whose tools can be had (carried, or lying
@@ -2130,15 +2144,17 @@ preference order (flint first for flakes, a cobble first for a chopper).
 In recipes and stations `KNOWLEDGE_NONE` means anyone can (in designations
 it means nobody can yet).
 
-A craft in progress lives on the station (`work_recipe`, `work_input`,
+A craft in progress lives on the station (`work_recipe`, `work_inputs`,
 `work_progress`), not on the colonist: if the crafter leaves to eat, the next
 one resumes it, and while it is unfinished only bills of the same recipe are
 taken, paused or not (a paused bill would otherwise block the station). A
 crafter already working finishes the craft even if the bill no longer accepts
 its level (it learned, or the range changed) or was paused. Products are
 dropped on the station's tile. Quality comes from the
-worker's level, capped by the material (`recipe_quality_cap()`: the material's quality + 20,
-a cobble knaps like crude flint); shaping a hand axe can fail
+worker's level, capped by the materials (`recipe_quality_cap_of()`: their average
+quality by count + 20, a cobble knaps like crude flint; when the recipe's first tool shapes
+the product, `RecipeDef.tool_shapes`, the crafter's tool counts for a quarter of that
+average: a scraper for the fibre, a flake for a bark tray); shaping a hand axe can fail
 (`recipe_failure_chance()`), leaving a few flakes.
 
 **Carried tools**: a colonist has no equipment slots but keeps up to
@@ -2151,7 +2167,8 @@ input (same `RESERVATION_HAUL_SOURCE` reservation) and then kept; a removed
 colonist drops them.
 
 **Tool speed and wear** (`core/tool.h`): each kind of work is a `ToolUse`
-(cutting grass, knapping, woodworking, building; `TOOL_USE_NONE` for work no
+(cutting grass, knapping, woodworking, building, digging; cutting, scraping fibre and
+piercing bark, `docs/CONTAINERS.md` §5; `TOOL_USE_NONE` for work no
 tool helps) with a speed factor per item type and one for bare hands (0:
 impossible), from the table of `docs/KNOWLEDGE.md` §2.3, times the tool's
 quality factor (×0.8 at 0 to ×1.2 at 100). Every tick of work multiplies the

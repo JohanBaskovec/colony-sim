@@ -2437,7 +2437,8 @@ static HaulWorld haul_world(const ColonistContext *context)
                        context->regions,
                        REGION_NONE,
                        0,
-                       0};
+                       0,
+                       context->workstations};
     return world;
 }
 
@@ -3220,6 +3221,36 @@ static bool tools_obtainable(const Colonist *colonist, const ColonistContext *co
     return true;
 }
 
+static ItemChoice bill_choice(const Bill *bill, ItemType type);
+
+/*
+ * Whether each ingredient of a bill that wants a moisture (dry, green, pliable) lies somewhere
+ * in that state (known items, map-wide like bill_has_input()): bark that dried out does not keep
+ * a bill of trays chosen, and the bills after it from being worked through. Ingredients of any
+ * moisture are not looked for here (the totals said enough).
+ */
+static bool ingredients_in_state(const ColonistContext *context, const Bill *bill)
+{
+    RecipeType recipe = (RecipeType)bill->recipe;
+    for (int i = 0; i < recipe_ingredient_count(recipe); i++) {
+        const RecipeIngredient *wanted = recipe_ingredient(recipe, i);
+        if (wanted->moisture == ITEM_WANT_ANY) {
+            continue;
+        }
+        bool found = false;
+        for (int alt = 0; alt < RECIPE_INPUT_ALTERNATIVES && !found; alt++) {
+            ItemType type = wanted->types[alt];
+            found =
+                type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type)) &&
+                items_any_chosen(context->plan_items, ITEM_TYPE_BIT(type), bill_choice(bill, type));
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /*
  * First bill of a built station the colonist could work through now: it
  * wants doing, the colonist knows the recipe and has a level the bill accepts,
@@ -3230,7 +3261,8 @@ static bool tools_obtainable(const Colonist *colonist, const ColonistContext *co
 static int choose_bill(const Colonist *colonist, const ColonistContext *context,
                        const Workstation *station)
 {
-    bool in_progress = station->work_input.count > 0;
+    bool in_progress = workstation_crafting(station);
+    ItemStack free_inputs[RECIPE_INGREDIENT_MAX];
     for (int index = 0; index < station->bill_count; index++) {
         const Bill *bill = &station->bills[index];
         RecipeType recipe = (RecipeType)bill->recipe;
@@ -3252,8 +3284,9 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
             }
         }
         if (!in_progress &&
-            (context->free_crafts ? bill_free_input(bill).count == 0
-                                  : !bill_has_input(bill, context->plan_items->totals, to_fetch))) {
+            (context->free_crafts ? !bill_free_inputs(bill, free_inputs)
+                                  : !bill_has_input(bill, context->plan_items->totals, to_fetch) ||
+                                        !ingredients_in_state(context, bill))) {
             continue;
         }
         return index;
@@ -3338,7 +3371,7 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
                                         : items_get_allowed_of_woods(search->items, x, y, z,
                                                                      search->types, search->woods);
     }
-    if (stack.type != ITEM_NONE && search->by_item && search->choice.dry &&
+    if (stack.type != ITEM_NONE && search->by_item && search->choice.moisture != ITEM_WANT_ANY &&
         search->match.count == 0) {
         /* Dry items of any of the types, under wet ones of another. */
         ItemType type = items_chosen_type(search->items, x, y, z, search->types, search->choice,
@@ -3414,13 +3447,18 @@ static FetchSearch fetch_search(const ColonistContext *context, ItemTypeMask typ
 }
 
 /* What of the stacks a bill's ingredients may be: its quality range (and the
- * recipe's least quality), the soonest to rot first for what rots. */
+ * recipe's least quality), the soonest to rot first for what rots, as dry or
+ * as wet as the recipe wants that ingredient. */
 static ItemChoice bill_choice(const Bill *bill, ItemType type)
 {
-    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
+    RecipeType recipe = (RecipeType)bill->recipe;
+    const RecipeDef *def = recipe_def(recipe);
     int low = def != NULL && def->input_min_quality > bill->min_quality ? def->input_min_quality
                                                                         : bill->min_quality;
-    return (ItemChoice){low, bill->max_quality, item_rots(type), bill->woods, false};
+    int ingredient = recipe_ingredient_of(recipe, type);
+    uint8_t moisture =
+        ingredient >= 0 ? (uint8_t)recipe_ingredient(recipe, ingredient)->moisture : ITEM_WANT_ANY;
+    return (ItemChoice){low, bill->max_quality, item_rots(type), bill->woods, moisture};
 }
 
 /* Hours of rot (x1) the ingredient that rots away soonest has left, among
@@ -3464,22 +3502,23 @@ static float soonest_ingredient(const ColonistContext *context, const Workstatio
  * count as soon enough (the nearest of them is fetched). */
 #define COLONIST_ROT_MARGIN_HOURS 6.0f
 
-/* Input of a craft: the recipe's input types in order of preference, among
- * those the bill allows, near the station. */
+/* An ingredient of a craft (at least `min_count` of it in a stack): the
+ * ingredient's types in order of preference, among those the bill allows,
+ * near the station. */
 static bool fetch_input(Colonist *colonist, const ColonistContext *context,
-                        const Workstation *station, const Bill *bill)
+                        const Workstation *station, const Bill *bill, int ingredient, int min_count)
 {
     if (bill->input_radius == 0) {
         return false; /* Looked for nowhere: nothing is made. */
     }
-    const RecipeDef *def = recipe_def((RecipeType)bill->recipe);
-    for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        ItemType type = def->inputs[i];
+    const RecipeIngredient *wanted = recipe_ingredient((RecipeType)bill->recipe, ingredient);
+    for (int i = 0; wanted != NULL && i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        ItemType type = wanted->types[i];
         if (type == ITEM_NONE || !(bill->inputs & ITEM_TYPE_BIT(type))) {
             continue;
         }
         FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(type));
-        search.min_count = def->input_count - colonist->carried.count;
+        search.min_count = min_count;
         search.match = colonist->carried;
         search.by_item = true;
         search.choice = bill_choice(bill, type);
@@ -3677,7 +3716,107 @@ static bool at_station_spot(const Colonist *colonist, const Workstation *station
                : colonist->x == tile.x && colonist->y == tile.y && colonist->z == tile.z;
 }
 
-/* Whether the craft still lacks a tool (not with the cheat no_tools) or its input, which
+/* Whether the work zone of the station has this tile free to take from. */
+static bool zone_tile_open(const ColonistContext *context, const Items *items, int x, int y, int z)
+{
+    return !items_forbidden(items, x, y, z) &&
+           !reservations_taken_by_other(context->reservations, RESERVATION_HAUL_SOURCE,
+                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
+                                        context->worker_id);
+}
+
+/*
+ * Whether a recipe has several ingredients. Their loads are then laid one by one in the work
+ * zone of the station (its tile), and the craft starts once the zone holds all of them
+ * (docs/CONTAINERS.md §9); the single ingredient of the other recipes is brought in hand.
+ */
+static bool several_ingredients(RecipeType recipe)
+{
+    return recipe_ingredient_count(recipe) > 1;
+}
+
+/* Items of a type the work zone of the station holds for the bill (its choice). */
+static int zone_count_of(const ColonistContext *context, const Items *items,
+                         const Workstation *station, const Bill *bill, ItemType type)
+{
+    ItemChoice choice = bill_choice(bill, type);
+    int count = 0;
+    for (int dy = -WORKSTATION_ZONE_REACH; dy <= WORKSTATION_ZONE_REACH; dy++) {
+        for (int dx = -WORKSTATION_ZONE_REACH; dx <= WORKSTATION_ZONE_REACH; dx++) {
+            int x = station->x + dx, y = station->y + dy;
+            if (x >= 0 && y >= 0 && x < items->width && y < items->height &&
+                zone_tile_open(context, items, x, y, station->z)) {
+                count += items_count_chosen(items, x, y, station->z, type, choice);
+            }
+        }
+    }
+    return count;
+}
+
+/* The ingredient of the recipe the colonist holds for the bill, -1 if none. */
+static int carried_ingredient(const Colonist *colonist, const Bill *bill)
+{
+    RecipeType recipe = (RecipeType)bill->recipe;
+    int ingredient = recipe_ingredient_of(recipe, (ItemType)colonist->carried.type);
+    return colonist->carried.count > 0 && ingredient >= 0 &&
+                   (bill->inputs & ITEM_TYPE_BIT(colonist->carried.type)) &&
+                   recipe_accepts_ingredient(recipe, ingredient, colonist->carried)
+               ? ingredient
+               : -1;
+}
+
+/*
+ * How many items of an ingredient a craft of several (several_ingredients()) still lacks,
+ * counting those in the work zone and those in hand, for the type of it the bill allows that
+ * lacks the fewest (`type`; ITEM_NONE when the bill allows none, or looks nowhere).
+ */
+static int ingredient_lacking(const Colonist *colonist, const ColonistContext *context,
+                              const Items *items, const Workstation *station, const Bill *bill,
+                              int ingredient, ItemType *type)
+{
+    const RecipeIngredient *wanted = recipe_ingredient((RecipeType)bill->recipe, ingredient);
+    *type = ITEM_NONE;
+    if (wanted == NULL) {
+        return 0;
+    }
+    int least = wanted->count;
+    bool held = carried_ingredient(colonist, bill) == ingredient;
+    for (int i = 0; bill->input_radius > 0 && i < RECIPE_INPUT_ALTERNATIVES; i++) {
+        ItemType alternative = wanted->types[i];
+        if (alternative == ITEM_NONE || !(bill->inputs & ITEM_TYPE_BIT(alternative))) {
+            continue;
+        }
+        int have = zone_count_of(context, items, station, bill, alternative);
+        if (held && colonist->carried.type == alternative) {
+            have += colonist->carried.count;
+        }
+        int lack = wanted->count > have ? wanted->count - have : 0;
+        if (*type == ITEM_NONE || lack < least) {
+            least = lack;
+            *type = alternative;
+        }
+    }
+    return least;
+}
+
+/* The first ingredient a craft of several still lacks (ingredient_lacking(): its type and how
+ * many), -1 when the work zone and the hands hold them all. */
+static int missing_ingredient(const Colonist *colonist, const ColonistContext *context,
+                              const Items *items, const Workstation *station, const Bill *bill,
+                              ItemType *type, int *lack)
+{
+    for (int i = 0; i < recipe_ingredient_count((RecipeType)bill->recipe); i++) {
+        *lack = ingredient_lacking(colonist, context, items, station, bill, i, type);
+        if (*lack > 0) {
+            return i;
+        }
+    }
+    *type = ITEM_NONE;
+    *lack = 0;
+    return -1;
+}
+
+/* Whether the craft still lacks a tool (not with the cheat no_tools) or an ingredient, which
  * only a station with no craft under way asks for (nor with the cheat free_crafts). */
 static bool craft_lacks(const Colonist *colonist, const ColonistContext *context,
                         const Workstation *station, const RecipeDef *def)
@@ -3687,17 +3826,16 @@ static bool craft_lacks(const Colonist *colonist, const ColonistContext *context
             return true;
         }
     }
-    return station->work_input.count == 0 && !context->free_crafts &&
-           colonist->carried.count < def->input_count;
-}
-
-/* Whether the work zone of the station has this tile free to take from. */
-static bool zone_tile_open(const ColonistContext *context, const Items *items, int x, int y, int z)
-{
-    return !items_forbidden(items, x, y, z) &&
-           !reservations_taken_by_other(context->reservations, RESERVATION_HAUL_SOURCE,
-                                        (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
-                                        context->worker_id);
+    if (workstation_crafting(station) || context->free_crafts) {
+        return false;
+    }
+    if (several_ingredients((RecipeType)colonist->recipe)) {
+        ItemType type;
+        int lack;
+        return missing_ingredient(colonist, context, context->items, station,
+                                  &station->bills[colonist->bill], &type, &lack) >= 0;
+    }
+    return colonist->carried.count < def->ingredients[0].count;
 }
 
 /*
@@ -3721,7 +3859,7 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
         /* Lacking: any tool of the kind will do; else only a better one, and not while a
          * craft is under way. */
         int index = lacking ? -1 : working_tool(colonist, def->tool_use, def->tools[slot], true);
-        if (!lacking && (index < 0 || station->work_input.count > 0)) {
+        if (!lacking && (index < 0 || workstation_crafting(station))) {
             continue;
         }
         float better = index >= 0 ? tool_speed_factor(def->tool_use, colonist->tools[index]) : 0.0f;
@@ -3751,17 +3889,19 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
         }
         found |= pick_up_at(colonist, context, at, true, ITEM_TYPE_BIT(best.type));
     }
-    if (station->work_input.count > 0 || context->free_crafts ||
-        colonist->carried.count >= def->input_count) {
+    /* The ingredients of a craft of several stay in the zone until it starts. */
+    if (workstation_crafting(station) || context->free_crafts ||
+        several_ingredients((RecipeType)colonist->recipe) ||
+        colonist->carried.count >= def->ingredients[0].count) {
         return found;
     }
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
-        ItemType type = def->inputs[i];
+        ItemType type = def->ingredients[0].types[i];
         if (type == ITEM_NONE || !(bill->inputs & ITEM_TYPE_BIT(type)) || bill->input_radius == 0) {
             continue;
         }
         ItemChoice choice = bill_choice(bill, type);
-        int need = def->input_count - (int)colonist->carried.count;
+        int need = def->ingredients[0].count - (int)colonist->carried.count;
         for (int dy = -WORKSTATION_ZONE_REACH; dy <= WORKSTATION_ZONE_REACH; dy++) {
             for (int dx = -WORKSTATION_ZONE_REACH; dx <= WORKSTATION_ZONE_REACH; dx++) {
                 int x = station->x + dx, y = station->y + dy;
@@ -3811,13 +3951,28 @@ static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
                                COLONIST_WORK_SEARCH_MAX_COST, true);
         }
     }
-    if (station->work_input.count == 0 && !context->no_tools &&
-        fetch_better_tool(colonist, context, def)) {
+    bool in_progress = workstation_crafting(station);
+    if (!in_progress && !context->no_tools && fetch_better_tool(colonist, context, def)) {
         return true;
     }
-    bool in_progress = station->work_input.count > 0;
-    if (!in_progress && !context->free_crafts && colonist->carried.count < def->input_count) {
-        return fetch_input(colonist, context, station, bill);
+    if (in_progress || context->free_crafts) {
+        return go_to_station(colonist, context, station);
+    }
+    if (several_ingredients((RecipeType)colonist->recipe)) {
+        ItemType type;
+        int lack;
+        int missing =
+            missing_ingredient(colonist, context, context->plan_items, station, bill, &type, &lack);
+        int held = carried_ingredient(colonist, bill);
+        if (missing < 0 || (held >= 0 && (held != missing || colonist->carried.type != type))) {
+            /* All there to start, or a load to lay in the zone first. */
+            return go_to_station(colonist, context, station);
+        }
+        return type != ITEM_NONE && fetch_input(colonist, context, station, bill, missing, lack);
+    }
+    if (colonist->carried.count < def->ingredients[0].count) {
+        return fetch_input(colonist, context, station, bill, 0,
+                           def->ingredients[0].count - colonist->carried.count);
     }
     return go_to_station(colonist, context, station);
 }
@@ -3845,7 +4000,7 @@ static bool station_job_still_valid(const Colonist *colonist, const ColonistCont
     return colonist->station_phase == STATION_JOB_WORK ||
            (bill_wants_more(bill, stored_count(context, bill)) &&
             colonist_fits_bill(colonist, context->self, bill) &&
-            (!bill->paused || station->work_input.count > 0));
+            (!bill->paused || workstation_crafting(station)));
 }
 
 static bool try_station_job(Colonist *colonist, const ColonistContext *context)
@@ -3913,14 +4068,18 @@ static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TileP
     } else if (colonist->carried.count > 0) {
         wanted_types = ITEM_TYPE_BIT(colonist->carried.type);
     } else {
-        ItemTypeMask allowed = station != NULL && colonist->bill < station->bill_count
-                                   ? station->bills[colonist->bill].inputs
-                                   : ~(ItemTypeMask)0;
-        for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
-            if (def->inputs[i] != ITEM_NONE) {
-                wanted_types |= ITEM_TYPE_BIT(def->inputs[i]) & allowed;
-            }
+        bool billed = station != NULL && colonist->bill < station->bill_count;
+        ItemTypeMask allowed = billed ? station->bills[colonist->bill].inputs : ~(ItemTypeMask)0;
+        int ingredient = 0;
+        if (several_ingredients((RecipeType)colonist->recipe)) {
+            /* The first one the work zone still lacks. */
+            ItemType type;
+            int lack;
+            ingredient = billed ? missing_ingredient(colonist, context, context->items, station,
+                                                     &station->bills[colonist->bill], &type, &lack)
+                                : -1;
         }
+        wanted_types = recipe_ingredient_types((RecipeType)colonist->recipe, ingredient) & allowed;
     }
     if (only != 0) {
         wanted_types &= only;
@@ -3947,9 +4106,11 @@ static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TileP
         colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, recipe_tools(def));
         return true;
     }
-    colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
-                       def->input_count, recipe_tools(def));
-    int wanted = def->input_count - (int)colonist->carried.count;
+    int ingredient = recipe_ingredient_of((RecipeType)colonist->recipe, (ItemType)stack.type);
+    int need = ingredient >= 0 ? def->ingredients[ingredient].count : 0;
+    colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type, need,
+                       recipe_tools(def));
+    int wanted = need - (int)colonist->carried.count;
     int capacity =
         colonist_carry_capacity(colonist, (ItemType)stack.type) - (int)colonist->carried.count;
     wanted = wanted < capacity ? wanted : capacity;
@@ -3971,28 +4132,87 @@ static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
     return pick_up_at(colonist, context, current_tile(colonist), colonist->fetch_tool, 0);
 }
 
+/*
+ * Starts a craft of several ingredients (several_ingredients()) with what the work zone of
+ * the station holds: of each ingredient, its count of the type that lacks the fewest. What was
+ * taken is put back on the station's tile if one of them falls short after all.
+ */
+static bool start_from_zone(Colonist *colonist, const ColonistContext *context,
+                            Workstation *station)
+{
+    const Bill *bill = &station->bills[colonist->bill];
+    RecipeType recipe = (RecipeType)colonist->recipe;
+    Items *items = context->items;
+    ItemStack inputs[RECIPE_INGREDIENT_MAX];
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        inputs[i] = (ItemStack){.type = ITEM_NONE};
+    }
+    bool complete = true;
+    for (int i = 0; complete && i < recipe_ingredient_count(recipe); i++) {
+        ItemType type;
+        int need = recipe_ingredient(recipe, i)->count;
+        complete = ingredient_lacking(colonist, context, items, station, bill, i, &type) == 0 &&
+                   type != ITEM_NONE;
+        ItemChoice choice = complete ? bill_choice(bill, type) : ITEM_CHOICE_ANY;
+        for (int dy = -WORKSTATION_ZONE_REACH; complete && dy <= WORKSTATION_ZONE_REACH; dy++) {
+            for (int dx = -WORKSTATION_ZONE_REACH; dx <= WORKSTATION_ZONE_REACH; dx++) {
+                int x = station->x + dx, y = station->y + dy;
+                if (inputs[i].count < need && x >= 0 && y >= 0 && x < items->width &&
+                    y < items->height && zone_tile_open(context, items, x, y, station->z)) {
+                    items_pick_up_chosen(items, x, y, station->z, type, need - inputs[i].count,
+                                         choice, &inputs[i]);
+                }
+            }
+        }
+        complete = complete && inputs[i].count >= need;
+    }
+    if (complete &&
+        workstation_start_craft(context->workstations, colonist->station, recipe, inputs)) {
+        return true; /* Their items: the station's. */
+    }
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        if (inputs[i].count > 0) {
+            items_drop_load(items, context->map, station->x, station->y, station->z, &inputs[i]);
+        }
+    }
+    return false;
+}
+
 /* Arrived at the station: puts the input down, then starts working. */
 static bool arrive_at_station(Colonist *colonist, const ColonistContext *context)
 {
     Workstations *workstations = context->workstations;
     Workstation *station = job_station(colonist, context);
+    RecipeType recipe = (RecipeType)colonist->recipe;
+    bool several = several_ingredients(recipe);
     /* What lies around the station is taken where one stands; what is still missing is
      * fetched from farther. */
     zone_take(colonist, context, station, true);
-    if (craft_lacks(colonist, context, station, recipe_def((RecipeType)colonist->recipe))) {
+    if (several && !workstation_crafting(station) && !context->free_crafts &&
+        carried_ingredient(colonist, &station->bills[colonist->bill]) >= 0) {
+        /* Laid in the work zone, where the craft takes all its ingredients from. */
+        items_drop_load(context->items, context->map, station->x, station->y, station->z,
+                        &colonist->carried);
+    }
+    if (craft_lacks(colonist, context, station, recipe_def(recipe))) {
         return plan_station_job(colonist, context);
     }
-    if (station->work_input.count == 0) {
+    if (!workstation_crafting(station)) {
         if (context->free_crafts &&
-            colonist->carried.count < recipe_def((RecipeType)colonist->recipe)->input_count) {
+            (several || colonist->carried.count < recipe_def(recipe)->ingredients[0].count)) {
             /* Out of nothing (what it holds, if anything, stays in hand). */
             if (!workstation_start_free_craft(workstations, colonist->station, colonist->bill)) {
                 return false;
             }
-        } else if (!workstation_start_craft(workstations, colonist->station,
-                                            (RecipeType)colonist->recipe, colonist->carried)) {
-            return false;
+        } else if (several) {
+            if (!start_from_zone(colonist, context, station)) {
+                return false;
+            }
         } else {
+            ItemStack inputs[RECIPE_INGREDIENT_MAX] = {colonist->carried};
+            if (!workstation_start_craft(workstations, colonist->station, recipe, inputs)) {
+                return false;
+            }
             colonist->carried = (ItemStack){.type = ITEM_NONE}; /* Its items: the station's. */
         }
     }
@@ -4081,11 +4301,16 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
         return;
     case STATION_JOB_WORK: break;
     }
-    if (station->work_input.count == 0) {
+    if (!workstation_crafting(station)) {
         set_idle(colonist, context, 0); /* The input went away (bill removed). */
         return;
     }
     const RecipeDef *recipe = recipe_def((RecipeType)colonist->recipe);
+    /* The tool that shapes the product (core/recipe.h), as it is before this tick's wear. */
+    int shaping = recipe->tools[0] != 0
+                      ? working_tool(colonist, recipe->tool_use, recipe->tools[0], true)
+                      : -1;
+    ItemStack tool = shaping >= 0 ? colonist->tools[shaping] : (ItemStack){.type = ITEM_NONE};
     float tool_factor = craft_tool_factor(colonist, context, recipe);
     if (tool_factor <= 0.0f) {
         set_idle(colonist, context, 0); /* A tool broke: fetch another one first. */
@@ -4096,7 +4321,7 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
     bool done = workstation_add_craft_work(
         context->workstations, colonist->station, colonist->bill, context->items, context->map,
         colonist_work_speed(colonist, knowledge) * tool_factor * assistance(colonist, context),
-        colonist_work_level(colonist, knowledge), context->rng,
+        colonist_work_level(colonist, knowledge), tool, context->rng,
         items_maker_register(context->items, context->self, colonist->name));
     colonist_learn_by_doing(colonist, knowledge, 1, context->tick);
     if (done) {
@@ -4260,7 +4485,7 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
             FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(colonist->carried.type));
             search.match = colonist->carried;
             search.by_item = construction_material_dry(site, colonist->supply_slot);
-            search.choice.dry = search.by_item;
+            search.choice.moisture = search.by_item ? ITEM_WANT_DRY : ITEM_WANT_ANY;
             if (start_fetch(colonist, context, &search, current_tile(colonist),
                             COLONIST_WORK_SEARCH_MAX_COST, false)) {
                 return true;
@@ -4278,7 +4503,7 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
         FetchSearch search = fetch_search(context, construction_material_types(site, slot));
         search.woods = site->wood_choice;
         search.by_item = construction_material_dry(site, slot); /* Only dry grass. */
-        search.choice.dry = search.by_item;
+        search.choice.moisture = search.by_item ? ITEM_WANT_DRY : ITEM_WANT_ANY;
         search.choice.woods = site->wood_choice;
         if (start_fetch(colonist, context, &search, current_tile(colonist),
                         COLONIST_WORK_SEARCH_MAX_COST, false)) {
@@ -5082,7 +5307,7 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
         }
         FetchSearch wanted = fetch_search(context, hearth_ingredient_types(lay));
         wanted.by_item = hearth_ingredient_dry(lay); /* Dry kindling. */
-        wanted.choice.dry = wanted.by_item;
+        wanted.choice.moisture = wanted.by_item ? ITEM_WANT_DRY : ITEM_WANT_ANY;
         colonist->light_step = LIGHT_FETCH_LAY;
         if (!items_exist(context->plan_items, wanted.types, 1)) {
             return false; /* None anywhere: no search over the map for nothing. */
@@ -5117,7 +5342,7 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
     }
     FetchSearch tinder = fetch_search(context, ITEM_TINDER_TYPES);
     tinder.by_item = true; /* Only dry tinder takes a spark. */
-    tinder.choice.dry = true;
+    tinder.choice.moisture = ITEM_WANT_DRY;
     colonist->light_step = LIGHT_FETCH_TINDER;
     if (!items_exist(context->plan_items, ITEM_TINDER_TYPES, 1)) {
         return false; /* None anywhere. */

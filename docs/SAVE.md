@@ -125,7 +125,9 @@ round-trip test (§5) shows they come back the same; otherwise they are saved.
   BEIN (occupancy, the blows waiting, blood, the colony log), VISN and KNOW
   (each with a flag: only while followed), AREA (the allowed areas: names and
   the per-tile layer; the tile counts are worked out again on load, and a bit
-  of an area that does not exist is refused; since SAVE_VERSION 11).
+  of an area that does not exist is refused; since SAVE_VERSION 11). WKST
+  holds the ingredients of each craft in progress, one stack per ingredient
+  of the recipe (up to three, docs/CONTAINERS.md §9; since SAVE_VERSION 12).
 - **Loading** reads GAME, allocates the map and reads it, allocates every
   other module without working anything out (`game_prepare_load()`; the
   light, temperatures and soil have an `_init_empty()`: their full init was

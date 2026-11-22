@@ -91,6 +91,11 @@ typedef enum ItemType {
     ITEM_BRACKEN,
     ITEM_HEATHER,
     ITEM_REEDS,
+    /* Fibre work and containers (docs/CONTAINERS.md). */
+    ITEM_BIRCH_BARK,     /* A sheet peeled from a birch. */
+    ITEM_WOODEN_SCRAPER, /* A dull wooden edge that cleans fibre without cutting it. */
+    ITEM_FLINT_BORER,    /* A flake retouched to a point, to pierce bark. */
+    ITEM_BARK_TRAY,      /* A sheet of bark folded into a tray, pinned with twigs. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,
@@ -460,6 +465,30 @@ typedef enum ItemMoistureState {
     ITEM_MOISTURE_STATE_COUNT
 } ItemMoistureState;
 ItemMoistureState item_moisture_state(ItemType type, float moisture);
+
+/* The moisture a use wants of an item (docs/CONTAINERS.md §9.2): any; dry
+ * (item_moisture_dry(): tinder, thatch, stems to scrape); green, still near
+ * its fresh moisture (item_moisture_green(): rods woven as they were cut);
+ * wet or soaked, i.e. not dry: pliable, fresh or softened in water again
+ * (bark folded, rods soaked). */
+typedef enum ItemMoistureWant {
+    ITEM_WANT_ANY,
+    ITEM_WANT_DRY,
+    ITEM_WANT_GREEN,
+    ITEM_WANT_WET,
+    ITEM_WANT_COUNT
+} ItemMoistureWant;
+
+/* Green: at least ITEM_GREEN_SHARE of the way from its equilibrium in the
+ * reference air (item_reference_moisture()) up to its fresh moisture, and not
+ * dry; never for a type that takes no water. */
+#define ITEM_GREEN_SHARE 0.75f
+bool item_moisture_green(ItemType type, float moisture);
+
+/* Whether an item of a type at this moisture is as `want` asks (always for
+ * ITEM_WANT_ANY; for a type that takes no water, only ITEM_WANT_ANY and
+ * ITEM_WANT_DRY). */
+bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want);
 /* A phrase that fits any item (never an adjective that would have to agree
  * with it), NULL for ITEM_MOISTURE_NONE. */
 const char *item_moisture_state_key(ItemMoistureState state);
@@ -760,20 +789,23 @@ int items_list(const Items *items, size_t index, ItemOrder order, const Item **o
 
 /* What of a tile's group of a type is wanted (a bill's ingredients): a
  * quality range, the items that rot away soonest first, for wooden
- * items the species allowed (item_woods_allowed()), and only dry ones
- * (item_moisture_dry(): tinder, kindling, thatch). */
+ * items the species allowed (item_woods_allowed()), and only those of a
+ * moisture (item_moisture_fits(): dry tinder, kindling and thatch, green
+ * rods...). */
 typedef struct ItemChoice {
     int min_quality;
     int max_quality;
     bool soonest_rot;
-    WoodMask woods; /* 0: any. */
-    bool dry;
+    WoodMask woods;   /* 0: any. */
+    uint8_t moisture; /* ItemMoistureWant. */
 } ItemChoice;
 
 /* Any item of the stack, the newest first. */
-#define ITEM_CHOICE_ANY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0, false})
+#define ITEM_CHOICE_ANY                                                                            \
+    ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0, ITEM_WANT_ANY})
 /* Any dry item. */
-#define ITEM_CHOICE_DRY ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0, true})
+#define ITEM_CHOICE_DRY                                                                            \
+    ((ItemChoice){ITEM_QUALITY_WORST, ITEM_QUALITY_BEST, false, 0, ITEM_WANT_DRY})
 
 /* Whether items of a stack are of the species `allowed` (0: any): always for
  * types not of wood; wooden ones of known species, all among them. */

@@ -618,7 +618,7 @@ static void test_interrupted_craft_resumes(void)
     run_ticks(&game, 600);
     const Workstation *station = workstation_get_const(&game.workstations, index);
     CHECK_EQ_INT(colonist->task, TASK_CRAFT);
-    CHECK_EQ_INT(station->work_input.type, ITEM_FLINT);
+    CHECK_EQ_INT(station->work_inputs[0].type, ITEM_FLINT);
     float progress = station->work_progress;
     CHECK(progress > 0.0f);
 
@@ -627,14 +627,14 @@ static void test_interrupted_craft_resumes(void)
                            WORK_PRIORITY_DISABLED);
     run_ticks(&game, 300);
     CHECK(colonist->task != TASK_CRAFT);
-    CHECK_EQ_INT(station->work_input.type, ITEM_FLINT);
+    CHECK_EQ_INT(station->work_inputs[0].type, ITEM_FLINT);
     CHECK_NEAR(station->work_progress, progress, 1e-3);
 
     game_set_work_priority(&game, game_colonist_id_at(&game, 0), WORK_CRAFTING, 1);
     run_ticks(&game, 3000);
     CHECK_EQ_INT((int)game.items.totals[ITEM_HAND_AXE], 1);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 2);
-    CHECK_EQ_INT(station->work_input.count, 0);
+    CHECK_EQ_INT(station->work_inputs[0].count, 0);
     game_shutdown(&game);
 }
 
@@ -773,6 +773,162 @@ static void test_bills_choose_the_wood(void)
     game_shutdown(&game);
 }
 
+/* A sheet of birch bark, as moist as given (a share of its mass). */
+static ItemStack bark_at(float moisture)
+{
+    ItemStack bark = item_stack_make(ITEM_BIRCH_BARK, 1, ITEM_QUALITY_STANDARD, 0);
+    item_stack_set_moisture(&bark, moisture);
+    return bark;
+}
+
+/* docs/CONTAINERS.md §9: a recipe of several ingredients. The crafter brings them one load
+ * at a time, lays each in the work zone (the station's tile), and starts once all are there;
+ * the craft holds a stack per ingredient. */
+static void test_a_tray_takes_bark_and_twigs_laid_by_the_station(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist_add_tool(colonist, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_BARK_TRAY) >= 0);
+    items_add(&game.items, 22, 10, 0, bark_at(item_fresh_moisture(ITEM_BIRCH_BARK)));
+    items_add(&game.items, 14, 18, 0, item_stack_make(ITEM_TWIGS, 2, ITEM_QUALITY_STANDARD, 10));
+    const Workstation *station = workstation_get_const(&game.workstations, index);
+    bool laid = false, both = false;
+    for (int i = 0; i < 12000 && game.items.totals[ITEM_BARK_TRAY] == 0; i++) {
+        run_ticks(&game, 1);
+        /* One ingredient lies on the station's tile while the other is fetched. */
+        laid |= !workstation_crafting(station) && colonist->carried.count > 0 &&
+                items_count_at(&game.items, 14, 10, 0, ITEM_BIRCH_BARK) +
+                        items_count_at(&game.items, 14, 10, 0, ITEM_TWIGS) >
+                    0;
+        both |= station->work_inputs[0].type == ITEM_BIRCH_BARK &&
+                station->work_inputs[0].count == 1 && station->work_inputs[1].type == ITEM_TWIGS &&
+                station->work_inputs[1].count == 2;
+        CHECK(colonist->carried.count == 0 || colonist->carried.type == ITEM_BIRCH_BARK ||
+              colonist->carried.type == ITEM_TWIGS);
+    }
+    CHECK(laid);
+    CHECK(both);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BARK_TRAY], 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BIRCH_BARK], 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 0);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
+/* Dry bark cracks when folded: the bill takes only a pliable sheet (fresh, or softened). */
+static void test_a_tray_wants_pliable_bark(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist_add_tool(colonist, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_BARK_TRAY) >= 0);
+    items_add(&game.items, 16, 10, 0, bark_at(0.1f)); /* Dry, and in the work zone. */
+    items_add(&game.items, 15, 11, 0, item_stack_make(ITEM_TWIGS, 2, ITEM_QUALITY_STANDARD, 10));
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BARK_TRAY], 0);
+    CHECK(!workstation_crafting(workstation_get_const(&game.workstations, index)));
+    CHECK_EQ_INT(items_count_at(&game.items, 16, 10, 0, ITEM_BIRCH_BARK), 1);
+
+    items_add(&game.items, 24, 10, 0, bark_at(0.5f)); /* Softened in water. */
+    run_ticks(&game, 9000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BARK_TRAY], 1);
+    CHECK_EQ_INT(items_count_at(&game.items, 16, 10, 0, ITEM_BIRCH_BARK), 1); /* Still there. */
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 0);
+    game_shutdown(&game);
+}
+
+/* A bill whose bark is all dried out is passed over: the bill after it is worked through. */
+static void test_a_bill_without_pliable_bark_lets_the_next_one_go(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist_add_tool(colonist, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_BARK_TRAY) == 0);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_WOODEN_SCRAPER) == 1);
+    items_add(&game.items, 18, 10, 0, bark_at(0.1f));
+    items_add(&game.items, 18, 12, 0, item_stack_make(ITEM_TWIGS, 2, ITEM_QUALITY_STANDARD, 10));
+    items_add(&game.items, 18, 14, 0, item_stack_make(ITEM_BRANCHES, 1, ITEM_QUALITY_STANDARD, 20));
+    run_ticks(&game, 6000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BARK_TRAY], 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_WOODEN_SCRAPER], 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BIRCH_BARK], 1);
+    game_shutdown(&game);
+}
+
+/* What the crafter laid by the station waits there for the rest: a hauler leaves it, even
+ * with a stockpile that takes it; the product is hauled away as usual. */
+static void test_haulers_leave_what_is_laid_for_a_craft(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *crafter = spawn_worker(&game, 10, 10);
+    REQUIRE(crafter != NULL);
+    crafter->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    colonist_add_tool(crafter, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    Colonist *hauler = spawn_worker(&game, 16, 12);
+    REQUIRE(hauler != NULL);
+    hauler->work_priorities[WORK_CRAFTING] = WORK_PRIORITY_DISABLED;
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 20, 20, 23, 23, 0) != STOCKPILE_NONE);
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_BARK_TRAY) >= 0);
+    items_add(&game.items, 18, 10, 0, bark_at(item_fresh_moisture(ITEM_BIRCH_BARK)));
+    /* Twigs already stored (nobody moves them), the bark loose: hauled or fetched. */
+    REQUIRE(stockpile_create(&game.stockpiles, &game.map, 8, 16, 8, 16, 0) != STOCKPILE_NONE);
+    items_add(&game.items, 8, 16, 0, item_stack_make(ITEM_TWIGS, 2, ITEM_QUALITY_STANDARD, 10));
+    const Workstation *station = workstation_get_const(&game.workstations, index);
+    bool laid = false;
+    int taken_away = 0; /* Times the bark left the station's tile with no craft started. */
+    for (int i = 0; i < 15000 && game.items.totals[ITEM_BARK_TRAY] == 0; i++) {
+        bool there = items_count_at(&game.items, 14, 10, 0, ITEM_BIRCH_BARK) > 0;
+        run_ticks(&game, 1);
+        bool still = items_count_at(&game.items, 14, 10, 0, ITEM_BIRCH_BARK) > 0;
+        laid |= still;
+        taken_away += there && !still && !workstation_crafting(station);
+    }
+    CHECK(laid);
+    CHECK_EQ_INT(taken_away, 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BARK_TRAY], 1);
+    run_ticks(&game, 3000); /* The tray goes to a stockpile. */
+    CHECK_EQ_INT(items_count_at(&game.items, 14, 10, 0, ITEM_BARK_TRAY), 0);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BARK_TRAY], 1);
+    game_shutdown(&game);
+}
+
+/* A craft of several ingredients called off gives them all back. */
+static void test_removing_a_station_drops_every_ingredient(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist_add_tool(colonist, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_BARK_TRAY) >= 0);
+    items_add(&game.items, 15, 10, 0, bark_at(item_fresh_moisture(ITEM_BIRCH_BARK)));
+    items_add(&game.items, 13, 10, 0, item_stack_make(ITEM_TWIGS, 3, ITEM_QUALITY_STANDARD, 10));
+    for (int i = 0;
+         i < 3000 && !workstation_crafting(workstation_get_const(&game.workstations, index)); i++) {
+        run_ticks(&game, 1);
+    }
+    REQUIRE(workstation_crafting(workstation_get_const(&game.workstations, index)));
+    CHECK_EQ_INT(items_count_at(&game.items, 13, 10, 0, ITEM_TWIGS), 1); /* Two were taken. */
+    CHECK(game_remove_workstation(&game, index));
+    CHECK_EQ_INT((int)game.items.totals[ITEM_BIRCH_BARK], 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_TWIGS], 3);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 static void test_removing_a_station_drops_its_input(void)
 {
     Game game;
@@ -784,7 +940,7 @@ static void test_removing_a_station_drops_its_input(void)
     items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 1, TEST_QUALITY_FINE));
     workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     run_ticks(&game, 600);
-    REQUIRE(workstation_get_const(&game.workstations, index)->work_input.count == 1);
+    REQUIRE(workstation_get_const(&game.workstations, index)->work_inputs[0].count == 1);
     CHECK(game_remove_workstation(&game, index));
     CHECK_EQ_INT(items_get(&game.items, 14, 10, 0).type, ITEM_FLINT);
     run_ticks(&game, 10);
@@ -950,18 +1106,18 @@ static void test_paused_bill(void)
     workstation_set_bill_paused(&game.workstations, index, bill, true);
     run_ticks(&game, 1500);
     CHECK(colonist->task != TASK_CRAFT);
-    CHECK_EQ_INT(station->work_input.count, 0);
+    CHECK_EQ_INT(station->work_inputs[0].count, 0);
 
     /* Resumed, then paused again during the craft: it is finished, and no
      * other one is started. */
     workstation_set_bill_paused(&game.workstations, index, bill, false);
     run_ticks(&game, 600);
-    CHECK_EQ_INT(station->work_input.type, ITEM_FLINT);
+    CHECK_EQ_INT(station->work_inputs[0].type, ITEM_FLINT);
     workstation_set_bill_paused(&game.workstations, index, bill, true);
     run_ticks(&game, 3000);
     CHECK_EQ_INT((int)game.items.totals[ITEM_HAND_AXE], 1);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLINT], 1);
-    CHECK_EQ_INT(station->work_input.count, 0);
+    CHECK_EQ_INT(station->work_inputs[0].count, 0);
     CHECK_EQ_INT(station->bills[bill].done, 1);
     game_shutdown(&game);
 }
@@ -1221,6 +1377,11 @@ int main(void)
     RUN_TEST(test_the_work_zone_gives_a_better_tool_not_forbidden_things);
     RUN_TEST(test_bills_choose_the_wood);
     RUN_TEST(test_removing_a_station_drops_its_input);
+    RUN_TEST(test_a_tray_takes_bark_and_twigs_laid_by_the_station);
+    RUN_TEST(test_a_tray_wants_pliable_bark);
+    RUN_TEST(test_a_bill_without_pliable_bark_lets_the_next_one_go);
+    RUN_TEST(test_haulers_leave_what_is_laid_for_a_craft);
+    RUN_TEST(test_removing_a_station_drops_every_ingredient);
     RUN_TEST(test_removing_a_colonist_drops_its_tools);
     RUN_TEST(test_missing_tools_and_inputs_are_reported);
     RUN_TEST(test_bill_worker_levels);

@@ -1895,6 +1895,39 @@ static void test_starting_knowledge_is_random_and_valid(void)
     game_shutdown(&game);
 }
 
+/* Knowledges added after the first seven (Cordage, Basketry) roll their starting levels from a
+ * stream of their own per settler, not from the game's stream: adding one changes nothing
+ * else. The same settler gets the same levels in them whatever the game's stream did before. */
+static void test_later_knowledges_have_a_stream_of_their_own(void)
+{
+    Game game, other_game;
+    REQUIRE(init_flat_game(&game));
+    REQUIRE(init_flat_game(&other_game));
+    for (int i = 0; i < 5; i++) {
+        rng_next_u32(&other_game.rng); /* Another history. */
+    }
+    Colonist *colonist = game_colonist(&game, game_spawn_colonist(&game, 10, 10, 0));
+    Colonist *twin = game_colonist(&other_game, game_spawn_colonist(&other_game, 10, 10, 0));
+    Colonist *next = game_colonist(&game, game_spawn_colonist(&game, 11, 10, 0));
+    REQUIRE(colonist != NULL && twin != NULL && next != NULL);
+    bool first_differ = false, later_differ = false;
+    for (int k = 0; k < KNOWLEDGE_COUNT; k++) {
+        double level = colonist_knowledge_level(colonist, (KnowledgeType)k);
+        double twin_level = colonist_knowledge_level(twin, (KnowledgeType)k);
+        if (k < KNOWLEDGE_CORDAGE) {
+            first_differ |= level != twin_level; /* From the game's stream. */
+            continue;
+        }
+        CHECK(level >= KNOWLEDGE_START_MIN && level <= KNOWLEDGE_START_MIN + KNOWLEDGE_START_SPAN);
+        CHECK_NEAR(level, twin_level, 1e-9);
+        later_differ |= level != colonist_knowledge_level(next, (KnowledgeType)k);
+    }
+    CHECK(first_differ);
+    CHECK(later_differ); /* Each settler rolls its own. */
+    game_shutdown(&game);
+    game_shutdown(&other_game);
+}
+
 static void test_knowledge_levels_validate(void)
 {
     Colonist colonist;
@@ -2949,6 +2982,7 @@ int main(void)
     RUN_TEST(test_hungry_colonist_eats_the_rotting_bottom_of_a_heap);
     RUN_TEST(test_colonist_harvests_blackberries);
     RUN_TEST(test_starting_knowledge_is_random_and_valid);
+    RUN_TEST(test_later_knowledges_have_a_stream_of_their_own);
     RUN_TEST(test_knowledge_levels_validate);
     RUN_TEST(test_gatherer_level_speeds_up_gathering);
     RUN_TEST(test_gathering_zone_keeps_the_worker_busy);

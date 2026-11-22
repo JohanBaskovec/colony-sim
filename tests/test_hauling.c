@@ -81,7 +81,8 @@ static HaulWorld world_of(Game *game)
                        NULL,
                        REGION_NONE,
                        0,
-                       0};
+                       0,
+                       &game->workstations};
     return world;
 }
 

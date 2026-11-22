@@ -39,6 +39,14 @@ typedef enum Scenario {
      * gathering wild food around (the fuel lies about); every settler knows fire well enough to
      * roast. */
     SCENARIO_COOKING,
+    /* Basketry (docs/CONTAINERS.md, step C1): a crafting spot next to the colony
+     * folding bark trays again and again (a recipe of two ingredients laid by the
+     * station one load at a time), and making a few wooden scrapers and flint borers;
+     * heaps of birch bark (most of it fresh, some dried out: refused), twigs, branches,
+     * flakes and cobbles about, a stockpile for everything; every settler knows
+     * Basketry, Cordage and Stone knapping well enough. The bark dries out in a day or
+     * so: the trays stop when the fresh bark is gone. */
+    SCENARIO_BASKETRY,
     SCENARIO_COUNT
 } Scenario;
 

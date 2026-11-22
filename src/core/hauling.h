@@ -17,6 +17,7 @@
 #include "core/region.h"
 #include "core/reservation.h"
 #include "core/stockpile.h"
+#include "core/workstation.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,6 +37,9 @@ typedef struct HaulWorld {
      * haul_any_job_possible(). */
     int from_y;
     int from_z;
+    /* Items laid on the tile of a station worked at, waiting there for the other ingredients of
+     * a craft (workstation_gathers()), are left there; NULL: no station is looked at. */
+    const Workstations *workstations;
 } HaulWorld;
 
 typedef struct HaulJob {

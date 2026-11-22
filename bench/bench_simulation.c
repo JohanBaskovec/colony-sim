@@ -23,7 +23,7 @@
  * save and the times, and whether the game loaded is the same.
  *
  * Scenarios: see core/scenario.h (0 = none, 1 = gathering, 2 = unreachable
- * jobs, 3 = construction, 4 = feuds, 5 = cooking).
+ * jobs, 3 = construction, 4 = feuds, 5 = cooking, 6 = basketry).
  */
 #define _POSIX_C_SOURCE 199309L /* clock_gettime(). */
 
