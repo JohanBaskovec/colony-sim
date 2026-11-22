@@ -2212,13 +2212,36 @@ static bool is_open_pick(const WorkSearch *search, int x, int y, int z)
                                         search->self);
 }
 
-/* is_open_pick() through the search's memo, when it has one. */
+/* is_open_job() through the search's memo, when it has one: the scan before
+ * the search and the search ask about the same tiles. */
+static bool open_job_kept(const WorkSearch *search, int x, int y, int z)
+{
+    if (search->memo == NULL || !map_in_bounds(search->map, x, y, z)) {
+        return is_open_job(search, x, y, z);
+    }
+    size_t index = map_index(search->map, x, y, z);
+    int kept = pathfinder_memo_get(search->memo, index, MEMO_OPEN_JOB);
+    if (kept >= 0) {
+        return kept != 0;
+    }
+    bool open = is_open_job(search, x, y, z);
+    pathfinder_memo_set(search->memo, index, MEMO_OPEN_JOB, open);
+    return open;
+}
+
+/* is_open_pick() through the search's memo, when it has one. A tile with
+ * neither foliage nor a zone holds nothing to gather (gather_tile_job_in()):
+ * the open air over a zone, looked at up to the tallest crowns. */
 static bool open_pick_kept(const WorkSearch *search, int x, int y, int z)
 {
     if (search->memo == NULL || !map_in_bounds(search->map, x, y, z)) {
         return is_open_pick(search, x, y, z);
     }
     size_t index = map_index(search->map, x, y, z);
+    if (!terrain_is_foliage((Terrain)search->map->terrain[index]) &&
+        gather_zone_at(search->gather_zones, x, y, z) == GATHER_ZONE_NONE) {
+        return false;
+    }
     int kept = pathfinder_memo_get(search->memo, index, MEMO_OPEN_PICK);
     if (kept >= 0) {
         return kept != 0;
@@ -2256,22 +2279,10 @@ static bool find_pick_job(const WorkSearch *search, int x, int y, int z, TilePos
  * fruit in the crowns within reach. */
 static bool find_adjacent_job(const WorkSearch *search, int x, int y, int z, TilePos *out)
 {
-    const Map *map = search->map;
     for (int i = 0; i < 4; i++) {
         int nx = x + NEIGHBOR_DX[i];
         int ny = y + NEIGHBOR_DY[i];
-        bool open;
-        if (search->memo != NULL && map_in_bounds(map, nx, ny, z)) {
-            size_t index = map_index(map, nx, ny, z);
-            int kept = pathfinder_memo_get(search->memo, index, MEMO_OPEN_JOB);
-            open = kept >= 0 ? kept != 0 : is_open_job(search, nx, ny, z);
-            if (kept < 0) {
-                pathfinder_memo_set(search->memo, index, MEMO_OPEN_JOB, open);
-            }
-        } else {
-            open = is_open_job(search, nx, ny, z);
-        }
-        if (open) {
+        if (open_job_kept(search, nx, ny, z)) {
             *out = (TilePos){(int16_t)nx, (int16_t)ny, (int16_t)z};
             return true;
         }
@@ -2325,13 +2336,13 @@ static __attribute__((noinline)) bool pick_beside_region(const WorkSearch *searc
     }
     if (terrain_is_foliage((Terrain)map->terrain[map_index(map, x, y, z)])) {
         return (zone->climb || (z > 0 && row_ids[(ptrdiff_t)x - (ptrdiff_t)level] == region)) &&
-               is_open_pick(search, x, y, z);
+               open_pick_kept(search, x, y, z);
     }
-    if (row_ids[x] == region && is_open_pick(search, x, y, z + 1)) {
+    if (row_ids[x] == region && open_pick_kept(search, x, y, z + 1)) {
         return true;
     }
     for (int dz = 2; zone->climb && dz <= TREE_MAX_LEVELS; dz++) {
-        if (is_open_pick(search, x, y, z + dz)) {
+        if (open_pick_kept(search, x, y, z + dz)) {
             return true;
         }
     }
@@ -2383,7 +2394,7 @@ static bool open_job_reachable(const WorkSearch *search, const ColonistContext *
                 /* A roof is worked on from the level below. */
                 bool next_to_region = beside_region(ids, x, y, width, height, region) ||
                                       (roofs && roof_beside_region(context, ids, x, y, z, region));
-                if (next_to_region && is_open_job(search, x, y, z)) {
+                if (next_to_region && open_job_kept(search, x, y, z)) {
                     return true;
                 }
                 if (search->pick_jobs && pick_beside_region(search, ids, x, y, z, region)) {
