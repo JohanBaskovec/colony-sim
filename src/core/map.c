@@ -505,7 +505,16 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                                      .capacity = 4,
                                      .regrow_hours = 48,
                                      .min_growth = 0.5f,
-                                     .dug = true}}},
+                                     .dug = true},
+                                    /* Leaves cut mature and still green, mid July to the end
+                                     * of September (docs/CONTAINERS.md §3.1); it grows on. */
+                                    {.item = ITEM_CATTAIL_LEAVES,
+                                     .capacity = 3,
+                                     .regrow_hours = 48,
+                                     .warmth_from = 50.0f,
+                                     .warmth_until = 220.0f,
+                                     .min_growth = 0.5f,
+                                     .quality_follows_plant = true}}},
     /* Appear fully grown, picked or gone within days (see core/game.c). Some
      * are deadly: a matter for skilled gatherers. */
     [PLANT_MUSHROOMS] = {.id = "mushrooms",

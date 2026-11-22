@@ -249,6 +249,21 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                             .product_count = 2,
                             .dirt = 0,
                             .tool_use = TOOL_USE_NONE},
+    /* Three bundles of leaves plaited by hand, trimmed with a flake: 5 h
+     * (docs/CONTAINERS.md §7.1). Woven green, it works loose as it dries. */
+    [RECIPE_CATTAIL_BASKET] =
+        {.id = "cattail_basket",
+         .name_key = N_("recipe.cattail_basket"),
+         .stations = CRAFTING_SPOT,
+         .ingredients = {{{ITEM_CATTAIL_LEAVES, ITEM_NONE}, 3, ITEM_WANT_ANY}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {{ITEM_FLAKE}},
+         .work = 12500.0f,
+         .knowledge = KNOWLEDGE_BASKETRY,
+         .min_level = 55.0f,
+         .product = ITEM_CATTAIL_BASKET,
+         .dirt = 2,
+         .tool_use = TOOL_USE_NONE},
 };
 
 #undef CRAFTING_SPOT
@@ -349,6 +364,8 @@ bool recipe_doable_at(RecipeType recipe, double level)
 #define SHAPING_TOOL_SHARE 0.25
 /* A flake scrapes fibre too sharply: it cuts some of it (docs/CONTAINERS.md §5). */
 #define FLAKE_SCRAPING_CAP_MALUS 10
+/* Green cattail leaves shrink as they dry: the basket works loose (§4.3). */
+#define GREEN_WEAVING_CAP_MALUS 15
 
 static bool knaps_a_cobble(const RecipeDef *def, ItemStack input)
 {
@@ -388,6 +405,15 @@ ItemQuality recipe_quality_cap_of(RecipeType recipe, const ItemStack inputs[RECI
         base = (1.0 - SHAPING_TOOL_SHARE) * base + SHAPING_TOOL_SHARE * (double)tool.quality;
     }
     int cap = (int)floor(base + 0.5) + ITEM_QUALITY_CAP_BONUS;
+    /* Woven green, what shrinks as it dries works loose. */
+    for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
+        const ItemDef *material = item_def((ItemType)inputs[i].type);
+        if (inputs[i].count > 0 && material != NULL && material->shrinks_green &&
+            item_moisture_green((ItemType)inputs[i].type, item_stack_moisture(inputs[i]))) {
+            cap -= GREEN_WEAVING_CAP_MALUS;
+            break;
+        }
+    }
     /* Retted stems give a finer fibre; over retted, a rotten one. */
     if (inputs[0].count > 0 && item_def((ItemType)inputs[0].type) != NULL &&
         item_def((ItemType)inputs[0].type)->rets) {

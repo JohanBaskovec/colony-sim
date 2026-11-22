@@ -264,6 +264,18 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                               0.4f, 0.0f, 40, true, true),
                           .length_cm = 15, .form = ITEM_FORM_LIMP, /* A hank wound up. */
                           WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    /* Cut mature and still green (July to September); woven green, or dried
+     * and dampened by the weaver (docs/CONTAINERS.md §4.3). */
+    [ITEM_CATTAIL_LEAVES] = {DEF("cattail_leaves", N_("item.cattail_leaves"),
+                                 ITEM_CATEGORY_RESOURCES, 0.4f, 5.0f, 0.0f, 20, true, true),
+                             .length_cm = 150, .form = ITEM_FORM_BUNDLE, .shrinks_green = true,
+                             WATER(0.7f, 0.8f, 1.0f, 48.0f, 0.2f)},
+    /* Holds about 10 litres, open; a container to carry in from step C4 (a tool
+     * until then, as the bark tray). */
+    [ITEM_CATTAIL_BASKET] = {DEF("cattail_basket", N_("item.cattail_basket"), ITEM_CATEGORY_TOOLS,
+                                 0.4f, 25.0f, 0.0f, 60, true, true),
+                             .length_cm = 35, .form = ITEM_FORM_RIGID,
+                             WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     /* Holds about 2 litres; a container to carry in from step C4 of
      * docs/CONTAINERS.md (a tool until then). */
     [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,

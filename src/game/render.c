@@ -189,6 +189,8 @@ static const SDL_Color BIRCH_BARK_INNER_COLOR = {196, 132, 84, 255};
 static const SDL_Color NETTLE_STEM_COLOR = {118, 132, 70, 255};   /* Stems drying, grey green. */
 static const SDL_Color NETTLE_FIBRE_COLOR = {214, 206, 170, 255}; /* Pale, silky. */
 static const SDL_Color NETTLE_CORD_COLOR = {176, 158, 112, 255};
+static const SDL_Color CATTAIL_LEAF_COLOR = {122, 150, 78, 255};
+static const SDL_Color CATTAIL_BASKET_COLOR = {176, 160, 98, 255};
 static const SDL_Color PIT_COLOR = {46, 38, 34, 255};
 static const SDL_Color ASH_COLOR = {98, 94, 90, 255};
 static const SDL_Color FLAME_COLOR = {240, 118, 34, 255};
@@ -1705,6 +1707,31 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
                       cy + r * 0.6f * sinf(a0), cx + r * cosf(a1), cy + r * 0.6f * sinf(a1), ring);
         }
         batch_bar(renderer, NETTLE_CORD_COLOR, cx + r, cy, cx + r * 1.5f, cy + r, ring);
+        break;
+    }
+    case ITEM_CATTAIL_LEAVES: {
+        /* Long flat leaves lying side by side, their tips drooping. */
+        float leaf = SDL_max(1.0f, floorf(h * 0.07f));
+        for (int i = 0; i < 4; i++) {
+            float y = tile->y + floorf(h * (0.4f + 0.08f * (float)i));
+            batch_bar(renderer, shade(CATTAIL_LEAF_COLOR, (i % 2) * 16),
+                      tile->x + floorf(w * 0.08f), y, tile->x + floorf(w * 0.8f),
+                      y - (float)(i % 2), leaf);
+            batch_bar(renderer, shade(CATTAIL_LEAF_COLOR, -12), tile->x + floorf(w * 0.8f), y,
+                      tile->x + floorf(w * 0.92f), y + leaf * 1.5f, leaf);
+        }
+        break;
+    }
+    case ITEM_CATTAIL_BASKET: {
+        /* A round-bellied basket, the plaiting drawn as light and dark bands. */
+        SDL_FRect body = {tile->x + floorf(w * 0.24f), tile->y + floorf(h * 0.36f),
+                          floorf(w * 0.52f), floorf(h * 0.42f)};
+        fill_outlined(renderer, body, CATTAIL_BASKET_COLOR);
+        float band = SDL_max(1.0f, floorf(body.h / 5.0f));
+        for (int i = 1; i < 5; i += 2) {
+            SDL_FRect stripe = {body.x + 1.0f, body.y + band * (float)i, body.w - 2.0f, band};
+            batch_quad(renderer, shade(CATTAIL_BASKET_COLOR, -24), &stripe);
+        }
         break;
     }
     case ITEM_BARK_TRAY: {

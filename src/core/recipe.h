@@ -40,8 +40,9 @@ typedef enum RecipeType {
     RECIPE_WOODEN_SCRAPER,
     RECIPE_FLINT_BORER,
     RECIPE_BARK_TRAY,
-    RECIPE_NETTLE_FIBRE, /* Dry stems broken and scraped into fibre. */
-    RECIPE_NETTLE_CORD,  /* Fibre twisted into two hanks of cord. */
+    RECIPE_NETTLE_FIBRE,   /* Dry stems broken and scraped into fibre. */
+    RECIPE_NETTLE_CORD,    /* Fibre twisted into two hanks of cord. */
+    RECIPE_CATTAIL_BASKET, /* Leaves plaited into a basket. */
     RECIPE_COUNT
 } RecipeType;
 

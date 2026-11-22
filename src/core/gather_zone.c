@@ -17,7 +17,7 @@
 #define DIG_WORK 125.0f
 #define CUT_GRASS_WORK 150.0f /* Clearing a tile of low plants. */
 #define CUT_GRASS_ARMFUL_WORK 50.0f
-#define CUT_STEMS_WORK 250.0f   /* A bundle of stems: 0.1 h (docs/CONTAINERS.md §4.1). */
+#define CUT_STEMS_WORK 250.0f   /* A bundle of stems or leaves: 0.1 h (docs/CONTAINERS.md §4). */
 #define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
 
 #define ONE(type)                                                                                  \
@@ -80,6 +80,9 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
     [GATHER_NETTLE_STEMS] = {"nettle_stems", N_("gather_zone.resource.nettle_stems"),
                              ITEM_NETTLE_STEMS, ONE(ITEM_NETTLE_STEMS), GATHER_JOB_CUT_STEMS, true,
                              MATERIALS},
+    [GATHER_CATTAIL_LEAVES] = {"cattail_leaves", N_("gather_zone.resource.cattail_leaves"),
+                               ITEM_CATTAIL_LEAVES, ONE(ITEM_CATTAIL_LEAVES), GATHER_JOB_CUT_STEMS,
+                               true, MATERIALS},
 };
 
 #undef WOOD
@@ -106,7 +109,7 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
                                  MEMBER(GATHER_HEATHER) | MEMBER(GATHER_REEDS),
                              false},
     [GATHER_GROUP_MATERIALS] = {"materials", N_("gather_zone.group.materials"),
-                                MEMBER(GATHER_NETTLE_STEMS), false},
+                                MEMBER(GATHER_NETTLE_STEMS) | MEMBER(GATHER_CATTAIL_LEAVES), false},
 };
 
 #undef MEMBER
@@ -138,7 +141,8 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
                                   RESOURCE(GATHER_REEDS),
                               TOOL_USE_CUT_GRASS, false},
     [GATHER_JOB_CUT_STEMS] = {"cut_stems", N_("colonist.task.cut_stems"), GATHERING,
-                              RESOURCE(GATHER_NETTLE_STEMS), TOOL_USE_CUTTING, true},
+                              RESOURCE(GATHER_NETTLE_STEMS) | RESOURCE(GATHER_CATTAIL_LEAVES),
+                              TOOL_USE_CUTTING, true},
     [GATHER_JOB_PICK] = {"pick", N_("colonist.task.pick"), GATHERING,
                          RESOURCE(GATHER_HAZELNUTS) | RESOURCE(GATHER_CHESTNUTS) |
                              RESOURCE(GATHER_APPLES) | RESOURCE(GATHER_PEARS),

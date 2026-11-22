@@ -372,6 +372,8 @@ item.wooden_scraper = Wooden scraper
 item.nettle_stems = Nettle stems
 item.nettle_fibre = Nettle fibre
 item.nettle_cord = Nettle cord
+item.cattail_leaves = Cattail leaves
+item.cattail_basket = Cattail basket
 item.flint_borer = Flint borer
 item.bark_tray = Folded bark tray
 item.settler_body = Settler's body
@@ -637,7 +639,7 @@ colonist.task.dig = Digging up roots
 # Digging up roots easily mistaken for a poisonous plant (wild carrots)
 colonist.task.dig_carefully = Digging up roots with care
 colonist.task.cut_grass = Cutting grass and other fibres
-colonist.task.cut_stems = Cutting nettle stems
+colonist.task.cut_stems = Cutting stems and leaves
 colonist.task.pick = Picking fruit in the trees
 colonist.task.craft = Crafting
 colonist.task.construct = Building
@@ -872,6 +874,7 @@ gather_zone.resource.bracken = Bracken
 gather_zone.resource.heather = Heather
 gather_zone.resource.reeds = Reeds
 gather_zone.resource.nettle_stems = Nettle stems
+gather_zone.resource.cattail_leaves = Cattail leaves
 # Groups of resources (foldable rows; their setting limits each of their resources)
 gather_zone.group.wood = Wood
 gather_zone.group.food = Food
@@ -945,6 +948,7 @@ recipe.flint_borer = Flint borer
 recipe.bark_tray = Folded bark tray
 recipe.nettle_fibre = Scrape nettle fibre
 recipe.nettle_cord = Twist nettle cord
+recipe.cattail_basket = Plaited cattail basket
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted

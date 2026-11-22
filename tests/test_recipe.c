@@ -184,6 +184,31 @@ static void test_nettle_cord_chain(void)
     CHECK(out[0].quality <= 60 + ITEM_QUALITY_CAP_BONUS);
 }
 
+/* The plaited cattail basket (docs/CONTAINERS.md §7.1): three bundles of leaves, a flake; woven
+ * green, it works loose as it dries (cap −15); dried leaves are dampened by the weaver. */
+static void test_cattail_basket(void)
+{
+    const RecipeIngredient *leaves = recipe_ingredient(RECIPE_CATTAIL_BASKET, 0);
+    REQUIRE(leaves != NULL);
+    CHECK_EQ_INT(leaves->types[0], ITEM_CATTAIL_LEAVES);
+    CHECK_EQ_INT(leaves->count, 3);
+    CHECK_EQ_INT(recipe_def(RECIPE_CATTAIL_BASKET)->knowledge, KNOWLEDGE_BASKETRY);
+    ItemStack dry = item_stack_make(ITEM_CATTAIL_LEAVES, 3, 50, 0);
+    item_stack_set_moisture(&dry, 0.1f);
+    ItemStack green = dry;
+    item_stack_set_fresh(&green);
+    REQUIRE(item_moisture_green(ITEM_CATTAIL_LEAVES, item_stack_moisture(green)));
+    ItemStack flake = item_stack_make(ITEM_FLAKE, 1, 80, 0);
+    ItemStack dried[RECIPE_INGREDIENT_MAX] = {dry};
+    ItemStack fresh[RECIPE_INGREDIENT_MAX] = {green};
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_CATTAIL_BASKET, dried, flake), 50 + 20);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_CATTAIL_BASKET, fresh, flake), 50 + 20 - 15);
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_CATTAIL_BASKET, dried, flake, 75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_CATTAIL_BASKET);
+    CHECK_EQ_INT(out[0].count, 1);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -286,6 +311,7 @@ int main(void)
     RUN_TEST(test_products);
     RUN_TEST(test_several_ingredients);
     RUN_TEST(test_nettle_cord_chain);
+    RUN_TEST(test_cattail_basket);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

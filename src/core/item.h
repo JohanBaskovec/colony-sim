@@ -99,6 +99,8 @@ typedef enum ItemType {
     ITEM_NETTLE_STEMS,   /* A bundle of about 20 stems cut whole, to dry and ret. */
     ITEM_NETTLE_FIBRE,   /* A handful of fibre scraped from the stems (about 20 g). */
     ITEM_NETTLE_CORD,    /* A hank of two-ply cord, about 5 m. */
+    ITEM_CATTAIL_LEAVES, /* A bundle of long leaves, to weave green or dried. */
+    ITEM_CATTAIL_BASKET, /* Plaited of cattail leaves, about 10 litres. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,
@@ -338,6 +340,9 @@ typedef struct ItemDef {
     const char *wood_name_key;
     /* Rets while it lies wet and warm (docs/CONTAINERS.md §4.4): ItemStack.retting. */
     bool rets;
+    /* Shrinks as it dries: woven green, what is made of it works loose
+     * (recipe_quality_cap_of(), docs/CONTAINERS.md §4.3). */
+    bool shrinks_green;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every

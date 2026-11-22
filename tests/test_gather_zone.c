@@ -1506,6 +1506,35 @@ static void test_nettle_stems_are_cut_whole(void)
     free_world(&map, &zones, &items);
 }
 
+/* Cattail leaves are cut for weaving (docs/CONTAINERS.md §4.3): the cut stems job takes them, the
+ * plant grows on with its rhizomes. */
+static void test_cattail_leaves_are_cut(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    Plant *cattail = put_plant(&map, 2, 2, PLANT_CATTAIL, 1.0f);
+    REQUIRE(plant_product_in_season(cattail, 1)); /* Mid summer, at the start of a game. */
+    int leaves = plant_stock_available(cattail, 1);
+    int rhizomes = plant_stock_available(cattail, 0);
+    REQUIRE(leaves > 0 && rhizomes > 0);
+    CHECK_EQ_INT(plant_product_harvest(PLANT_CATTAIL, 1), PLANT_HARVEST_KEEPS);
+    int index = gather_zone_create(&zones, &map, 2, 2, 2, 2, 0);
+    order(&zones, &items, index, GATHER_CATTAIL_LEAVES, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_CUT_STEMS);
+    float work = gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_CUT_STEMS);
+    REQUIRE(gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_CUT_STEMS, work, 75.0,
+                                 NULL));
+    ItemStack cut = items_get(&items, 2, 2, 0);
+    CHECK_EQ_INT(cut.type, ITEM_CATTAIL_LEAVES);
+    CHECK_EQ_INT(cut.count, leaves);
+    CHECK_NEAR(cattail->growth, 1.0, 1e-6);                    /* It grows on... */
+    CHECK_EQ_INT(plant_stock_available(cattail, 0), rhizomes); /* ...its roots left. */
+    CHECK_EQ_INT(plant_stock_available(cattail, 1), 0);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1542,5 +1571,6 @@ int main(void)
     RUN_TEST(test_extend_and_shrink_one);
     RUN_TEST(test_picking_in_the_crowns);
     RUN_TEST(test_nettle_stems_are_cut_whole);
+    RUN_TEST(test_cattail_leaves_are_cut);
     return test_summary();
 }
