@@ -45,8 +45,8 @@ cmake --preset headless-release && cmake --build --preset headless-release
 ctest --preset headless-release      # the same tests optimized, without sanitizers: several times faster
 ```
 
-- The `headless` preset is unoptimized, with AddressSanitizer and UBSan: the
-  reference run before declaring a change done. `headless-release` is for
+- The `headless` preset is lightly optimized (`-O1`), with AddressSanitizer
+  and UBSan: the reference run before declaring a change done. `headless-release` is for
   iterating quickly; it catches no memory error.
 
 - Framework: `tests/test_framework.h` (`CHECK`, `CHECK_EQ_INT`, `CHECK_STR_EQ`,

@@ -27,8 +27,11 @@ function(colony_configure_target target)
             target_compile_options(${target} PRIVATE -Werror)
         endif()
         if(COLONY_ENABLE_SANITIZERS)
+            # -O1 in Debug, as AddressSanitizer's documentation advises: the
+            # tests run twice as fast as unoptimized, the same errors caught.
             target_compile_options(${target} PRIVATE
-                -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
+                -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined
+                $<$<CONFIG:Debug>:-O1>)
             target_link_options(${target} PRIVATE -fsanitize=address,undefined)
         endif()
     endif()
