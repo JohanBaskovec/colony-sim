@@ -124,7 +124,12 @@ typedef enum ItemType {
     ITEM_RAW_HIDE_MEDIUM, /* A deer's, a boar's or a wolf's. */
     ITEM_RAW_HIDE_LARGE,  /* An aurochs' or a horse's (none yet). */
     ITEM_BONE,
-    ITEM_SINEW, /* Tendons, kept for cord and sewing. */
+    ITEM_SINEW,        /* Tendons, kept for cord and sewing. */
+    ITEM_SINEW_THREAD, /* Dried sinew pounded and shredded into thread. */
+    ITEM_BONE_AWL,     /* A splinter of bone ground to a point: pierces hide and bark. */
+    ITEM_BONE_NEEDLE,  /* A thin bone needle with an eye drilled through: sews. */
+    ITEM_LEATHER,      /* A piece of dressed hide (about a quarter of a square metre). */
+    ITEM_HIDE_BAG,     /* Sewn of dressed hide, slung: about 12 litres, closed. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,
@@ -348,7 +353,7 @@ typedef struct ItemDef {
     float bulk;    /* Room taken per item (see ITEM_TILE_BULK). */
     int length_cm; /* Its longest side; 0 for loose items (a heap has none). */
     ItemForm form;
-    bool strap;         /* Has a strap or a cord to sling it (the net bag). */
+    bool strap;         /* Has a strap or a cord to sling it (the net bag, the hide bag). */
     float nutrition;    /* Food need restored by eating one item; 0 = not food. */
     int max_hit_points; /* Hit points of one item in perfect condition. */
     bool has_quality;   /* false: always ITEM_QUALITY_BEST. */

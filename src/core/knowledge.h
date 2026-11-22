@@ -29,8 +29,10 @@ typedef enum KnowledgeType {
     KNOWLEDGE_SPEAR_HUNTING,
     KNOWLEDGE_BUTCHERING,
     KNOWLEDGE_BASIC_SHELTERS,
-    KNOWLEDGE_CORDAGE,  /* Fibre and cord (docs/CONTAINERS.md §8). */
-    KNOWLEDGE_BASKETRY, /* Trays, baskets, bags, bark boxes. */
+    KNOWLEDGE_CORDAGE,      /* Fibre and cord (docs/CONTAINERS.md §8). */
+    KNOWLEDGE_BASKETRY,     /* Trays, baskets, bags, bark boxes. */
+    KNOWLEDGE_SKIN_WORKING, /* Dressing hides, sewing them (docs/KNOWLEDGE.md §9). */
+    KNOWLEDGE_BONE_WORKING, /* Awls and needles of bone. */
     KNOWLEDGE_COUNT
 } KnowledgeType;
 

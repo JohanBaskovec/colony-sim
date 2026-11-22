@@ -874,6 +874,22 @@ by the spot wait for their systems. Settlers bring carcasses as any bill's
 ingredient (within its radius); hunting by settlers is a roadmap step of its
 own (wolves leave carcasses). `SAVE_VERSION` 21.
 
+*Skins, bone and sewing (built after it)*: two more starting knowledges for
+now (rolled from the later stream, as Cordage and Basketry), **Skin working**
+and **Bone working**. Sinew dries (it takes water now) and is pounded with a
+cobble into **sinew thread** (Cordage 50, two hanks); a bone split with the
+hammer stone and ground with a flake gives two **bone awls** (Bone working 50;
+piercing ×1.2, better than the flint borer), or three **eyed bone needles**
+(Bone working 65, the eye drilled with a borer or an awl). **Dress a hide**
+(Skin working 50): a raw hide and a portion of fat (or marrow), scraped with
+the wooden scraper or a flake: pieces of **dressed hide** that no longer rot,
+1 for a small hide, 4 for a deer's, 12 for a large one (`recipe_hide_pieces()`,
+2,500 ticks a piece). **Sewn hide bag** (Skin working 55): two pieces and a
+hank of sinew thread or cord, a needle best (`TOOL_USE_SEWING`: needle 1, awl
+0.6, borer 0.3): 12 L, slung, closed (berries too); mended with a piece of
+hide. Sinew thread also laces a bark box, and the bone awl pierces bark boxes
+and coiled baskets. The water skin waits for carrying water. `SAVE_VERSION` 22.
+
 ### 9.1 Items
 
 | id                  | Name             | Category        | kg   | Bulk | Stack | HP  | Quality | Damageable | Notes |

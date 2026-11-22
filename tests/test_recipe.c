@@ -1,5 +1,6 @@
 #include "core/carry.h"
 #include "core/recipe.h"
+#include "core/tool.h"
 #include "core/wood.h"
 #include "core/workstation.h"
 
@@ -412,6 +413,55 @@ static void test_butchering(void)
     CHECK(item_def(ITEM_ROASTED_MEAT)->nutrition > item_def(ITEM_RAW_MEAT)->nutrition);
 }
 
+/* Skins, bone and sewing (docs/KNOWLEDGE.md §9): dried sinew pounded into thread; awls and eyed
+ * needles of bone; a raw hide scraped and worked soft with fat into pieces of dressed hide by its
+ * size (1 h a piece); two pieces sewn into a bag, a needle best. */
+static void test_skins_bone_and_sewing(void)
+{
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_SINEW_THREAD, 0)->moisture, ITEM_WANT_DRY);
+    ItemStack sinew[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_SINEW, 1, 60, 30)};
+    REQUIRE(recipe_craft_with(RECIPE_SINEW_THREAD, sinew, item_stack_make(ITEM_COBBLE, 1, 50, 200),
+                              75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_SINEW_THREAD);
+    CHECK_EQ_INT(out[0].count, 2);
+    ItemStack bone[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_BONE, 1, 50, 200)};
+    REQUIRE(recipe_craft_with(RECIPE_BONE_AWL, bone, item_stack_make(ITEM_FLAKE, 1, 60, 15), 75.0,
+                              NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_BONE_AWL);
+    CHECK_EQ_INT(recipe_def(RECIPE_BONE_NEEDLE)->knowledge, KNOWLEDGE_BONE_WORKING);
+    CHECK(tool_type_factor(TOOL_USE_PIERCING, ITEM_BONE_AWL) >
+          tool_type_factor(TOOL_USE_PIERCING, ITEM_FLINT_BORER));
+    CHECK(tool_type_factor(TOOL_USE_SEWING, ITEM_BONE_NEEDLE) >
+          tool_type_factor(TOOL_USE_SEWING, ITEM_BONE_AWL));
+    CHECK(tool_type_factor(TOOL_USE_SEWING, ITEM_NONE) == 0.0f);
+
+    CHECK_EQ_INT(recipe_hide_pieces(ITEM_RAW_HIDE_SMALL), 1);
+    CHECK_EQ_INT(recipe_hide_pieces(ITEM_RAW_HIDE_MEDIUM), 4);
+    CHECK_EQ_INT(recipe_hide_pieces(ITEM_BONE), 0);
+    ItemStack hide[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_RAW_HIDE_MEDIUM, 1, 60, 30),
+                                             item_stack_make(ITEM_FAT, 1, 50, 40)};
+    CHECK_NEAR(recipe_work_factor(RECIPE_DRESS_HIDE, hide), 0.25, 1e-6);
+    REQUIRE(recipe_craft_with(RECIPE_DRESS_HIDE, hide,
+                              item_stack_make(ITEM_WOODEN_SCRAPER, 1, 60, 40), 75.0, NULL,
+                              out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_LEATHER);
+    CHECK_EQ_INT(out[0].count, 4);
+    CHECK(!item_rots(ITEM_LEATHER) && item_rots(ITEM_RAW_HIDE_MEDIUM));
+
+    ItemStack bag[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_LEATHER, 2, 60, 80),
+                                            item_stack_make(ITEM_SINEW_THREAD, 1, 60, 40)};
+    REQUIRE(recipe_craft_with(RECIPE_HIDE_BAG, bag, item_stack_make(ITEM_BONE_NEEDLE, 1, 60, 25),
+                              75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_HIDE_BAG);
+    CHECK(carry_container_holds(ITEM_HIDE_BAG, ITEM_BLACKBERRIES)); /* Closed: no crushing. */
+    CHECK(item_def(ITEM_HIDE_BAG)->strap);
+    /* Sinew thread laces a bark box too; a bone awl pierces it. */
+    CHECK(recipe_accepts_ingredient(RECIPE_BARK_BOX, 1,
+                                    item_stack_make(ITEM_SINEW_THREAD, 1, 50, 40)));
+    CHECK(item_types_has(recipe_tool_types(recipe_def(RECIPE_BARK_BOX), 0), ITEM_BONE_AWL));
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -556,6 +606,7 @@ int main(void)
     RUN_TEST(test_plaited_mat);
     RUN_TEST(test_coiled_basket);
     RUN_TEST(test_butchering);
+    RUN_TEST(test_skins_bone_and_sewing);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

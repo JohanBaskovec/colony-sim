@@ -1503,6 +1503,53 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
                   tile->y + h * 0.42f, bone);
         break;
     }
+    case ITEM_SINEW_THREAD: {
+        /* A small hank of pale thread wound round. */
+        float ring = SDL_max(1.0f, floorf(w * 0.05f));
+        float cx = tile->x + w * 0.5f, cy = tile->y + h * 0.56f, r = w * 0.15f;
+        for (int i = 0; i < 8; i++) {
+            float a0 = (float)i * 0.785398f, a1 = (float)(i + 1) * 0.785398f;
+            batch_bar(renderer, (SDL_Color){230, 216, 182, 255}, cx + r * cosf(a0),
+                      cy + r * 0.6f * sinf(a0), cx + r * cosf(a1), cy + r * 0.6f * sinf(a1), ring);
+        }
+        break;
+    }
+    case ITEM_BONE_AWL:
+    case ITEM_BONE_NEEDLE: {
+        /* A slender white point; the needle thinner, with its eye. */
+        bool needle = type == ITEM_BONE_NEEDLE;
+        float thick = SDL_max(1.0f, floorf(h * (needle ? 0.04f : 0.08f)));
+        SDL_Color white = {230, 222, 200, 255};
+        batch_bar(renderer, white, tile->x + w * 0.25f, tile->y + h * 0.62f, tile->x + w * 0.75f,
+                  tile->y + h * 0.42f, thick);
+        if (needle) {
+            SDL_FRect eye = {tile->x + w * 0.27f, tile->y + h * 0.58f, thick, thick};
+            batch_quad(renderer, ITEM_OUTLINE, &eye);
+        }
+        break;
+    }
+    case ITEM_LEATHER:
+    case ITEM_HIDE_BAG: {
+        /* A soft tan piece of hide folded over; the bag a pouch with its strap. */
+        SDL_Color tan = {176, 132, 86, 255};
+        bool bag = type == ITEM_HIDE_BAG;
+        SDL_FRect piece = bag ? (SDL_FRect){tile->x + floorf(w * 0.3f), tile->y + floorf(h * 0.42f),
+                                            floorf(w * 0.4f), floorf(h * 0.38f)}
+                              : (SDL_FRect){tile->x + floorf(w * 0.2f), tile->y + floorf(h * 0.46f),
+                                            floorf(w * 0.6f), floorf(h * 0.26f)};
+        fill_outlined(renderer, piece, tan);
+        SDL_FRect fold = {piece.x + 1.0f, piece.y + 1.0f, piece.w - 2.0f,
+                          SDL_max(1.0f, floorf(piece.h * 0.3f))};
+        batch_quad(renderer, shade(tan, -24), &fold);
+        if (bag) {
+            float strap = SDL_max(1.0f, floorf(w * 0.04f));
+            batch_bar(renderer, shade(tan, -40), piece.x, piece.y, tile->x + w * 0.5f,
+                      tile->y + h * 0.2f, strap);
+            batch_bar(renderer, shade(tan, -40), piece.x + piece.w, piece.y, tile->x + w * 0.5f,
+                      tile->y + h * 0.2f, strap);
+        }
+        break;
+    }
     case ITEM_SINEW: {
         /* Pale strands bundled. */
         float strand = SDL_max(1.0f, floorf(h * 0.05f));

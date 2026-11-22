@@ -64,6 +64,13 @@ typedef enum RecipeType {
     RECIPE_BUTCHER,     /* A carcass cut into meat, fat, a hide, bones and sinew. */
     RECIPE_CRACK_BONES, /* Bones cracked with a cobble for their marrow. */
     RECIPE_ROAST_MEAT,  /* Raw meat roasted at a hearth. */
+    /* Skins, bone and sewing. */
+    RECIPE_SINEW_THREAD, /* Dried sinew pounded into thread. */
+    RECIPE_BONE_AWL,     /* A bone split and ground into awls. */
+    RECIPE_BONE_NEEDLE,  /* A bone ground into needles, their eyes drilled. */
+    RECIPE_DRESS_HIDE,   /* A raw hide scraped and worked soft with fat. */
+    RECIPE_HIDE_BAG,     /* Dressed hide sewn into a bag. */
+    RECIPE_MEND_HIDE_BAG,
     RECIPE_COUNT
 } RecipeType;
 
@@ -130,6 +137,10 @@ typedef struct RecipeDef {
 #define BUTCHER_HIDE_MEDIUM_BELOW_KG 200.0f
 /* A carcass eaten past this share has no hide left worth taking. */
 #define BUTCHER_HIDE_EATEN_MAX 0.5f
+
+/* The pieces of dressed hide a raw hide gives (RECIPE_DRESS_HIDE): a small one 1, a
+ * deer's 4, a large one 12 (0 for anything else). */
+int recipe_hide_pieces(ItemType hide);
 
 /* The share of a carcass a butcher at `level` gets out of it: 0.7 at 50 up to 1 at 100. */
 float recipe_butcher_efficiency(double level);

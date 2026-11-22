@@ -278,21 +278,22 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
          .tool_use = TOOL_USE_NONE},
     /* Two sheets of pliable bark folded round a rim of rods and sewn through holes
      * pierced with the borer, a lid fitted: 4.5 h (docs/CONTAINERS.md §7.1). */
-    [RECIPE_BARK_BOX] = {.id = "bark_box",
-                         .name_key = N_("recipe.bark_box"),
-                         .stations = CRAFTING_SPOT,
-                         .ingredients = {{{ITEM_BIRCH_BARK, ITEM_NONE}, 2, ITEM_WANT_WET},
-                                         {{ITEM_NETTLE_CORD, ITEM_LIME_BAST}, 1, ITEM_WANT_ANY},
-                                         {{ITEM_WILLOW_RODS, ITEM_HAZEL_RODS}, 1, ITEM_WANT_WET}},
-                         .input_min_quality = ITEM_QUALITY_WORST,
-                         .tools = {{ITEM_FLINT_BORER, ITEM_FLAKE}, {ITEM_FLAKE}},
-                         .tool_shapes = true,
-                         .work = 11250.0f,
-                         .knowledge = KNOWLEDGE_BASKETRY,
-                         .min_level = 65.0f,
-                         .product = ITEM_BARK_BOX,
-                         .dirt = 2,
-                         .tool_use = TOOL_USE_PIERCING},
+    [RECIPE_BARK_BOX] =
+        {.id = "bark_box",
+         .name_key = N_("recipe.bark_box"),
+         .stations = CRAFTING_SPOT,
+         .ingredients = {{{ITEM_BIRCH_BARK, ITEM_NONE}, 2, ITEM_WANT_WET},
+                         {{ITEM_NETTLE_CORD, ITEM_LIME_BAST, ITEM_SINEW_THREAD}, 1, ITEM_WANT_ANY},
+                         {{ITEM_WILLOW_RODS, ITEM_HAZEL_RODS}, 1, ITEM_WANT_WET}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {{ITEM_BONE_AWL, ITEM_FLINT_BORER, ITEM_FLAKE}, {ITEM_FLAKE}},
+         .tool_shapes = true,
+         .work = 11250.0f,
+         .knowledge = KNOWLEDGE_BASKETRY,
+         .min_level = 65.0f,
+         .product = ITEM_BARK_BOX,
+         .dirt = 2,
+         .tool_use = TOOL_USE_PIERCING},
     /* Pliable rods (green, or dried and soaked) stuck as stakes and woven round:
      * 8 h (docs/CONTAINERS.md §7.1). */
     [RECIPE_FRAME_BASKET] =
@@ -418,7 +419,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                               .ingredients = {{{ITEM_SPLIT_CANES, ITEM_NONE}, 2, ITEM_WANT_WET},
                                               {{ITEM_GRASS, ITEM_REEDS}, 4, ITEM_WANT_DRY}},
                               .input_min_quality = ITEM_QUALITY_WORST,
-                              .tools = {{ITEM_FLINT_BORER, ITEM_FLAKE}},
+                              .tools = {{ITEM_BONE_AWL, ITEM_FLINT_BORER, ITEM_FLAKE}},
                               .work = 75000.0f,
                               .knowledge = KNOWLEDGE_BASKETRY,
                               .min_level = 65.0f,
@@ -494,6 +495,93 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                            .product = ITEM_ROASTED_MEAT,
                            .dirt = 0,
                            .tool_use = TOOL_USE_NONE},
+    /* Dried sinew pounded on a stone with a cobble, then shredded into fibres: two hanks of
+     * thread, 0.5 h. */
+    [RECIPE_SINEW_THREAD] = {.id = "sinew_thread",
+                             .name_key = N_("recipe.sinew_thread"),
+                             .stations = CRAFTING_SPOT,
+                             .ingredients = {{{ITEM_SINEW, ITEM_NONE}, 1, ITEM_WANT_DRY}},
+                             .input_min_quality = ITEM_QUALITY_WORST,
+                             .tools = {HAMMER},
+                             .work = 1250.0f,
+                             .knowledge = KNOWLEDGE_CORDAGE,
+                             .min_level = 50.0f,
+                             .product = ITEM_SINEW_THREAD,
+                             .product_count = 2,
+                             .dirt = 1,
+                             .tool_use = TOOL_USE_NONE},
+    /* A long bone split with the hammer stone, its splinters grooved and ground to points
+     * with a flake: two awls, 0.6 h. */
+    [RECIPE_BONE_AWL] = {.id = "bone_awl",
+                         .name_key = N_("recipe.bone_awl"),
+                         .stations = CRAFTING_SPOT,
+                         .ingredients = {{{ITEM_BONE, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                         .input_min_quality = ITEM_QUALITY_WORST,
+                         .tools = {{ITEM_FLAKE}, HAMMER},
+                         .tool_shapes = true,
+                         .work = 1500.0f,
+                         .knowledge = KNOWLEDGE_BONE_WORKING,
+                         .min_level = 50.0f,
+                         .product = ITEM_BONE_AWL,
+                         .product_count = 2,
+                         .dirt = 3,
+                         .tool_use = TOOL_USE_CUTTING},
+    /* Thin splinters ground into needles, an eye drilled through each with a borer or an
+     * awl: three needles, 1.5 h. */
+    [RECIPE_BONE_NEEDLE] = {.id = "bone_needle",
+                            .name_key = N_("recipe.bone_needle"),
+                            .stations = CRAFTING_SPOT,
+                            .ingredients = {{{ITEM_BONE, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                            .input_min_quality = ITEM_QUALITY_WORST,
+                            .tools = {{ITEM_FLINT_BORER, ITEM_BONE_AWL}, {ITEM_FLAKE}},
+                            .tool_shapes = true,
+                            .work = 3750.0f,
+                            .knowledge = KNOWLEDGE_BONE_WORKING,
+                            .min_level = 65.0f,
+                            .product = ITEM_BONE_NEEDLE,
+                            .product_count = 3,
+                            .dirt = 2,
+                            .tool_use = TOOL_USE_PIERCING},
+    /* A raw hide scraped of flesh and fat with a dull scraper, then worked soft with fat
+     * (as brains or marrow were used): pieces of dressed hide by its size, 1 h a piece
+     * (recipe_work_factor()). */
+    [RECIPE_DRESS_HIDE] = {.id = "dress_hide",
+                           .name_key = N_("recipe.dress_hide"),
+                           .stations = CRAFTING_SPOT,
+                           .ingredients = {{{ITEM_RAW_HIDE_MEDIUM, ITEM_RAW_HIDE_SMALL,
+                                             ITEM_RAW_HIDE_LARGE},
+                                            1,
+                                            ITEM_WANT_ANY},
+                                           {{ITEM_FAT, ITEM_MARROW}, 1, ITEM_WANT_ANY}},
+                           .input_min_quality = ITEM_QUALITY_WORST,
+                           .tools = {{ITEM_WOODEN_SCRAPER, ITEM_FLAKE}},
+                           .tool_shapes = true,
+                           .work = 2500.0f,
+                           .knowledge = KNOWLEDGE_SKIN_WORKING,
+                           .min_level = 50.0f,
+                           .product = ITEM_LEATHER,
+                           .dirt = 4,
+                           .tool_use = TOOL_USE_SCRAPING},
+    /* Two pieces sewn with sinew thread (or cord) into a pouch with a strap: 2 h. */
+    [RECIPE_HIDE_BAG] =
+        {.id = "hide_bag",
+         .name_key = N_("recipe.hide_bag"),
+         .stations = CRAFTING_SPOT,
+         .ingredients = {{{ITEM_LEATHER, ITEM_NONE}, 2, ITEM_WANT_ANY},
+                         {{ITEM_SINEW_THREAD, ITEM_NETTLE_CORD, ITEM_LIME_CORD}, 1, ITEM_WANT_ANY}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {{ITEM_BONE_NEEDLE, ITEM_BONE_AWL, ITEM_FLINT_BORER}},
+         .tool_shapes = true,
+         .work = 5000.0f,
+         .knowledge = KNOWLEDGE_SKIN_WORKING,
+         .min_level = 55.0f,
+         .product = ITEM_HIDE_BAG,
+         .dirt = 1,
+         .tool_use = TOOL_USE_SEWING},
+    /* A torn seam sewn again, a patch of hide: 1 h. */
+    [RECIPE_MEND_HIDE_BAG] =
+        MEND("mend_hide_bag", N_("recipe.mend_hide_bag"), ITEM_HIDE_BAG, ITEM_LEATHER, ITEM_NONE, 1,
+             ITEM_WANT_ANY, ITEM_BONE_NEEDLE, ITEM_BONE_AWL, 2500.0f),
 };
 
 #undef CRAFTING_SPOT
@@ -673,6 +761,10 @@ float recipe_work_factor(RecipeType recipe, const ItemStack inputs[RECIPE_INGRED
     if (recipe_def(recipe) == NULL || inputs[0].count <= 0 || main == NULL) {
         return 1.0f;
     }
+    if (recipe == RECIPE_DRESS_HIDE) { /* `work` a piece of the hide. */
+        int pieces = recipe_hide_pieces((ItemType)inputs[0].type);
+        return pieces > 0 ? 1.0f / (float)pieces : 1.0f;
+    }
     if (recipe_def(recipe)->butchers) { /* `work` a kilogram of carcass. */
         ItemStack one = inputs[0];
         one.count = 1;
@@ -746,6 +838,9 @@ static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack inp
             def->product, 1, input.quality,
             item_hit_points_at_percent(def->product, item_stack_hit_points_percent(input)));
         return 1;
+    case RECIPE_DRESS_HIDE:
+        out[0] = product(def->product, recipe_hide_pieces((ItemType)input.type), level, rng, cap);
+        return out[0].count > 0 ? 1 : 0;
     case RECIPE_ROAST_RHIZOMES:
     case RECIPE_ROAST_CARROTS:
     case RECIPE_ROAST_MEAT: {
@@ -766,6 +861,16 @@ static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack inp
         out[0] =
             product(def->product, def->product_count > 0 ? def->product_count : 1, level, rng, cap);
         return 1;
+    }
+}
+
+int recipe_hide_pieces(ItemType hide)
+{
+    switch (hide) {
+    case ITEM_RAW_HIDE_SMALL: return 1;
+    case ITEM_RAW_HIDE_MEDIUM: return 4;
+    case ITEM_RAW_HIDE_LARGE: return 12;
+    default: return 0;
     }
 }
 

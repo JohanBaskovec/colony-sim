@@ -385,7 +385,31 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                    .length_cm = 30, .form = ITEM_FORM_RIGID},
     [ITEM_SINEW] = {DEF("sinew", N_("item.sinew"), ITEM_CATEGORY_RESOURCES, 0.1f, 0.3f, 0.0f, 30,
                         true, true),
-                    .length_cm = 30, .form = ITEM_FORM_LIMP, .rot_days = 10.0f},
+                    .length_cm = 30, .form = ITEM_FORM_LIMP, .rot_days = 10.0f,
+                    WATER(0.6f, 0.7f, 1.0f, 48.0f, 0.2f)},
+    /* Dried sinew pounded with a cobble and shredded into fibres, moistened to
+     * sew: it shrinks as it dries and tightens the seam. */
+    [ITEM_SINEW_THREAD] = {DEF("sinew_thread", N_("item.sinew_thread"), ITEM_CATEGORY_RESOURCES,
+                               0.02f, 0.2f, 0.0f, 40, true, true),
+                           .length_cm = 15, .form = ITEM_FORM_LIMP,
+                           WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    [ITEM_BONE_AWL] = {DEF("bone_awl", N_("item.bone_awl"), ITEM_CATEGORY_TOOLS, 0.03f, 0.1f, 0.0f,
+                           60, true, true),
+                       .length_cm = 12, .form = ITEM_FORM_RIGID},
+    [ITEM_BONE_NEEDLE] = {DEF("bone_needle", N_("item.bone_needle"), ITEM_CATEGORY_TOOLS, 0.005f,
+                              0.05f, 0.0f, 25, true, true),
+                          .length_cm = 7, .form = ITEM_FORM_RIGID},
+    /* Scraped clean and worked soft with fat: it no longer rots. */
+    [ITEM_LEATHER] = {DEF("leather", N_("item.leather"), ITEM_CATEGORY_RESOURCES, 0.3f, 2.0f, 0.0f,
+                          80, true, true),
+                      .length_cm = 50, .form = ITEM_FORM_LIMP,
+                      WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    /* Two pieces of hide sewn into a pouch with a strap: closed, it holds berries
+     * as well as nuts. */
+    [ITEM_HIDE_BAG] = {DEF("hide_bag", N_("item.hide_bag"), ITEM_CATEGORY_TOOLS, 0.4f, 3.0f, 0.0f,
+                           150, true, true),
+                       .length_cm = 40, .form = ITEM_FORM_LIMP, .strap = true,
+                       .container_litres = 12.0f, WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     [ITEM_SETTLER_BODY] = {DEF("settler_body", N_("item.settler_body"), ITEM_CATEGORY_BODIES, 65.0f,
                                1000.0f, 0.0f, 100, false, true),
                            .length_cm = 170, .form = ITEM_FORM_LIMP, .rot_days = 10.0f},

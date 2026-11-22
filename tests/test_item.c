@@ -28,7 +28,8 @@ static void test_definitions(void)
         CHECK(item_stack_limit((ItemType)type) > 0);
         CHECK(def->form > ITEM_FORM_NONE && def->form < ITEM_FORM_COUNT);
         CHECK(def->length_cm >= 0);
-        CHECK(!def->strap || type == ITEM_NET_BAG); /* The first thing slung. */
+        /* Slung bags are containers. */
+        CHECK(!def->strap || def->container_litres > 0.0f);
         /* A heap of loose pieces has no longest side: every other item has one. */
         CHECK((def->form == ITEM_FORM_LOOSE) == (def->length_cm == 0));
     }

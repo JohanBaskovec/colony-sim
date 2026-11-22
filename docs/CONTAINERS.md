@@ -602,13 +602,14 @@ plan for what needs whole systems first (§11.1).
 The rest of the list waits for systems of its own, each a step of the roadmap
 (in the order that unlocks the most):
 
-1. **Butchering** (designed: `docs/KNOWLEDGE.md` §9, a starting knowledge): the
+1. **Butchering** *(built)* (`docs/KNOWLEDGE.md` §9, a starting knowledge): the
    butchering spot, carcasses cut into meat, fat, marrow, raw hides, bones and
    **sinew**; settlers fetching the carcasses wolves leave (hunting by settlers
    is a roadmap step of its own). Meat wants cooking (with fire, M4).
-2. **Bone working and sewing**: **sinew thread** (dried, pounded, shredded,
-   moistened), the **bone awl** and the **eyed needle**; then **hide bags** and
-   a **skin water bag** (with Skin working: scraping and drying hides).
+2. **Bone working and sewing** *(built, but the water bag: docs/KNOWLEDGE.md §9)*:
+   **sinew thread** (dried, pounded, shredded, moistened), the **bone awl** and the
+   **eyed needle**; then **hide bags** and a **skin water bag** (with Skin working:
+   scraping and drying hides).
 3. **Hafting** (`docs/KNOWLEDGE.md` §13) and **birch tar** (bark heated without
    air: a pit or a covered pot, at a hearth): glue for hafted tools, and the
    seams of a box or a bucket sealed so that it holds **water**.

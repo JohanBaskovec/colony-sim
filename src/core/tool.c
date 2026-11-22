@@ -37,10 +37,11 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
                            N_("tool_use.scraping"),
                            0.3f,
                            {[ITEM_FLAKE] = 0.6f, [ITEM_WOODEN_SCRAPER] = 1.0f}},
-    [TOOL_USE_PIERCING] = {"piercing",
-                           N_("tool_use.piercing"),
-                           0.0f,
-                           {[ITEM_FLAKE] = 0.4f, [ITEM_FLINT_BORER] = 1.0f}},
+    [TOOL_USE_PIERCING] =
+        {"piercing",
+         N_("tool_use.piercing"),
+         0.0f,
+         {[ITEM_FLAKE] = 0.4f, [ITEM_FLINT_BORER] = 1.0f, [ITEM_BONE_AWL] = 1.2f}},
     /* One cut down the trunk with a sharp edge, then the sheet lifted off. */
     [TOOL_USE_PEELING] = {"peeling",
                           N_("tool_use.peeling"),
@@ -57,6 +58,13 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
                              N_("tool_use.butchering"),
                              0.0f,
                              {[ITEM_CHOPPER] = 0.8f, [ITEM_FLAKE] = 1.0f, [ITEM_HAND_AXE] = 0.9f}},
+    /* The eyed needle carries the thread through; with an awl the holes are pierced
+     * first and the thread pushed through each, slower. */
+    [TOOL_USE_SEWING] =
+        {"sewing",
+         N_("tool_use.sewing"),
+         0.0f,
+         {[ITEM_BONE_NEEDLE] = 1.0f, [ITEM_BONE_AWL] = 0.6f, [ITEM_FLINT_BORER] = 0.3f}},
 };
 
 /* Speed factor of a tool of the worst and of the best quality, linear in

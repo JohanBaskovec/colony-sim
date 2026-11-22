@@ -16,6 +16,9 @@ static const KnowledgeDef KNOWLEDGE_DEFS[KNOWLEDGE_COUNT] = {
     /* Starting knowledges while their chains are tested (docs/CONTAINERS.md §8). */
     [KNOWLEDGE_CORDAGE] = {"cordage", N_("knowledge.cordage"), true},
     [KNOWLEDGE_BASKETRY] = {"basketry", N_("knowledge.basketry"), true},
+    /* Starting knowledges too, until knowledges can be learnt or invented. */
+    [KNOWLEDGE_SKIN_WORKING] = {"skin_working", N_("knowledge.skin_working"), true},
+    [KNOWLEDGE_BONE_WORKING] = {"bone_working", N_("knowledge.bone_working"), true},
 };
 
 const KnowledgeDef *knowledge_def(KnowledgeType knowledge)
