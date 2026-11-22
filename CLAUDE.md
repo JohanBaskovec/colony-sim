@@ -39,6 +39,7 @@ current milestone.
 ```sh
 cmake --preset headless && cmake --build --preset headless && ctest --preset headless  # core + tests, fast, no SDL
 cmake --preset debug && cmake --build --preset debug && ctest --preset debug           # everything
+cmake --preset headless-release && cmake --build --preset headless-release && ctest --preset headless-release  # the same tests optimized, no sanitizers: several times faster for iterating (headless stays the reference)
 ./build/debug/bin/colony_sim --lang fr                                                  # the title screen (Thawmoor): New game, Settings, Quit
 ./build/debug/bin/colony_sim --lang fr --seed 42                                        # straight into a game (any game option skips the title screen)
 ./build/debug/bin/colony_sim --seed 42 --colonists 8 --scenario 3 --debug instant_build,learn_all  # test setup

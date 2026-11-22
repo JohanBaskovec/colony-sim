@@ -79,6 +79,7 @@
     { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } },
     { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } },
     { "name": "asan", "configurePreset": "asan", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } },
-    { "name": "headless", "configurePreset": "headless", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } }
+    { "name": "headless", "configurePreset": "headless", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } },
+    { "name": "headless-release", "configurePreset": "headless-release", "output": { "outputOnFailure": true }, "execution": { "jobs": 6 } }
   ]
 }
