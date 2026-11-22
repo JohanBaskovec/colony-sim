@@ -334,6 +334,12 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                       .length_cm = 40, .form = ITEM_FORM_LIMP, .strap = true,
                       .container_litres = 10.0f, .net = true,
                       WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    /* A mat plaited of leaves or reeds (docs/CONTAINERS.md §11), rolled up: laid
+     * over a litter, it keeps the damp of the ground off a sleeper. */
+    [ITEM_MAT] = {DEF("mat", N_("item.mat"), ITEM_CATEGORY_RESOURCES, 1.5f, 20.0f, 0.0f, 60, true,
+                      true),
+                  .length_cm = 100, .form = ITEM_FORM_BUNDLE,
+                  WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,
                             0.0f, 25, true, true),
                         .length_cm = 30, .form = ITEM_FORM_RIGID, .container_litres = 2.0f,

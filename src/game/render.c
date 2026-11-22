@@ -1822,6 +1822,18 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
                   tile->y + h * 0.2f, cord);
         break;
     }
+    case ITEM_MAT: {
+        /* A rolled mat: a pale cylinder, its plaiting drawn as bands, its spiral end. */
+        SDL_FRect roll = {tile->x + floorf(w * 0.16f), tile->y + floorf(h * 0.44f),
+                          floorf(w * 0.68f), SDL_max(2.0f, floorf(h * 0.22f))};
+        fill_outlined(renderer, roll, CATTAIL_BASKET_COLOR);
+        float band = SDL_max(1.0f, floorf(roll.w / 8.0f));
+        for (int i = 1; i < 8; i += 2) {
+            SDL_FRect stripe = {roll.x + band * (float)i, roll.y + 1.0f, band, roll.h - 2.0f};
+            batch_quad(renderer, shade(CATTAIL_BASKET_COLOR, -24), &stripe);
+        }
+        break;
+    }
     case ITEM_BARK_BOX: {
         /* A small round white box sewn up its side, its lid rimmed with a rod. */
         SDL_FRect body = {tile->x + floorf(w * 0.32f), tile->y + floorf(h * 0.4f),
@@ -2748,7 +2760,8 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
         return;
     }
     switch (type) {
-    case STRUCTURE_GRASS_BED: {
+    case STRUCTURE_GRASS_BED:
+    case STRUCTURE_MAT_BED: {
         bool vertical = direction == DIRECTION_NORTH || direction == DIRECTION_SOUTH;
         float across = vertical ? w : h; /* One tile. */
         float side = floorf(across * 0.12f), end = floorf(across * 0.06f);
@@ -2768,6 +2781,20 @@ static void render_structure_shape(SDL_Renderer *renderer, const SDL_FRect *tile
             pillow.w = roll;
         }
         fill(renderer, dark, &pillow);
+        if (type == STRUCTURE_MAT_BED) { /* The plaited mat over the litter: bands across. */
+            float band = SDL_max(1.0f, floorf(across * 0.08f));
+            for (int i = 1; i < 6; i += 2) {
+                SDL_FRect weave = litter;
+                if (vertical) {
+                    weave.y += floorf(litter.h * (float)i / 7.0f);
+                    weave.h = band;
+                } else {
+                    weave.x += floorf(litter.w * (float)i / 7.0f);
+                    weave.w = band;
+                }
+                fill(renderer, edge, &weave);
+            }
+        }
         break;
     }
     case STRUCTURE_GROUND_BEDDING: break; /* Only an outline, above. */

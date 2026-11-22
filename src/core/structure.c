@@ -30,7 +30,10 @@
  * ground does, 0.8: a place where settlers lie down, not a better night).
  * Hit points: a bed 20 (it packs down, a hit point a day, and is refreshed
  * with 4 armfuls of dry grass in 125 ticks), a wall 60, a screen 40, a roof
- * 50, a prop 40, a ladder 30, a ground bedding 20 (it does not wear).
+ * 50, a prop 40, a ladder 30, a ground bedding 20 (it does not wear). A mat
+ * bed: a plaited mat over 8 armfuls of grass, rest ×1.15 (the mat keeps the
+ * damp of the ground off), 40 hit points (the mat holds the litter: it packs
+ * down half as fast), refreshed with 4 armfuls of grass.
  */
 static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
     [STRUCTURE_NONE] = {"none",
@@ -164,6 +167,22 @@ static const StructureDef STRUCTURE_DEFS[STRUCTURE_TYPE_COUNT] = {
                                   {ITEM_NONE, 0},
                                   0.0f,
                                   false},
+    [STRUCTURE_MAT_BED] = {"mat_bed",
+                           N_("structure.mat_bed"),
+                           N_("structure.mat_bed.description"),
+                           {{ITEM_MAT, 1}, {ITEM_GRASS, 8}},
+                           625.0f,
+                           KNOWLEDGE_BASIC_SHELTERS,
+                           50.0f,
+                           1.2f,
+                           1.15f,
+                           false,
+                           2,
+                           40,
+                           1,
+                           {ITEM_GRASS, 4},
+                           125.0f,
+                           false},
 };
 
 /* Hit points by quality: ×0.6 at 0, ×1 at ITEM_QUALITY_STANDARD, ×1.5 at 100,

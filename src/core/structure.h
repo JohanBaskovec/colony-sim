@@ -41,6 +41,7 @@ typedef enum StructureType {
     STRUCTURE_PROP,           /* Forked post of branches: holds up a ceiling or a roof. */
     STRUCTURE_LADDER,         /* Branch ladder: up to the level above (see map_can_climb()). */
     STRUCTURE_GROUND_BEDDING, /* A spot of trodden ground to sleep on, no material. */
+    STRUCTURE_MAT_BED,        /* A plaited mat over a litter of grass. */
     STRUCTURE_TYPE_COUNT
 } StructureType;
 

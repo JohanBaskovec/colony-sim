@@ -918,6 +918,33 @@ static void test_taking_a_roof_apart(void)
     game_shutdown(&game);
 }
 
+/* A mat over the litter (docs/CONTAINERS.md §11): a bed of a plaited mat and grass, built as the
+ * grass bed is; rest comes back faster than on grass alone, and it packs down more slowly. */
+static void test_a_mat_bed_rests_better(void)
+{
+    const StructureDef *mat = structure_def(STRUCTURE_MAT_BED);
+    const StructureDef *grass = structure_def(STRUCTURE_GRASS_BED);
+    CHECK(structure_is_bed(STRUCTURE_MAT_BED));
+    CHECK(mat->rest_factor > grass->rest_factor);
+    CHECK(mat->max_hit_points > grass->max_hit_points && mat->wear_per_day == grass->wear_per_day);
+    CHECK_EQ_INT(mat->materials[0].type, ITEM_MAT);
+    CHECK_EQ_INT(structure_length(STRUCTURE_MAT_BED), 2);
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *on_mat = spawn_rested(&game, 10, 10);
+    Colonist *on_grass = spawn_rested(&game, 10, 16);
+    REQUIRE(on_mat != NULL && on_grass != NULL);
+    map_set_structure(&game.map, 12, 10, 0, STRUCTURE_MAT_BED);
+    map_set_structure(&game.map, 12, 16, 0, STRUCTURE_GRASS_BED);
+    on_mat->needs[NEED_REST] = 0.2f;
+    on_grass->needs[NEED_REST] = 0.2f;
+    run_ticks(&game, 3 * TICKS_PER_HOUR);
+    CHECK(on_mat->x == 12 && on_mat->y == 10);
+    CHECK(on_grass->x == 12 && on_grass->y == 16);
+    CHECK(on_mat->needs[NEED_REST] > on_grass->needs[NEED_REST] + 0.01f);
+    game_shutdown(&game);
+}
+
 int main(void)
 {
     RUN_TEST(test_placing);
@@ -935,6 +962,7 @@ int main(void)
     RUN_TEST(test_doors_let_settlers_through_slowly);
     RUN_TEST(test_doors_open_and_close);
     RUN_TEST(test_settlers_sleep_in_beds);
+    RUN_TEST(test_a_mat_bed_rests_better);
     RUN_TEST(test_settlers_own_their_beds);
     RUN_TEST(test_planning_beds);
     RUN_TEST(test_building_a_bed_facing_east);

@@ -306,6 +306,21 @@ static void test_mending_containers(void)
     CHECK_EQ_INT(out[0].hit_points, item_def(ITEM_FRAME_BASKET)->max_hit_points);
 }
 
+/* A mat (docs/CONTAINERS.md §11): three bundles of cattail leaves or reeds, plaited by hand. */
+static void test_plaited_mat(void)
+{
+    const RecipeIngredient *leaves = recipe_ingredient(RECIPE_MAT, 0);
+    REQUIRE(leaves != NULL);
+    CHECK_EQ_INT(leaves->count, 3);
+    CHECK_EQ_INT(leaves->types[0], ITEM_CATTAIL_LEAVES);
+    CHECK_EQ_INT(leaves->types[1], ITEM_REEDS);
+    ItemStack reeds[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_REEDS, 3, 60, 0)};
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_MAT, reeds, (ItemStack){.type = ITEM_NONE}, 75.0, NULL, out) ==
+            1);
+    CHECK_EQ_INT(out[0].type, ITEM_MAT);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -447,6 +462,7 @@ int main(void)
     RUN_TEST(test_lime_bast_chain);
     RUN_TEST(test_net_bag);
     RUN_TEST(test_mending_containers);
+    RUN_TEST(test_plaited_mat);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

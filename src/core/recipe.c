@@ -378,6 +378,20 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                         .product = ITEM_NET_BAG,
                         .dirt = 0,
                         .tool_use = TOOL_USE_NONE},
+    /* Three bundles of cattail leaves or reeds plaited flat, 3 h (docs/CONTAINERS.md
+     * §11); green leaves shrink as they dry and work loose. */
+    [RECIPE_MAT] = {.id = "mat",
+                    .name_key = N_("recipe.mat"),
+                    .stations = CRAFTING_SPOT,
+                    .ingredients = {{{ITEM_CATTAIL_LEAVES, ITEM_REEDS}, 3, ITEM_WANT_ANY}},
+                    .input_min_quality = ITEM_QUALITY_WORST,
+                    .tools = {{ITEM_NONE}},
+                    .work = 7500.0f,
+                    .knowledge = KNOWLEDGE_BASKETRY,
+                    .min_level = 50.0f,
+                    .product = ITEM_MAT,
+                    .dirt = 2,
+                    .tool_use = TOOL_USE_NONE},
     /* Mending (docs/CONTAINERS.md §11): broken leaves plaited anew, 1 h. */
     [RECIPE_MEND_CATTAIL_BASKET] =
         MEND("mend_cattail_basket", N_("recipe.mend_cattail_basket"), ITEM_CATTAIL_BASKET,
