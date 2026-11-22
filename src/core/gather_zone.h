@@ -90,6 +90,8 @@ typedef enum GatherResource {
     GATHER_CATTAIL_LEAVES, /* Cut for weaving; the plant grows on. */
     GATHER_BIRCH_BARK,     /* Peeled off birches (GATHER_JOB_PEEL); the tree lives. */
     GATHER_HAZEL_RODS,     /* Cut at the stool (GATHER_JOB_CUT_RODS); new ones grow. */
+    GATHER_WILLOW_RODS,    /* The same, of osier by the water. */
+    GATHER_LIME_POLES,     /* Cut from young limes (GATHER_JOB_CUT_POLES) for their bast. */
     GATHER_RESOURCE_COUNT
 } GatherResource;
 
@@ -110,9 +112,12 @@ typedef enum GatherJob {
     /* Peel bark off a tree (birch bark, a flake best): once, it grows back over
      * years; out of its season, warmed first, slower and fewer sheets. */
     GATHER_JOB_PEEL,
-    /* Cut rods at the stool of a hazel (a hand axe best): best leafless, green and
+    /* Cut rods at the stool of a hazel or a willow (a hand axe best): best leafless, green and
      * weaker in leaf; new rods grow within a year. */
     GATHER_JOB_CUT_RODS,
+    /* Cut the poles of a young lime at the stool (a hand axe best), without felling: it
+     * grows again from the stool; out of the sap season, half of them and worse. */
+    GATHER_JOB_CUT_POLES,
     /* Pick the fruit or nuts hanging in a block of foliage (core/crown.h),
      * from the ground below it or, climbing, from the dense foliage around
      * it (gather_pick_reaches()). */

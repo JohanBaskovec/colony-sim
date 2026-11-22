@@ -330,7 +330,8 @@ an overflowed log; batching far blocks if floods cost too much (§9). Lakes
 of the tests' flat world (`WorldGenParams.flat`, a single level) lie on
 the level of their banks, their deep water (`WORLDGEN_FLAT_DEEP_MM`) beside
 their shallows: nothing holds them once woken (a tree growing on the shore
-is enough), and they spread over the plain. Players do not get that world:
+is enough), and they spread over the plain; so that world has no willows
+(they stand on shores). Players do not get that world:
 a relief of 0 % in the New game window makes a plain with its lakes in
 hollows (docs/UI.md), held as any other.
 

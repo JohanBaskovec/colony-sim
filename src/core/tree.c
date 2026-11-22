@@ -84,6 +84,26 @@ static const TreeDef TREE_DEFS[PLANT_TREE_LAST - PLANT_TREE_FIRST + 1] = {
                                             .crown_twigs = 8,
                                             .shed_twigs = 0.7f,
                                             .shed_branches = 0.5f},
+    /* The lime: tall and dense like the beech, and very long lived. */
+    [PLANT_LIME - PLANT_TREE_FIRST] = {.second_level_at = 0.49f,
+                                       .third_level_at = 0.55f,
+                                       .reach = 2,
+                                       .density_shift = 1,
+                                       .raggedness = 0.7f,
+                                       .crown_branches = 5,
+                                       .crown_twigs = 12,
+                                       .shed_twigs = 1.0f,
+                                       .shed_branches = 0.8f,
+                                       .can_be_old = true,
+                                       .can_be_ancient = true},
+    /* The osier stays low like the hazel: thin stems, many twigs. */
+    [PLANT_WILLOW - PLANT_TREE_FIRST] = {.second_level_at = 0.52f,
+                                         .reach = 1,
+                                         .raggedness = 1.0f,
+                                         .crown_branches = 4,
+                                         .crown_twigs = 14,
+                                         .shed_twigs = 1.4f,
+                                         .shed_branches = 0.8f},
     /* A hazel stays small: two levels of trunk at most. */
     [PLANT_HAZEL - PLANT_TREE_FIRST] = {.second_level_at = 0.52f,
                                         .reach = 2,
@@ -93,7 +113,7 @@ static const TreeDef TREE_DEFS[PLANT_TREE_LAST - PLANT_TREE_FIRST + 1] = {
                                         .shed_twigs = 1.0f,
                                         .shed_branches = 1.0f},
 };
-_Static_assert(PLANT_TREE_LAST - PLANT_TREE_FIRST + 1 == 8, "a TreeDef per tree species");
+_Static_assert(PLANT_TREE_LAST - PLANT_TREE_FIRST + 1 == 10, "a TreeDef per tree species");
 
 /* Shapes of the old and ancient trees, which only world generation makes: a
  * bare trunk under their crown (the reach is the species'). A tree of the

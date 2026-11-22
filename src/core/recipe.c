@@ -270,8 +270,8 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                          .name_key = N_("recipe.bark_box"),
                          .stations = CRAFTING_SPOT,
                          .ingredients = {{{ITEM_BIRCH_BARK, ITEM_NONE}, 2, ITEM_WANT_WET},
-                                         {{ITEM_NETTLE_CORD, ITEM_NONE}, 1, ITEM_WANT_ANY},
-                                         {{ITEM_HAZEL_RODS, ITEM_NONE}, 1, ITEM_WANT_WET}},
+                                         {{ITEM_NETTLE_CORD, ITEM_LIME_BAST}, 1, ITEM_WANT_ANY},
+                                         {{ITEM_WILLOW_RODS, ITEM_HAZEL_RODS}, 1, ITEM_WANT_WET}},
                          .input_min_quality = ITEM_QUALITY_WORST,
                          .tools = {{ITEM_FLINT_BORER, ITEM_FLAKE}, {ITEM_FLAKE}},
                          .tool_shapes = true,
@@ -283,24 +283,25 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                          .tool_use = TOOL_USE_PIERCING},
     /* Pliable rods (green, or dried and soaked) stuck as stakes and woven round:
      * 8 h (docs/CONTAINERS.md §7.1). */
-    [RECIPE_FRAME_BASKET] = {.id = "frame_basket",
-                             .name_key = N_("recipe.frame_basket"),
-                             .stations = CRAFTING_SPOT,
-                             .ingredients = {{{ITEM_HAZEL_RODS, ITEM_NONE}, 3, ITEM_WANT_WET}},
-                             .input_min_quality = ITEM_QUALITY_WORST,
-                             .tools = {CUTTING_TOOL},
-                             .work = 20000.0f,
-                             .knowledge = KNOWLEDGE_BASKETRY,
-                             .min_level = 60.0f,
-                             .product = ITEM_FRAME_BASKET,
-                             .dirt = 3,
-                             .tool_use = TOOL_USE_NONE},
+    [RECIPE_FRAME_BASKET] =
+        {.id = "frame_basket",
+         .name_key = N_("recipe.frame_basket"),
+         .stations = CRAFTING_SPOT,
+         .ingredients = {{{ITEM_WILLOW_RODS, ITEM_HAZEL_RODS}, 3, ITEM_WANT_WET}},
+         .input_min_quality = ITEM_QUALITY_WORST,
+         .tools = {CUTTING_TOOL},
+         .work = 20000.0f,
+         .knowledge = KNOWLEDGE_BASKETRY,
+         .min_level = 60.0f,
+         .product = ITEM_FRAME_BASKET,
+         .dirt = 3,
+         .tool_use = TOOL_USE_NONE},
     /* The same, tall and stout, with two straps of cord: 14 h. */
     [RECIPE_PACK_BASKET] = {.id = "pack_basket",
                             .name_key = N_("recipe.pack_basket"),
                             .stations = CRAFTING_SPOT,
-                            .ingredients = {{{ITEM_HAZEL_RODS, ITEM_NONE}, 6, ITEM_WANT_WET},
-                                            {{ITEM_NETTLE_CORD, ITEM_NONE}, 2, ITEM_WANT_ANY}},
+                            .ingredients = {{{ITEM_WILLOW_RODS, ITEM_HAZEL_RODS}, 6, ITEM_WANT_WET},
+                                            {{ITEM_NETTLE_CORD, ITEM_LIME_CORD}, 2, ITEM_WANT_ANY}},
                             .input_min_quality = ITEM_QUALITY_WORST,
                             .tools = {CUTTING_TOOL},
                             .work = 35000.0f,
@@ -309,6 +310,49 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                             .product = ITEM_PACK_BASKET,
                             .dirt = 4,
                             .tool_use = TOOL_USE_NONE},
+    /* Fresh poles slit along with a flake and their bark lifted off with the bast
+     * under it: 0.3 h (docs/CONTAINERS.md §4.2). */
+    [RECIPE_LIME_BARK] = {.id = "lime_bark",
+                          .name_key = N_("recipe.lime_bark"),
+                          .stations = CRAFTING_SPOT,
+                          .ingredients = {{{ITEM_LIME_POLES, ITEM_NONE}, 1, ITEM_WANT_WET}},
+                          .input_min_quality = ITEM_QUALITY_WORST,
+                          .tools = {{ITEM_FLAKE}},
+                          .work = 750.0f,
+                          .knowledge = KNOWLEDGE_CORDAGE,
+                          .min_level = 50.0f,
+                          .product = ITEM_LIME_BARK,
+                          .product_count = 2,
+                          .dirt = 3,
+                          .tool_use = TOOL_USE_PEELING},
+    /* Retted bark whose layers come apart, parted by hand into strips: 0.5 h (the
+     * work below at the pace retted bark gives, twice, recipe_work_factor()). */
+    [RECIPE_LIME_BAST] = {.id = "lime_bast",
+                          .name_key = N_("recipe.lime_bast"),
+                          .stations = CRAFTING_SPOT,
+                          .ingredients = {{{ITEM_LIME_BARK, ITEM_NONE}, 1, ITEM_WANT_RETTED}},
+                          .input_min_quality = ITEM_QUALITY_WORST,
+                          .tools = {{ITEM_NONE}},
+                          .work = 2500.0f,
+                          .knowledge = KNOWLEDGE_CORDAGE,
+                          .min_level = 50.0f,
+                          .product = ITEM_LIME_BAST,
+                          .dirt = 2,
+                          .tool_use = TOOL_USE_NONE},
+    /* Bast twisted like nettle fibre, coarser and faster: two hanks, 0.4 h each. */
+    [RECIPE_LIME_CORD] = {.id = "lime_cord",
+                          .name_key = N_("recipe.lime_cord"),
+                          .stations = CRAFTING_SPOT,
+                          .ingredients = {{{ITEM_LIME_BAST, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                          .input_min_quality = ITEM_QUALITY_WORST,
+                          .tools = {{ITEM_NONE}},
+                          .work = 2000.0f,
+                          .knowledge = KNOWLEDGE_CORDAGE,
+                          .min_level = 50.0f,
+                          .product = ITEM_LIME_CORD,
+                          .product_count = 2,
+                          .dirt = 0,
+                          .tool_use = TOOL_USE_NONE},
 };
 
 #undef CRAFTING_SPOT
@@ -459,6 +503,10 @@ ItemQuality recipe_quality_cap_of(RecipeType recipe, const ItemStack inputs[RECI
             break;
         }
     }
+    /* Osier rods weave finer than hazel's. */
+    if (inputs[0].count > 0 && item_def((ItemType)inputs[0].type) != NULL) {
+        cap += item_def((ItemType)inputs[0].type)->craft_cap_bonus;
+    }
     /* Retted stems give a finer fibre; over retted, a rotten one. */
     if (inputs[0].count > 0 && item_def((ItemType)inputs[0].type) != NULL &&
         item_def((ItemType)inputs[0].type)->rets) {
@@ -479,10 +527,13 @@ ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
 float recipe_work_factor(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIENT_MAX])
 {
     const ItemDef *main = item_def((ItemType)inputs[0].type);
-    if (recipe_def(recipe) == NULL || inputs[0].count <= 0 || main == NULL || !main->rets) {
+    if (recipe_def(recipe) == NULL || inputs[0].count <= 0 || main == NULL) {
         return 1.0f;
     }
-    return item_retting_work_factor(item_stack_retting(inputs[0]));
+    if (main->craft_work_factor > 0.0f) { /* Osier rods: woven faster. */
+        return 1.0f / main->craft_work_factor;
+    }
+    return main->rets ? item_retting_work_factor(item_stack_retting(inputs[0])) : 1.0f;
 }
 
 bool recipe_needs_fire(RecipeType recipe)

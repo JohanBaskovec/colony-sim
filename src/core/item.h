@@ -102,9 +102,14 @@ typedef enum ItemType {
     ITEM_CATTAIL_LEAVES, /* A bundle of long leaves, to weave green or dried. */
     ITEM_CATTAIL_BASKET, /* Plaited of cattail leaves, about 10 litres. */
     ITEM_HAZEL_RODS,     /* A bundle of about 20 one-year shoots, to weave green or soaked. */
+    ITEM_WILLOW_RODS,    /* The same of osier: longer and more pliable, the best for baskets. */
     ITEM_BARK_BOX,       /* Birch bark sewn round a rod rim, with a lid: about 3 litres. */
     ITEM_FRAME_BASKET,   /* Rods woven on stakes: about 20 litres, carried in a hand. */
     ITEM_PACK_BASKET,    /* Rods woven tall, with straps: about 40 litres, on the back. */
+    ITEM_LIME_POLES,     /* A few young lime poles cut at the stool, to peel in the sap. */
+    ITEM_LIME_BARK,      /* Strips of lime bark with their bast, to ret in water. */
+    ITEM_LIME_BAST,      /* A bundle of bast strips: lacing, or twisted into cord. */
+    ITEM_LIME_CORD,      /* A hank of lime bast cord, coarser than nettle's, about 5 m. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,
@@ -342,8 +347,11 @@ typedef struct ItemDef {
      * "Branches de {0}": wood_item_name()). */
     bool wooden;
     const char *wood_name_key;
-    /* Rets while it lies wet and warm (docs/CONTAINERS.md §4.4): ItemStack.retting. */
+    /* Rets while it lies wet and warm (docs/CONTAINERS.md §4.4): ItemStack.retting,
+     * in `retting_hours` at the reference warmth in the dew (0: ITEM_RETTING_HOURS;
+     * lime bark takes days in water). */
     bool rets;
+    float retting_hours;
     /* Shrinks as it dries: woven green, what is made of it works loose
      * (recipe_quality_cap_of(), docs/CONTAINERS.md §4.3). */
     bool shrinks_green;
@@ -352,6 +360,11 @@ typedef struct ItemDef {
     float container_litres;
     /* Carried on the back by its straps (the pack basket, CARRY_BACK). */
     bool on_back;
+    /* A main ingredient that works more easily and finely (willow rods, longer and
+     * more pliable than hazel's): × the craft's work (0: ×1), + its products'
+     * quality cap (recipe_work_factor(), recipe_quality_cap_of()). */
+    float craft_work_factor;
+    int craft_cap_bonus;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every
@@ -665,12 +678,15 @@ ItemMoistureState item_moisture_state(ItemType type, float moisture);
  * (item_moisture_dry(): tinder, thatch, stems to scrape); green, still near
  * its fresh moisture (item_moisture_green(): rods woven as they were cut);
  * wet or soaked, i.e. not dry: pliable, fresh or softened in water again
- * (bark folded, rods soaked). */
+ * (bark folded, rods soaked); retted, whatever its moisture (ItemStack.retting
+ * at 1 or more: lime bark whose layers come apart, checked on each item by
+ * the item choices, not by item_moisture_fits()). */
 typedef enum ItemMoistureWant {
     ITEM_WANT_ANY,
     ITEM_WANT_DRY,
     ITEM_WANT_GREEN,
     ITEM_WANT_WET,
+    ITEM_WANT_RETTED,
     ITEM_WANT_COUNT
 } ItemMoistureWant;
 
@@ -681,8 +697,8 @@ typedef enum ItemMoistureWant {
 bool item_moisture_green(ItemType type, float moisture);
 
 /* Whether an item of a type at this moisture is as `want` asks (always for
- * ITEM_WANT_ANY; for a type that takes no water, only ITEM_WANT_ANY and
- * ITEM_WANT_DRY). */
+ * ITEM_WANT_ANY and ITEM_WANT_RETTED; for a type that takes no water, only
+ * ITEM_WANT_ANY, ITEM_WANT_DRY and ITEM_WANT_RETTED). */
 bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want);
 /* A phrase that fits any item (never an adjective that would have to agree
  * with it), NULL for ITEM_MOISTURE_NONE. */

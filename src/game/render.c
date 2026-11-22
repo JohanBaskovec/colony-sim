@@ -43,7 +43,8 @@ static const SDL_Color TREE_BARK[PLANT_COUNT] = {
     [PLANT_OAK] = {84, 58, 36, 255},       [PLANT_BEECH] = {118, 112, 102, 255},
     [PLANT_CHESTNUT] = {80, 54, 36, 255},  [PLANT_ASH] = {112, 106, 90, 255},
     [PLANT_BIRCH] = {206, 200, 188, 255},  [PLANT_WILD_APPLE] = {92, 72, 56, 255},
-    [PLANT_WILD_PEAR] = {74, 60, 50, 255}, [PLANT_HAZEL] = {106, 86, 68, 255},
+    [PLANT_WILD_PEAR] = {74, 60, 50, 255}, [PLANT_LIME] = {104, 98, 88, 255},
+    [PLANT_WILLOW] = {96, 88, 72, 255},    [PLANT_HAZEL] = {106, 86, 68, 255},
 };
 /* How the leaves of each species tint the foliage texture, in leaf and once
  * turned (they fall as the crowns go bare, Map.bare): the beech copper, the
@@ -59,6 +60,8 @@ static const LeafTint LEAF_TINTS[PLANT_COUNT] = {
     [PLANT_BIRCH] = {{1.0f, 1.0f, 0.78f, 1.0f}, {1.0f, 1.0f, 0.36f, 1.0f}},
     [PLANT_WILD_APPLE] = {{0.98f, 1.0f, 0.9f, 1.0f}, {1.0f, 0.82f, 0.46f, 1.0f}},
     [PLANT_WILD_PEAR] = {{0.9f, 0.94f, 0.9f, 1.0f}, {1.0f, 0.6f, 0.4f, 1.0f}},
+    [PLANT_LIME] = {{0.92f, 1.0f, 0.86f, 1.0f}, {1.0f, 0.92f, 0.42f, 1.0f}},
+    [PLANT_WILLOW] = {{0.92f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.96f, 0.56f, 1.0f}}, /* Silvery. */
     [PLANT_HAZEL] = {{1.0f, 1.0f, 0.88f, 1.0f}, {1.0f, 0.9f, 0.4f, 1.0f}},
 };
 static const SDL_Color RING_COLOR = {120, 84, 50, 255};
@@ -186,7 +189,10 @@ static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
 static const SDL_Color HARDENED_SPEAR_COLOR = {128, 88, 52, 255};
 static const SDL_Color BIRCH_BARK_COLOR = {232, 226, 212, 255}; /* Its white outer side. */
 static const SDL_Color BIRCH_BARK_INNER_COLOR = {196, 132, 84, 255};
-static const SDL_Color HAZEL_ROD_COLOR = {128, 92, 60, 255};      /* Its glossy brown bark. */
+static const SDL_Color HAZEL_ROD_COLOR = {128, 92, 60, 255}; /* Its glossy brown bark. */
+static const SDL_Color WILLOW_ROD_COLOR = {150, 140, 74, 255};
+static const SDL_Color LIME_BARK_COLOR = {116, 106, 92, 255};     /* Grey outside. */
+static const SDL_Color LIME_BAST_COLOR = {206, 186, 140, 255};    /* Pale, ribbon-like. */
 static const SDL_Color NETTLE_STEM_COLOR = {118, 132, 70, 255};   /* Stems drying, grey green. */
 static const SDL_Color NETTLE_FIBRE_COLOR = {214, 206, 170, 255}; /* Pale, silky. */
 static const SDL_Color NETTLE_CORD_COLOR = {176, 158, 112, 255};
@@ -1728,14 +1734,17 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
-    case ITEM_HAZEL_RODS: {
-        /* Long straight rods lying across the tile, thinning to their tips, tied twice. */
+    case ITEM_HAZEL_RODS:
+    case ITEM_WILLOW_RODS: {
+        /* Long straight rods lying across the tile, thinning to their tips, tied twice:
+         * the hazel's brown, the osier's yellow green. */
+        SDL_Color rod_color = type == ITEM_WILLOW_RODS ? WILLOW_ROD_COLOR : HAZEL_ROD_COLOR;
         float rod = SDL_max(1.0f, floorf(h * 0.06f));
         for (int i = 0; i < 5; i++) {
             float y = tile->y + floorf(h * (0.38f + 0.06f * (float)i));
-            batch_bar(renderer, shade(HAZEL_ROD_COLOR, (i % 2) * 16 - 8),
-                      tile->x + floorf(w * 0.06f), y, tile->x + floorf(w * 0.94f),
-                      y + (float)(i % 3) - 1.0f, i == 2 ? rod * 1.5f : rod);
+            batch_bar(renderer, shade(rod_color, (i % 2) * 16 - 8), tile->x + floorf(w * 0.06f), y,
+                      tile->x + floorf(w * 0.94f), y + (float)(i % 3) - 1.0f,
+                      i == 2 ? rod * 1.5f : rod);
         }
         for (int i = 0; i < 2; i++) {
             SDL_FRect tie = {tile->x + floorf(w * (0.28f + 0.4f * (float)i)),
@@ -1754,6 +1763,45 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         for (int i = 1; i < 5; i += 2) {
             SDL_FRect stripe = {body.x + 1.0f, body.y + band * (float)i, body.w - 2.0f, band};
             batch_quad(renderer, shade(CATTAIL_BASKET_COLOR, -24), &stripe);
+        }
+        break;
+    }
+    case ITEM_LIME_POLES: {
+        /* Three long grey poles side by side, their cut ends pale. */
+        float pole = SDL_max(1.0f, floorf(h * 0.09f));
+        for (int i = 0; i < 3; i++) {
+            float y = tile->y + floorf(h * (0.4f + 0.12f * (float)i));
+            batch_bar(renderer, shade(LIME_BARK_COLOR, (i % 2) * 14), tile->x + floorf(w * 0.06f),
+                      y, tile->x + floorf(w * 0.94f), y - (float)(i % 2), pole);
+            SDL_FRect end = {tile->x + floorf(w * 0.9f), y - pole * 0.5f, SDL_max(1.0f, pole),
+                             pole};
+            batch_quad(renderer, LIME_BAST_COLOR, &end);
+        }
+        break;
+    }
+    case ITEM_LIME_BARK:
+    case ITEM_LIME_BAST: {
+        /* Long strips lying across the tile: grey bark with its pale inner side, or
+         * the pale bast ribbons alone. */
+        bool bast = type == ITEM_LIME_BAST;
+        float strip = SDL_max(1.0f, floorf(h * (bast ? 0.05f : 0.08f)));
+        for (int i = 0; i < 4; i++) {
+            float y = tile->y + floorf(h * (0.38f + 0.08f * (float)i));
+            SDL_Color color = bast ? shade(LIME_BAST_COLOR, (i % 2) * 14 - 7)
+                                   : (i % 2 ? LIME_BAST_COLOR : LIME_BARK_COLOR);
+            batch_bar(renderer, color, tile->x + floorf(w * 0.1f), y + (float)(i % 2),
+                      tile->x + floorf(w * 0.9f), y, strip);
+        }
+        break;
+    }
+    case ITEM_LIME_CORD: {
+        /* A hank of coarse pale brown cord wound in a ring. */
+        float ring = SDL_max(1.0f, floorf(w * 0.08f));
+        float cx = tile->x + w * 0.5f, cy = tile->y + h * 0.55f, r = w * 0.2f;
+        for (int i = 0; i < 8; i++) {
+            float a0 = (float)i * 0.785398f, a1 = (float)(i + 1) * 0.785398f;
+            batch_bar(renderer, shade(LIME_BAST_COLOR, (i % 2) * 12 - 30), cx + r * cosf(a0),
+                      cy + r * 0.6f * sinf(a0), cx + r * cosf(a1), cy + r * 0.6f * sinf(a1), ring);
         }
         break;
     }

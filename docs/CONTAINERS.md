@@ -504,9 +504,37 @@ rods and the pack basket; then the net bag.
      went idle (`craft_tool_factor()`); and scenario 6 laid its bark at the
      reference moisture (dry): the trays waited for rain. Both fixed; scenario 6
      makes the three new containers. `SAVE_VERSION` 17.
-6. **C6 Willow and lime**: the two species (shapes, sprites, world
+6. **C6 Willow and lime** *(built)*: the two species (shapes, sprites, world
    generation), willow rods, young lime poles, lime bark retted in water,
    lime bast (lacing, cord).
+   - *As built*: `PLANT_LIME` and `PLANT_WILLOW` among the trees (before the hazel,
+     which stays the last; `WoodMask` holds the ten species), each with its
+     `PlantDef`, `TreeDef`, `WoodDef`, bark and leaf colours and two sapling sprites
+     (appended to the sprite script, the others unchanged). World generation: the
+     lime shares the woods' weights (6, ×2 on rich soil, rare on poor ground); the
+     willow is placed apart like the hazel, its water response (from 1.1, best 1.6
+     to 2.6) keeping it to shores and wet hollows (all of them within four tiles of
+     water in the tests' worlds). The tests' flat world gets none: its lakes lie on
+     the level of their banks, and a willow growing on a shore woke them to flood the
+     plain (docs/WATER.md §9).
+   - Osier rods: the willow's product as the hazel's (4 bundles a stool, 250 hours
+     each, best leafless, green and weaker in leaf), the same *Cutting rods* job, an
+     order of their own; preferred to hazel rods by the rod recipes (first of the
+     two types), woven at 1/0.8 the pace and +10 the cap
+     (`ItemDef.craft_work_factor`, `craft_cap_bonus`, the main ingredient's).
+   - Lime: *Young lime poles* (a few, 3 kg, 250 cm) from limes up to growth 0.3
+     (`PlantProduct.max_growth`: a sapling, or the shoots of a stool), *Cutting
+     poles* (`GATHER_JOB_CUT_POLES`, 375 ticks a pole, the rods' tools); cut, the
+     stool goes back to growth 0 and grows again. In the sap season (warmth 50 to
+     150, about May and June) every pole; out of it half, 25 worse
+     (`PLANT_OFF_SEASON_HARDER`). Recipes (Cordage 50): *Peel lime poles* (fresh
+     poles, a flake: two bundles of bark, 750 ticks), *Part lime bast* (bark retted
+     to 1 or more, `ITEM_WANT_RETTED`, checked on each item by the item choices; by
+     hand, 0.5 h at the pace retted bark gives), *Lime bast cord* (a bundle, two
+     hanks, 2,000 ticks). Lime bark rets in `ItemDef.retting_hours` (288 at 15 °C
+     in the dew: about six game days in water, 144 hours). Bast is the bark box's
+     other lacing (with nettle cord), lime cord the pack basket's other straps.
+     The sap season gates the poles, not the peeling (a simplification).
 7. **C7 Net bag**: looped from nettle or lime cord.
 
 Each step ends with a playable build, its unit tests, the translations

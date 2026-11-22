@@ -58,6 +58,8 @@ static const PlantSprites PLANT_SPRITES[] = {
     {PLANT_BIRCH, "birch", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
     {PLANT_WILD_APPLE, "wild_apple", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
     {PLANT_WILD_PEAR, "wild_pear", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
+    {PLANT_LIME, "lime", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
+    {PLANT_WILLOW, "willow", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
     {PLANT_HAZEL, "hazel", TREE_VOLUME_MIN_STAGE, TREE_VOLUME_MIN_STAGE, false},
     {PLANT_GRASS, "grass", PLANT_GROWTH_STAGES, PLANT_GROWTH_STAGES, false},
     {PLANT_BRAMBLE, "bramble", PLANT_GROWTH_STAGES, PLANT_GROWTH_STAGES, true},
@@ -78,7 +80,7 @@ static const PlantSprites PLANT_SPRITES[] = {
 };
 /* Sum of the sizes (twice for plants with a food variant), checked when the
  * sprites are loaded. */
-#define PLANT_SPRITE_COUNT 82
+#define PLANT_SPRITE_COUNT 86
 
 /* Tools with a sprite, and their file names. */
 static const ItemType TOOL_TYPES[] = {ITEM_COBBLE, ITEM_CHOPPER, ITEM_FLAKE, ITEM_HAND_AXE};

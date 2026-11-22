@@ -6,8 +6,9 @@
 
 /* docs/TREES.md §6.2: oak and the fruit trees hard; beech the best firewood
  * but rotting outdoors; chestnut light, lasting outdoors; ash tough and
- * springy, the wood of shafts; birch rotting fast; hazel light straight
- * rods. */
+ * springy, the wood of shafts; birch rotting fast; lime light and soft,
+ * the carver's wood; willow lighter still, rotting fast; hazel light
+ * straight rods. */
 static const WoodDef WOOD_DEFS[WOOD_SPECIES_COUNT] = {
     [PLANT_OAK - PLANT_TREE_FIRST] = {N_("wood.oak"), 1.10f, 1.10f, 0, 0.6f, 1.20f},
     [PLANT_BEECH - PLANT_TREE_FIRST] = {N_("wood.beech"), 1.10f, 1.00f, 0, 1.5f, 1.25f},
@@ -16,6 +17,8 @@ static const WoodDef WOOD_DEFS[WOOD_SPECIES_COUNT] = {
     [PLANT_BIRCH - PLANT_TREE_FIRST] = {N_("wood.birch"), 1.00f, 0.85f, -5, 1.6f, 1.00f},
     [PLANT_WILD_APPLE - PLANT_TREE_FIRST] = {N_("wood.wild_apple"), 1.05f, 1.10f, 0, 1.0f, 1.10f},
     [PLANT_WILD_PEAR - PLANT_TREE_FIRST] = {N_("wood.wild_pear"), 1.05f, 1.05f, 0, 1.0f, 1.10f},
+    [PLANT_LIME - PLANT_TREE_FIRST] = {N_("wood.lime"), 0.80f, 0.75f, -5, 1.5f, 0.85f},
+    [PLANT_WILLOW - PLANT_TREE_FIRST] = {N_("wood.willow"), 0.75f, 0.80f, 0, 1.7f, 0.70f},
     [PLANT_HAZEL - PLANT_TREE_FIRST] = {N_("wood.hazel"), 0.85f, 1.15f, 8, 1.0f, 0.90f},
 };
 

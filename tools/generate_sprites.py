@@ -241,6 +241,9 @@ TREE_SPECIES = {
     "birch": ((222, 216, 204), (118, 160, 70), (74, 118, 50), (176, 206, 108), NARROW_CROWN),
     "wild_apple": ((110, 88, 70), (82, 132, 64), (48, 92, 44), (140, 180, 92), LOW_CROWN),
     "wild_pear": ((92, 76, 64), (70, 116, 56), (40, 80, 40), (126, 164, 82), NARROW_CROWN),
+    # Appended: the species above keep their random streams (their index).
+    "lime": ((122, 114, 102), (66, 124, 50), (36, 84, 38), (128, 176, 80), BROAD_CROWN),
+    "willow": ((114, 104, 86), (122, 150, 112), (78, 106, 76), (176, 198, 160), NARROW_CROWN),
 }
 GROUND_SHADOW = (0, 0, 0)
 

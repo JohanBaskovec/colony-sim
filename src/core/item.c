@@ -286,6 +286,11 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                          WATER(0.5f, 0.65f, 1.0f, 120.0f, 0.25f)},
     /* Two sheets of bark sewn with cord round a rim of rods, a lid on it (as
      * the one found with the Iceman): closed, it holds about 3 litres. */
+    /* Osier rods: longer and more pliable, woven faster (×0.8) and finer (cap +10). */
+    [ITEM_WILLOW_RODS] = {DEF("willow_rods", N_("item.willow_rods"), ITEM_CATEGORY_RESOURCES, 1.3f,
+                              8.0f, 0.0f, 20, true, true),
+                          .length_cm = 220, .form = ITEM_FORM_BUNDLE, .craft_work_factor = 0.8f,
+                          .craft_cap_bonus = 10, WATER(0.5f, 0.65f, 1.0f, 120.0f, 0.25f)},
     [ITEM_BARK_BOX] = {DEF("bark_box", N_("item.bark_box"), ITEM_CATEGORY_TOOLS, 0.2f, 7.0f, 0.0f,
                            40, true, true),
                        .length_cm = 20, .form = ITEM_FORM_RIGID, .container_litres = 3.0f,
@@ -300,6 +305,25 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                               90.0f, 0.0f, 120, true, true),
                           .length_cm = 60, .form = ITEM_FORM_RIGID, .container_litres = 40.0f,
                           .on_back = true, WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    /* Young lime poles (docs/CONTAINERS.md §4.2): peeled while the sap runs. */
+    [ITEM_LIME_POLES] = {DEF("lime_poles", N_("item.lime_poles"), ITEM_CATEGORY_RESOURCES, 3.0f,
+                             15.0f, 0.0f, 30, true, true),
+                         .length_cm = 250, .form = ITEM_FORM_RIGID,
+                         WATER(0.5f, 0.65f, 1.0f, 200.0f, 0.25f)},
+    /* Its bark with the bast under it: retted in water for days (4 to 8 weeks in
+     * reality) until the layers come apart. */
+    [ITEM_LIME_BARK] = {DEF("lime_bark", N_("item.lime_bark"), ITEM_CATEGORY_RESOURCES, 0.5f, 4.0f,
+                            0.0f, 20, true, true),
+                        .length_cm = 200, .form = ITEM_FORM_BUNDLE, .rets = true,
+                        .retting_hours = 288.0f, WATER(0.5f, 0.8f, 1.0f, 36.0f, 0.25f)},
+    [ITEM_LIME_BAST] = {DEF("lime_bast", N_("item.lime_bast"), ITEM_CATEGORY_RESOURCES, 0.2f, 2.0f,
+                            0.0f, 30, true, true),
+                        .length_cm = 50, .form = ITEM_FORM_BUNDLE, /* Strips wound up. */
+                        WATER(0.3f, 0.8f, 1.0f, 24.0f, 0.25f)},
+    [ITEM_LIME_CORD] = {DEF("lime_cord", N_("item.lime_cord"), ITEM_CATEGORY_RESOURCES, 0.04f, 0.5f,
+                            0.0f, 35, true, true),
+                        .length_cm = 15, .form = ITEM_FORM_LIMP, /* A hank wound up. */
+                        WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,
                             0.0f, 25, true, true),
                         .length_cm = 30, .form = ITEM_FORM_RIGID, .container_litres = 2.0f,
@@ -653,6 +677,7 @@ bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want)
         ItemMoistureState state = item_moisture_state(type, moisture);
         return state == ITEM_MOISTURE_WET || state == ITEM_MOISTURE_SOAKED;
     }
+    case ITEM_WANT_RETTED: return true; /* Its retting, not its moisture: chosen(). */
     case ITEM_WANT_COUNT: break;
     }
     return false;
@@ -1809,7 +1834,8 @@ static bool chosen(const Item *item, const ItemStack *stack, ItemChoice choice)
     return item_matches(item, stack) && item->quality >= choice.min_quality &&
            item->quality <= choice.max_quality &&
            item_moisture_fits((ItemType)item->type, item_moisture(item),
-                              (ItemMoistureWant)choice.moisture);
+                              (ItemMoistureWant)choice.moisture) &&
+           (choice.moisture != ITEM_WANT_RETTED || item->retting >= ITEM_RETTING_UNITS);
 }
 
 int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, ItemChoice choice)
@@ -2607,7 +2633,9 @@ static bool advance_retting(Item *item, int hours, ItemConditions here)
                    (ITEM_RETTING_REFERENCE_CELSIUS - ITEM_RETTING_MIN_CELSIUS);
     float rate = (warmth < ITEM_RETTING_WARM_MAX ? warmth : ITEM_RETTING_WARM_MAX) *
                  (here.in_water ? ITEM_RETTING_WATER : 1.0f);
-    long units = lroundf((float)ITEM_RETTING_UNITS * rate * (float)hours / ITEM_RETTING_HOURS);
+    float full = ITEM_DEFS[item->type].retting_hours > 0.0f ? ITEM_DEFS[item->type].retting_hours
+                                                            : ITEM_RETTING_HOURS;
+    long units = lroundf((float)ITEM_RETTING_UNITS * rate * (float)hours / full);
     long most = lroundf(ITEM_RETTING_MAX * (float)ITEM_RETTING_UNITS);
     long retting = (long)item->retting + (units > 1 ? units : 1);
     retting = retting < most ? retting : most;

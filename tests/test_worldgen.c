@@ -564,6 +564,7 @@ static void test_trees(void)
 {
     long trees = 0, wide = 0;
     long species[PLANT_COUNT] = {0}, on_sand[PLANT_COUNT] = {0}, on_gravel[PLANT_COUNT] = {0};
+    long willows_by_water = 0;
     for (uint64_t seed = 1; seed <= 4; seed++) {
         WorldGenParams params = params_for_seed(seed);
         Map map;
@@ -586,6 +587,19 @@ static void test_trees(void)
                     species[plant->type]++;
                     on_sand[plant->type] += map.terrain[i] == TERRAIN_SAND;
                     on_gravel[plant->type] += map.terrain[i] == TERRAIN_GRAVEL;
+                    if (plant->type == PLANT_WILLOW) {
+                        bool water = false;
+                        for (int dy = -4; dy <= 4 && !water; dy++) {
+                            for (int dx = -4; dx <= 4 && !water; dx++) {
+                                /* On its level, or a level below (a lake in a hollow). */
+                                for (int dz = -1; dz <= 0 && !water; dz++) {
+                                    water = map_in_bounds(&map, x + dx, y + dy, z + dz) &&
+                                            map_is_water(&map, x + dx, y + dy, z + dz);
+                                }
+                            }
+                        }
+                        willows_by_water += water;
+                    }
                     /* Only some species grow old. */
                     CHECK(plant->size <= 1 || tree_def((PlantType)plant->type)->can_be_old);
                     CHECK(plant->size <= 2 || tree_def((PlantType)plant->type)->can_be_ancient);
@@ -609,14 +623,19 @@ static void test_trees(void)
     CHECK(wide > 0);
     CHECK(wide < trees / 20);
     /* Every species grows somewhere (docs/TREES.md §4), the oak most, the
-     * wild fruit trees least; only the birch grows on sand, neither the
-     * beech nor the ash on gravel. */
-    for (int type = PLANT_TREE_FIRST; type < PLANT_TREE_LAST; type++) {
+     * wild fruit trees least; only the birch grows on sand among the trees of the
+     * woods, neither the beech nor the ash on gravel. The willow stands apart, by
+     * the water. */
+    for (int type = PLANT_TREE_FIRST; type < PLANT_WILLOW; type++) {
         CHECK(species[type] > 0);
         CHECK(species[type] <= species[PLANT_OAK]);
-        CHECK(species[type] >= species[PLANT_WILD_PEAR] || type == PLANT_WILD_APPLE);
+        CHECK(species[type] >= species[PLANT_WILD_PEAR] || type == PLANT_WILD_APPLE ||
+              type == PLANT_LIME);
         CHECK(on_sand[type] == 0 || type == PLANT_BIRCH);
     }
+    CHECK(species[PLANT_LIME] < species[PLANT_OAK] / 3); /* Uncommon. */
+    CHECK(species[PLANT_WILLOW] > 0);
+    CHECK(willows_by_water * 10 >= species[PLANT_WILLOW] * 8);
     CHECK(on_sand[PLANT_BIRCH] > 0);
     CHECK_EQ_INT(on_gravel[PLANT_BEECH] + on_gravel[PLANT_ASH], 0);
 }

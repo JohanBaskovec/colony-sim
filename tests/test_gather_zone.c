@@ -1651,6 +1651,70 @@ static void test_hazel_rods_are_cut_at_the_stool(void)
     free_world(&map, &zones, &items);
 }
 
+/* Osier willows stand by the water and give their rods as the hazel does, more of them
+ * (docs/CONTAINERS.md §3.2): one order for each, the same job. */
+static void test_willow_rods(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    Plant *willow = put_plant(&map, 2, 2, PLANT_WILLOW, 1.0f);
+    CHECK_EQ_INT(plant_stock_available(willow, 0), 4);
+    CHECK_EQ_INT(plant_product_out_of_season(willow, 0), PLANT_OFF_SEASON_GREEN); /* In leaf. */
+    int index = gather_zone_create(&zones, &map, 2, 2, 2, 2, 0);
+    order(&zones, &items, index, GATHER_HAZEL_RODS, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_NONE);
+    order(&zones, &items, index, GATHER_WILLOW_RODS, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_CUT_RODS);
+    float work = gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_CUT_RODS);
+    REQUIRE(
+        gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_CUT_RODS, work, 75.0, NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_WILLOW_RODS], 4);
+    free_world(&map, &zones, &items);
+}
+
+/* Young limes give poles for their bast without felling (docs/CONTAINERS.md §3.2): a sapling or
+ * a stool's shoots, not a grown tree; cut, it grows again from the stool. The bark comes away
+ * while the sap runs (May and June); out of it, half the poles, worse ones. */
+static void test_lime_poles_from_young_limes(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    Plant *young = put_plant(&map, 2, 2, PLANT_LIME, 0.25f);
+    Plant *sap = put_plant(&map, 4, 2, PLANT_LIME, 0.25f);
+    Plant *grown = put_plant(&map, 8, 2, PLANT_LIME, 1.0f);
+    sap->warmth = 100.0f; /* June. */
+    CHECK_EQ_INT(plant_stock_available(grown, 0), 0);
+    int poles = plant_stock_available(young, 0);
+    CHECK(poles >= 1);
+    CHECK_EQ_INT(plant_product_out_of_season(young, 0), PLANT_OFF_SEASON_HARDER); /* August. */
+    CHECK_EQ_INT(plant_product_out_of_season(sap, 0), PLANT_OFF_SEASON_GONE);
+    int index = gather_zone_create(&zones, &map, 2, 2, 8, 2, 0);
+    order(&zones, &items, index, GATHER_LIME_POLES, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_CUT_POLES);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 8, 2, 0, ~(GatherJobMask)0), GATHER_JOB_NONE);
+    CHECK_EQ_INT(gather_job_def(GATHER_JOB_CUT_POLES)->tool_use, TOOL_USE_CUTTING_RODS);
+
+    float work = gather_job_work_needed(&map, 4, 2, 0, GATHER_JOB_CUT_POLES);
+    CHECK_NEAR(work, 375.0 * poles, 1e-3);
+    REQUIRE(gather_zone_add_work(&zones, &map, &items, 4, 2, 0, GATHER_JOB_CUT_POLES, work, 75.0,
+                                 NULL));
+    ItemStack cut = items_get(&items, 4, 2, 0);
+    CHECK_EQ_INT(cut.type, ITEM_LIME_POLES);
+    CHECK_EQ_INT(cut.count, poles);
+    CHECK_EQ_INT(sap->type, PLANT_LIME); /* The stool lives... */
+    CHECK_NEAR(sap->growth, 0.0, 1e-6);  /* ...and sends up new shoots. */
+    REQUIRE(gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_CUT_POLES, work, 75.0,
+                                 NULL));
+    ItemStack clinging = items_get(&items, 2, 2, 0);
+    CHECK_EQ_INT(clinging.count, (poles + 1) / 2);
+    CHECK_EQ_INT(clinging.quality, cut.quality - PLANT_OUT_OF_SEASON_QUALITY);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1690,5 +1754,7 @@ int main(void)
     RUN_TEST(test_cattail_leaves_are_cut);
     RUN_TEST(test_birch_bark_is_peeled_once);
     RUN_TEST(test_hazel_rods_are_cut_at_the_stool);
+    RUN_TEST(test_willow_rods);
+    RUN_TEST(test_lime_poles_from_young_limes);
     return test_summary();
 }

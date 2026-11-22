@@ -1836,6 +1836,28 @@ static void test_items_listed_in_order(void)
     items_free(&items);
 }
 
+/* Lime bark rets for days in water (docs/CONTAINERS.md §4.2: weeks in reality): about six game
+ * days at 15 °C, where nettle stems take thirty hours. */
+static void test_lime_bark_rets_for_days(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 2, 1, 1));
+    ItemStack bark = item_stack_pristine(ITEM_LIME_BARK, 1);
+    item_stack_set_moisture(&bark, item_def(ITEM_LIME_BARK)->water.room);
+    REQUIRE(items_add(&items, 0, 0, 0, bark) == 1);
+    ItemConditions water = ITEM_CONDITIONS_STILL;
+    water.in_water = true;
+    for (int hour = 0; hour < 30; hour++) {
+        items_advance(&items, 0, 1, 1, given, &water);
+    }
+    CHECK_NEAR(retting_at(&items, 0, 0), 30.0 / 144.0, 0.02);
+    for (int hour = 30; hour < 144; hour++) {
+        items_advance(&items, 0, 1, 1, given, &water);
+    }
+    CHECK_NEAR(retting_at(&items, 0, 0), 1.0, 0.02);
+    items_free(&items);
+}
+
 int main(void)
 {
     RUN_TEST(test_form_names);
@@ -1877,6 +1899,7 @@ int main(void)
     RUN_TEST(test_grass_dries);
     RUN_TEST(test_logs_season_slowly);
     RUN_TEST(test_stems_ret_wet_and_warm);
+    RUN_TEST(test_lime_bark_rets_for_days);
     RUN_TEST(test_rot_by_moisture);
     RUN_TEST(test_twigs_get_wet_in_the_rain_and_dry_again);
     RUN_TEST(test_eating_takes_weight_not_hit_points);

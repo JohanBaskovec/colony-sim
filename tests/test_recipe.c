@@ -218,7 +218,8 @@ static void test_rod_and_bark_containers(void)
     CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 0)->count, 2);
     CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 0)->moisture, ITEM_WANT_WET);
     CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 1)->types[0], ITEM_NETTLE_CORD);
-    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 2)->types[0], ITEM_HAZEL_RODS);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 2)->types[0], ITEM_WILLOW_RODS);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 2)->types[1], ITEM_HAZEL_RODS);
     CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 2)->moisture, ITEM_WANT_WET);
     CHECK(box->tool_shapes && box->tool_use == TOOL_USE_PIERCING);
     CHECK(item_types_has(recipe_tool_types(box, 0), ITEM_FLINT_BORER));
@@ -245,6 +246,20 @@ static void test_rod_and_bark_containers(void)
                               75.0, NULL, out) == 1);
     CHECK_EQ_INT(out[0].type, ITEM_PACK_BASKET);
     CHECK(out[0].quality <= 50 + 20);
+}
+
+/* Osier rods are longer and more pliable than hazel's (docs/CONTAINERS.md §7.1): a frame basket
+ * of them is woven in four fifths of the time, and finer (cap +10). */
+static void test_osier_weaves_faster_and_finer(void)
+{
+    ItemStack hazel[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_HAZEL_RODS, 3, 50, 0)};
+    ItemStack osier[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_WILLOW_RODS, 3, 50, 0)};
+    ItemStack axe = item_stack_make(ITEM_HAND_AXE, 1, 50, 0);
+    CHECK(recipe_accepts_ingredient(RECIPE_FRAME_BASKET, 0, osier[0]));
+    CHECK_NEAR(recipe_work_factor(RECIPE_FRAME_BASKET, hazel), 1.0, 1e-6);
+    CHECK_NEAR(recipe_work_factor(RECIPE_FRAME_BASKET, osier), 1.25, 1e-6);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_FRAME_BASKET, hazel, axe), 50 + 20);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_FRAME_BASKET, osier, axe), 50 + 20 + 10);
 }
 
 static void test_products(void)
@@ -341,6 +356,39 @@ static void test_hand_axe_failures(void)
     }
 }
 
+/* Lime bast (docs/CONTAINERS.md §4.2): fresh poles peeled with a flake (two bundles of bark),
+ * the bark retted, then parted by hand into bast; bast twisted into two hanks of cord. Bast
+ * laces a bark box, its cord makes the straps of a pack basket. */
+static void test_lime_bast_chain(void)
+{
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_LIME_BARK, 0)->moisture, ITEM_WANT_WET);
+    CHECK_EQ_INT(recipe_def(RECIPE_LIME_BARK)->tool_use, TOOL_USE_PEELING);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_LIME_BAST, 0)->moisture, ITEM_WANT_RETTED);
+    CHECK_EQ_INT(recipe_def(RECIPE_LIME_BAST)->knowledge, KNOWLEDGE_CORDAGE);
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    ItemStack poles[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_LIME_POLES, 1, 60, 0)};
+    REQUIRE(recipe_craft_with(RECIPE_LIME_BARK, poles, item_stack_make(ITEM_FLAKE, 1, 60, 0), 75.0,
+                              NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_LIME_BARK);
+    CHECK_EQ_INT(out[0].count, 2);
+    ItemStack bark[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_LIME_BARK, 1, 60, 0)};
+    item_stack_set_retting(&bark[0], 1.0f);
+    CHECK_NEAR(recipe_work_factor(RECIPE_LIME_BAST, bark), 2.0, 1e-6); /* 0.5 h of work. */
+    REQUIRE(recipe_craft_with(RECIPE_LIME_BAST, bark, (ItemStack){.type = ITEM_NONE}, 75.0, NULL,
+                              out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_LIME_BAST);
+    ItemStack bast[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_LIME_BAST, 1, 60, 0)};
+    REQUIRE(recipe_craft_with(RECIPE_LIME_CORD, bast, (ItemStack){.type = ITEM_NONE}, 75.0, NULL,
+                              out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_LIME_CORD);
+    CHECK_EQ_INT(out[0].count, 2);
+    CHECK(recipe_accepts_ingredient(RECIPE_BARK_BOX, 1, bast[0]));
+    CHECK(recipe_accepts_ingredient(RECIPE_PACK_BASKET, 1, out[0]));
+    CHECK(!recipe_accepts_ingredient(RECIPE_PACK_BASKET, 1, bast[0]));
+    /* Retted is a state of the item, not of its moisture. */
+    CHECK(item_moisture_fits(ITEM_LIME_BARK, 0.1f, ITEM_WANT_RETTED));
+}
+
 int main(void)
 {
     RUN_TEST(test_definitions);
@@ -351,6 +399,8 @@ int main(void)
     RUN_TEST(test_nettle_cord_chain);
     RUN_TEST(test_cattail_basket);
     RUN_TEST(test_rod_and_bark_containers);
+    RUN_TEST(test_osier_weaves_faster_and_finer);
+    RUN_TEST(test_lime_bast_chain);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

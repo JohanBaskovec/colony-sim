@@ -63,6 +63,8 @@ plant.ash = Ash
 plant.birch = Birch
 plant.wild_apple = Wild apple tree
 plant.wild_pear = Wild pear tree
+plant.lime = Small-leaved lime
+plant.willow = Osier willow
 
 # Designations (player orders)
 designation.mine = Mine
@@ -335,6 +337,8 @@ wood.ash = ash
 wood.birch = birch
 wood.wild_apple = wild apple
 wood.wild_pear = wild pear
+wood.lime = lime
+wood.willow = willow
 wood.hazel = hazel
 wood.list.two = {0} and {1}
 wood.list.more = {0}, {1}
@@ -375,9 +379,14 @@ item.nettle_cord = Nettle cord
 item.cattail_leaves = Cattail leaves
 item.cattail_basket = Cattail basket
 item.hazel_rods = Hazel rods
+item.willow_rods = Osier rods
 item.bark_box = Sewn bark box
 item.frame_basket = Frame basket
 item.pack_basket = Pack basket
+item.lime_poles = Lime poles
+item.lime_bark = Lime bark
+item.lime_bast = Lime bast
+item.lime_cord = Lime bast cord
 item.flint_borer = Flint borer
 item.bark_tray = Folded bark tray
 item.settler_body = Settler's body
@@ -648,6 +657,7 @@ colonist.task.cut_grass = Cutting grass and other fibres
 colonist.task.cut_stems = Cutting stems and leaves
 colonist.task.peel = Peeling bark
 colonist.task.cut_rods = Cutting rods
+colonist.task.cut_poles = Cutting poles
 colonist.task.pick = Picking fruit in the trees
 colonist.task.craft = Crafting
 colonist.task.construct = Building
@@ -887,6 +897,8 @@ gather_zone.resource.nettle_stems = Nettle stems
 gather_zone.resource.cattail_leaves = Cattail leaves
 gather_zone.resource.birch_bark = Birch bark
 gather_zone.resource.hazel_rods = Hazel rods
+gather_zone.resource.willow_rods = Osier rods
+gather_zone.resource.lime_poles = Young lime poles
 # Groups of resources (foldable rows; their setting limits each of their resources)
 gather_zone.group.wood = Wood
 gather_zone.group.food = Food
@@ -964,6 +976,9 @@ recipe.cattail_basket = Plaited cattail basket
 recipe.bark_box = Sewn bark box
 recipe.frame_basket = Frame basket of rods
 recipe.pack_basket = Pack basket
+recipe.lime_bark = Peel lime poles
+recipe.lime_bast = Part lime bast
+recipe.lime_cord = Lime bast cord
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted
@@ -988,6 +1003,10 @@ recipe.ingredient_green.tip = The ingredient must be freshly cut: once dried out
 recipe.ingredient_wet = {0}, pliable
 # Tooltip of an ingredient wanted pliable
 recipe.ingredient_wet.tip = The ingredient must be fresh, or soaked in water if it has dried out.
+# {0} = ingredient with its count, wanted retted: left lying in water until its layers come apart
+recipe.ingredient_retted = {0}, retted
+# Tooltip of an ingredient wanted retted
+recipe.ingredient_retted.tip = The ingredient must have retted: left lying in shallow water for days, until its layers come apart.
 
 # Workstation inspector
 forbid.forbid = Forbid

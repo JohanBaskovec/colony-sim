@@ -307,6 +307,81 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                          .fall_item = ITEM_PEARS,
                          .fall_days = PLANT_DAYS(AUTUMN(1), AUTUMN(12)),
                          .fall_yield = 30},
+    /* The small-leaved lime: tall, dense crown, shade tolerant, on rich soil in mixed woods
+     * (docs/CONTAINERS.md §3.2); uncommon. Its bast comes from young poles (step C6). */
+    [PLANT_LIME] = {.id = "lime",
+                    .name_key = N_("plant.lime"),
+                    .transpiration = 1.0f,
+                    .water = {0.1f, 0.5f, 1.4f, 1.9f, 40.0f, 15.0f},
+                    .spread_chance = 0.03f,
+                    .spread_growth = 1.0f,
+                    .spread_range = 3,
+                    .deciduous = true,
+                    .growth_per_day = 0.025f,
+                    .min_fertility = 0.7f,
+                    .move_cost = 1.6f,
+                    .t_min = 6.0f,
+                    .t_opt_low = 17.0f,
+                    .t_opt_high = 24.0f,
+                    .t_max = 34.0f,
+                    .t_frost_active = -3.0f,
+                    .t_frost_hardened = -30.0f,
+                    .t_lethal_heat = 43.0f,
+                    .rest = PLANT_REST_SLEEPS,
+                    .light_min = 0.04f,
+                    .light_full = 0.45f,
+                    .dark_days = 50.0f,
+                    .cut_item = ITEM_WOOD,
+                    .cut_yield = 60,
+                    /* Its young poles (a sapling, or a shoot of a stool once cut), cut with a
+                     * hand axe without felling (docs/CONTAINERS.md §3.2): the stool sends up
+                     * new shoots. Their bark comes away while the sap runs, May and June;
+                     * out of it, it clings: half of it, worse. */
+                    .products = {{.item = ITEM_LIME_POLES,
+                                  .capacity = 6,
+                                  .regrow_hours = 100,
+                                  .warmth_from = 50.0f,
+                                  .warmth_until = 150.0f,
+                                  .min_growth = 0.1f,
+                                  .max_growth = 0.3f,
+                                  .cuts_plant = true,
+                                  .quality_follows_plant = true,
+                                  .off_season = PLANT_OFF_SEASON_HARDER}}},
+    /* The osier willow: low, many stems from the ground like the hazel, by the water
+     * (shores, wet hollows, river banks), wanting full light; floods do not harm it. */
+    [PLANT_WILLOW] = {.id = "willow",
+                      .name_key = N_("plant.willow"),
+                      .transpiration = 1.3f,
+                      .water = {1.1f, 1.6f, 2.6f, 3.2f, 20.0f, 90.0f},
+                      .spread_chance = 0.05f,
+                      .spread_growth = 1.0f,
+                      .spread_range = 2,
+                      .deciduous = true,
+                      .growth_per_day = 0.06f,
+                      .min_fertility = 0.3f,
+                      .move_cost = 1.5f,
+                      .t_min = 4.0f,
+                      .t_opt_low = 15.0f,
+                      .t_opt_high = 24.0f,
+                      .t_max = 34.0f,
+                      .t_frost_active = -4.0f,
+                      .t_frost_hardened = -40.0f,
+                      .t_lethal_heat = 42.0f,
+                      .rest = PLANT_REST_SLEEPS,
+                      .light_min = 0.25f,
+                      .light_full = 0.75f,
+                      .dark_days = 20.0f,
+                      .cut_item = ITEM_WOOD,
+                      .cut_yield = 15,
+                      /* Its one-year rods, cut at the stool as the hazel's: more of them,
+                       * and back sooner (docs/CONTAINERS.md §3.2). */
+                      .products = {{.item = ITEM_WILLOW_RODS,
+                                    .capacity = 4,
+                                    .regrow_hours = 250,
+                                    .min_growth = 0.3f,
+                                    .quality_follows_plant = true,
+                                    .leafless = true,
+                                    .off_season = PLANT_OFF_SEASON_GREEN}}},
     /* A small tree: its hazelnuts fall to the ground in autumn (items), its
      * dead branches and twigs like those of the other trees (core/tree.h). */
     [PLANT_HAZEL] = {.id = "hazel",
@@ -850,7 +925,8 @@ int plant_stock_capacity(const Plant *plant, int slot)
         return 0;
     }
     float growth = clampf(plant->growth, 0.0f, 1.0f);
-    if (growth < product->min_growth) {
+    if (growth < product->min_growth ||
+        (product->max_growth > 0.0f && growth > product->max_growth)) {
         return 0;
     }
     /* Wider trees (core/tree.h) hold more, by the area of their trunk. */

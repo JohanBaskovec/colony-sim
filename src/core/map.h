@@ -79,6 +79,8 @@ typedef enum PlantType {
     PLANT_BIRCH,
     PLANT_WILD_APPLE,      /* Small and low: apples fall from the end of summer. */
     PLANT_WILD_PEAR,       /* Narrow: pears fall in autumn. */
+    PLANT_LIME,            /* Small-leaved lime: tall, shade tolerant; its young poles give bast. */
+    PLANT_WILLOW,          /* Osier: low and many-stemmed by the water; the best basket rods. */
     PLANT_HAZEL,           /* A small tree (a shrub as a seedling): hazelnuts fall in autumn. */
     PLANT_BRAMBLE,         /* Thorny: blackberries at the end of summer. */
     PLANT_WILD_GARLIC,     /* Leaves in spring, then withers under the trees. */
@@ -179,6 +181,8 @@ typedef struct PlantProduct {
      * needs to bear any. */
     float warmth_from, warmth_until, lost_below;
     float min_growth;
+    /* Borne only up to this growth (0: no limit): poles come from young limes. */
+    float max_growth;
     bool dug; /* Dug up (with a digging stick, best), never eaten in place. */
     /* Easily mistaken for a poisonous plant: only a skilled gatherer takes it
      * (see core/gather_zone.h), and nobody eats it in place. */

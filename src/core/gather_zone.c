@@ -20,6 +20,7 @@
 #define CUT_STEMS_WORK 250.0f   /* A bundle of stems or leaves: 0.1 h (docs/CONTAINERS.md §4). */
 #define PEEL_WORK 500.0f        /* A sheet of bark: 0.2 h (docs/CONTAINERS.md §4.3). */
 #define CUT_RODS_WORK 750.0f    /* A bundle of rods: 0.3 h (docs/CONTAINERS.md §4.3). */
+#define CUT_POLES_WORK 375.0f   /* A young lime's few poles: 0.3 h (docs/CONTAINERS.md §4.2). */
 #define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
 
 #define ONE(type)                                                                                  \
@@ -89,6 +90,10 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
                            ONE(ITEM_BIRCH_BARK), GATHER_JOB_PEEL, false, MATERIALS},
     [GATHER_HAZEL_RODS] = {"hazel_rods", N_("gather_zone.resource.hazel_rods"), ITEM_HAZEL_RODS,
                            ONE(ITEM_HAZEL_RODS), GATHER_JOB_CUT_RODS, true, MATERIALS},
+    [GATHER_WILLOW_RODS] = {"willow_rods", N_("gather_zone.resource.willow_rods"), ITEM_WILLOW_RODS,
+                            ONE(ITEM_WILLOW_RODS), GATHER_JOB_CUT_RODS, true, MATERIALS},
+    [GATHER_LIME_POLES] = {"lime_poles", N_("gather_zone.resource.lime_poles"), ITEM_LIME_POLES,
+                           ONE(ITEM_LIME_POLES), GATHER_JOB_CUT_POLES, false, MATERIALS},
 };
 
 #undef WOOD
@@ -116,7 +121,8 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
                              false},
     [GATHER_GROUP_MATERIALS] = {"materials", N_("gather_zone.group.materials"),
                                 MEMBER(GATHER_NETTLE_STEMS) | MEMBER(GATHER_CATTAIL_LEAVES) |
-                                    MEMBER(GATHER_BIRCH_BARK) | MEMBER(GATHER_HAZEL_RODS),
+                                    MEMBER(GATHER_BIRCH_BARK) | MEMBER(GATHER_HAZEL_RODS) |
+                                    MEMBER(GATHER_WILLOW_RODS) | MEMBER(GATHER_LIME_POLES),
                                 false},
 };
 
@@ -154,7 +160,10 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_PEEL] = {"peel", N_("colonist.task.peel"), GATHERING, RESOURCE(GATHER_BIRCH_BARK),
                          TOOL_USE_PEELING, true},
     [GATHER_JOB_CUT_RODS] = {"cut_rods", N_("colonist.task.cut_rods"), GATHERING,
-                             RESOURCE(GATHER_HAZEL_RODS), TOOL_USE_CUTTING_RODS, true},
+                             RESOURCE(GATHER_HAZEL_RODS) | RESOURCE(GATHER_WILLOW_RODS),
+                             TOOL_USE_CUTTING_RODS, true},
+    [GATHER_JOB_CUT_POLES] = {"cut_poles", N_("colonist.task.cut_poles"), GATHERING,
+                              RESOURCE(GATHER_LIME_POLES), TOOL_USE_CUTTING_RODS, true},
     [GATHER_JOB_PICK] = {"pick", N_("colonist.task.pick"), GATHERING,
                          RESOURCE(GATHER_HAZELNUTS) | RESOURCE(GATHER_CHESTNUTS) |
                              RESOURCE(GATHER_APPLES) | RESOURCE(GATHER_PEARS),
@@ -1153,7 +1162,7 @@ static bool takes_product(GatherJob job)
     return job == GATHER_JOB_HARVEST || job == GATHER_JOB_HARVEST_CAREFULLY ||
            job == GATHER_JOB_DIG || job == GATHER_JOB_DIG_CAREFULLY ||
            job == GATHER_JOB_CUT_GRASS || job == GATHER_JOB_CUT_STEMS || job == GATHER_JOB_PEEL ||
-           job == GATHER_JOB_CUT_RODS;
+           job == GATHER_JOB_CUT_RODS || job == GATHER_JOB_CUT_POLES;
 }
 
 /* The slot of the product of a plant that a job takes (-1: none). */
@@ -1496,6 +1505,7 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
         return PEEL_WORK * harder * (float)(items > 1 ? items : 1);
     }
     case GATHER_JOB_CUT_RODS: return CUT_RODS_WORK * (float)(items > 1 ? items : 1);
+    case GATHER_JOB_CUT_POLES: return CUT_POLES_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_PICK: {
         int fruit = crown_fruit(map, x, y, z, JOB_DEFS[GATHER_JOB_PICK].resources);
         return HARVEST_WORK * (float)(fruit > 1 ? fruit : 1);
@@ -1706,6 +1716,8 @@ float gather_clear_work(const Map *map, int x, int y, int z)
     case PLANT_BIRCH:
     case PLANT_WILD_APPLE:
     case PLANT_WILD_PEAR:
+    case PLANT_LIME:
+    case PLANT_WILLOW:
     case PLANT_HAZEL:
     case PLANT_COUNT: return 0.0f;
     case PLANT_BRAMBLE:

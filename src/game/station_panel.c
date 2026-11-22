@@ -103,6 +103,7 @@ static const char *ingredient_tip(RecipeType recipe, int ingredient)
         [ITEM_WANT_DRY] = N_("recipe.ingredient_dry.tip"),
         [ITEM_WANT_GREEN] = N_("recipe.ingredient_green.tip"),
         [ITEM_WANT_WET] = N_("recipe.ingredient_wet.tip"),
+        [ITEM_WANT_RETTED] = N_("recipe.ingredient_retted.tip"),
     };
     ItemMoistureWant moisture = recipe_ingredient(recipe, ingredient)->moisture;
     if ((unsigned)moisture >= ITEM_WANT_COUNT || TIP_KEYS[moisture] == NULL) {
@@ -133,6 +134,7 @@ static void one_ingredient_text(char *out, size_t size, RecipeType recipe, int i
         [ITEM_WANT_DRY] = N_("recipe.ingredient_dry"),
         [ITEM_WANT_GREEN] = N_("recipe.ingredient_green"),
         [ITEM_WANT_WET] = N_("recipe.ingredient_wet"),
+        [ITEM_WANT_RETTED] = N_("recipe.ingredient_retted"),
     };
     if ((unsigned)wanted->moisture < ITEM_WANT_COUNT && MOISTURE_KEYS[wanted->moisture] != NULL) {
         SDL_strlcpy(text, out, sizeof(text));

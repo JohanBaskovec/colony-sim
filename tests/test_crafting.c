@@ -848,6 +848,32 @@ static void test_a_basket_is_woven_with_a_trimming_flake(void)
     game_shutdown(&game);
 }
 
+/* Lime bast is parted from retted bark only (docs/CONTAINERS.md §4.2): the bark that has not
+ * retted is left lying. */
+static void test_lime_bast_wants_retted_bark(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_LIME_BAST) >= 0);
+    ItemStack raw = item_stack_make(ITEM_LIME_BARK, 1, ITEM_QUALITY_STANDARD, 20);
+    ItemStack retted = raw;
+    item_stack_set_retting(&retted, 1.0f);
+    items_add(&game.items, 16, 10, 0, raw);
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_LIME_BAST], 0);
+    items_add(&game.items, 18, 13, 0, retted);
+    for (int i = 0; i < 8000 && game.items.totals[ITEM_LIME_BAST] == 0; i++) {
+        run_ticks(&game, 1);
+    }
+    CHECK_EQ_INT((int)game.items.totals[ITEM_LIME_BAST], 1);
+    CHECK_EQ_INT(items_count_at(&game.items, 16, 10, 0, ITEM_LIME_BARK), 1); /* Left lying. */
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 /* Nettle stems at their moisture (0 .. 1). */
 static ItemStack stems_at(float moisture)
 {
@@ -1445,6 +1471,7 @@ int main(void)
     RUN_TEST(test_removing_a_station_drops_its_input);
     RUN_TEST(test_a_tray_takes_bark_and_twigs_laid_by_the_station);
     RUN_TEST(test_a_basket_is_woven_with_a_trimming_flake);
+    RUN_TEST(test_lime_bast_wants_retted_bark);
     RUN_TEST(test_a_tray_wants_pliable_bark);
     RUN_TEST(test_nettle_stems_become_fibre_then_cord);
     RUN_TEST(test_a_bill_without_pliable_bark_lets_the_next_one_go);

@@ -43,7 +43,9 @@ are `core/tree.h`; the plants' life (growth, rest, light, water) is
 | Birch | tall, narrow (reach 1) | sparse, medium by the trunk | 0.060 (pioneer) | 30 | 3 / 14 | none |
 | Wild apple | low (2 levels), rounded, foliage from the first level | dense and medium | 0.030 | 20 | 4 / 10 | apples |
 | Wild pear | tall, narrow (reach 1), pyramidal | medium (dense over the trunk) | 0.025 | 30 | 3 / 8 | pears |
-| Hazel (unchanged) | low, several stems | as today | 0.040 | 20 | as today | hazelnuts |
+| Small-leaved lime | tall, domed, long lived (old and ancient) | dense, deep shade; shade tolerant | 0.025 | 60 | 5 / 12 | none (young poles for bast) |
+| Osier willow | low (2 levels, reach 1), many stems, by the water | medium | 0.060 | 15 | 4 / 14 | none (rods) |
+| Hazel (unchanged) | low, several stems | as today | 0.040 | 20 | as today | hazelnuts (and rods) |
 
 The generic tree before them: growth 0.03 a day, 60 logs, a crown of 6
 branches and 10 twigs. Shedding (dead twigs and branches falling, `TREE_SHED_*_CHANCE`)
@@ -170,6 +172,8 @@ Moderate effects, from the woods' known character:
 | Birch | ×1.00 | ×0.85 | -5 | ×1.6 | ×1.00 | rots fast, catches fire easily |
 | Wild apple | ×1.05 | ×1.10 | +0 | ×1.0 | ×1.10 | hard, fine-grained |
 | Wild pear | ×1.05 | ×1.05 | +0 | ×1.0 | ×1.10 | hard, fine-grained |
+| Lime | ×0.80 | ×0.75 | -5 | ×1.5 | ×0.85 | light and soft: the carver's wood |
+| Willow | ×0.75 | ×0.80 | +0 | ×1.7 | ×0.70 | lighter still, rots fast |
 | Hazel | ×0.85 | ×1.15 | +8 | ×1.0 | ×0.90 | straight supple rods: spears, sticks |
 
 - **Weight**: of the item (logs, branches and what is made from them,
@@ -201,8 +205,8 @@ Each type that carries a species has a pattern key (`item.branches.of_wood`:
 "{0} branches", "Branches de {0}"), and each species a translated noun
 (`wood.oak`: "oak", "chêne"); several species are listed with a list key
 (`wood.list.two`: "{0} and {1}", "{0} et {1}"): *Épieu en frêne et chêne*.
-The seven species and the hazel take no elision in French; species starting
-with a vowel (maple, alder) would need a form of their own (§10).
+The nine species and the hazel take no elision in French (*tilleul*, *saule*);
+species starting with a vowel (maple, alder) would need a form of their own (§10).
 
 ### 6.4 Constructions
 
@@ -338,11 +342,12 @@ Each step is a commit of its own, with its tests and docs.
 
 ## 10. Later
 
-- **Willow and lime** (designed in `docs/CONTAINERS.md` §3.2, step C6): a
-  low willow of many stems by the water, for basket rods; the small-leaved
-  lime in mixed woods on rich soil, for bast. Birch bark peeled in its
-  season, hazel and willow rods: products of trees (`docs/CONTAINERS.md`
-  §3.1).
+- *Done* (`docs/CONTAINERS.md` §10 C6): the **osier willow**, low and many-stemmed
+  by the water (placed apart like the hazel, its water response keeping it to wet
+  ground: none in the tests' flat world, whose lakes a shore tree would wake), and
+  the **small-leaved lime** in mixed woods on rich soil (weight 6, about one tree in
+  twenty there). Birch bark, hazel and willow rods and young lime poles are products
+  of trees.
 - Acorns and beechnuts, with mast years (a heavy crop every few years);
   acorns eaten by settlers after leaching.
 - Beating a tree with a long pole to bring nuts and chestnuts down.

@@ -249,14 +249,19 @@ static float expected_moisture(float region, int water_distance)
     return fmaxf(0.45f + 0.6f * region, soil_bank_moisture(water_distance));
 }
 
+/* The species of the woods tree_species_weights() shares out: every tree but the
+ * willow and the hazel, placed apart (place_woody()). */
+#define WOOD_TREE_SPECIES (PLANT_WILLOW - PLANT_TREE_FIRST)
+
 /* How much of the trees of a site are of each species (docs/TREES.md §4,
  * tuning), from the forest share, the edge and clearing shares and the
- * ground: weights, about oak 30, beech 25, birch 15, ash 12, chestnut 8 and
- * 5 for each wild fruit tree on soil in an ordinary wood. The species that
- * the ground cannot hold still count in the sum: poor ground has fewer
- * trees. */
+ * ground: weights, about oak 30, beech 25, birch 15, ash 12, chestnut 8,
+ * lime 6 and 5 for each wild fruit tree on soil in an ordinary wood. The
+ * species that the ground cannot hold still count in the sum: poor ground
+ * has fewer trees. */
+
 static void tree_species_weights(Terrain terrain, float forest, float edge, float clearing,
-                                 float weights[PLANT_TREE_LAST - PLANT_TREE_FIRST])
+                                 float weights[WOOD_TREE_SPECIES])
 {
     bool poor = terrain == TERRAIN_SAND || terrain == TERRAIN_GRAVEL;
     bool rich = terrain == TERRAIN_RICH_SOIL;
@@ -277,11 +282,14 @@ static void tree_species_weights(Terrain terrain, float forest, float edge, floa
     /* Rare and alone, at edges and in clearings. */
     w[PLANT_WILD_APPLE] = 5.0f * (0.3f + 0.4f * open + 2.0f * rim) * (poor ? 0.5f : 1.0f);
     w[PLANT_WILD_PEAR] = 5.0f * (0.3f + 0.4f * open + 2.0f * rim) * (poor ? 0.5f : 1.0f);
+    /* Uncommon, in mixed woods on rich soil (about one tree in twenty there). */
+    w[PLANT_LIME] = 6.0f * (0.4f + 0.8f * forest) * (rich ? 2.0f : 1.0f) * (poor ? 0.2f : 1.0f);
 }
 
 /* The first pass: trees (mostly scattered, with dense forests where the
  * forest noise is high and glades where it is not), of a species the site
- * suits (tree_species_weights()), and hazels (at the edges of the woods).
+ * suits (tree_species_weights()), hazels (at the edges of the woods) and
+ * willows (by the water).
  * Everything that grows under them is placed afterwards, once their crowns
  * are there to cast their shade (place_understory()). */
 static void place_woody(Map *map, size_t index, Rng *rng, const WorldGenParams *params,
@@ -297,18 +305,24 @@ static void place_woody(Map *map, size_t index, Rng *rng, const WorldGenParams *
     float clearing = glade_share(glade) * forest_factor;
     float trees = params->tree_density * (0.04f + 0.9f * forest_factor) * (0.5f + 0.5f * moisture) *
                   (1.0f - GLADE_TREE_LOSS * clearing);
-    enum { SPECIES = PLANT_TREE_LAST - PLANT_TREE_FIRST }; /* The hazel apart. */
+    enum { SPECIES = WOOD_TREE_SPECIES }; /* The willow and the hazel apart. */
     float weights[SPECIES];
     tree_species_weights(terrain, forest_factor, edge, clearing, weights);
     float total = 0.0f;
     for (int i = 0; i < SPECIES; i++) {
         total += weights[i];
     }
-    PlantChance chances[SPECIES + 1];
+    PlantChance chances[SPECIES + 2];
     for (int i = 0; i < SPECIES; i++) {
         chances[i] = (PlantChance){(PlantType)(PLANT_TREE_FIRST + i), trees * weights[i] / total};
     }
     chances[SPECIES] = (PlantChance){PLANT_HAZEL, 0.006f + 0.05f * edge + 0.03f * clearing};
+    /* Willows stand by the water in the open (their water response keeps them to wet
+     * ground: shores, wet hollows, river banks). None in the tests' flat world: its lakes
+     * lie on the level of their banks, and a tree growing on a shore wakes them to flood
+     * the plain (docs/WATER.md §9). */
+    chances[SPECIES + 1] =
+        (PlantChance){PLANT_WILLOW, params->flat ? 0.0f : 0.05f + 0.1f * (1.0f - forest_factor)};
     Plant *plant = &map->plants[index];
     float sum = 0.0f;
     for (size_t i = 0; i < sizeof(chances) / sizeof(chances[0]); i++) {
