@@ -1715,6 +1715,31 @@ static void test_lime_poles_from_young_limes(void)
     free_world(&map, &zones, &items);
 }
 
+/* Brambles give their long canes besides their berries (docs/CONTAINERS.md §3.1): cut as rods
+ * are, best in winter, the berries left on the plant. */
+static void test_bramble_canes(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    Plant *bramble = put_plant(&map, 2, 2, PLANT_BRAMBLE, 1.0f);
+    REQUIRE(plant_stock_item(PLANT_BRAMBLE, 1) == ITEM_BRAMBLE_CANES);
+    int canes = plant_stock_available(bramble, 1);
+    CHECK_EQ_INT(canes, 3);
+    int berries = plant_stock_available(bramble, 0);
+    int index = gather_zone_create(&zones, &map, 2, 2, 2, 2, 0);
+    order(&zones, &items, index, GATHER_BRAMBLE_CANES, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_CUT_RODS);
+    float work = gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_CUT_RODS);
+    REQUIRE(
+        gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_CUT_RODS, work, 75.0, NULL));
+    CHECK_EQ_INT((int)items.totals[ITEM_BRAMBLE_CANES], canes);
+    CHECK_EQ_INT(bramble->type, PLANT_BRAMBLE);
+    CHECK_EQ_INT(plant_stock_available(bramble, 0), berries); /* The berries stay. */
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1756,5 +1781,6 @@ int main(void)
     RUN_TEST(test_hazel_rods_are_cut_at_the_stool);
     RUN_TEST(test_willow_rods);
     RUN_TEST(test_lime_poles_from_young_limes);
+    RUN_TEST(test_bramble_canes);
     return test_summary();
 }

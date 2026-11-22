@@ -389,6 +389,9 @@ item.lime_bast = Lime bast
 item.lime_cord = Lime bast cord
 item.net_bag = Net bag
 item.mat = Plaited mat
+item.bramble_canes = Bramble canes
+item.split_canes = Split canes
+item.coiled_basket = Coiled basket
 item.flint_borer = Flint borer
 item.bark_tray = Folded bark tray
 item.settler_body = Settler's body
@@ -900,6 +903,7 @@ gather_zone.resource.cattail_leaves = Cattail leaves
 gather_zone.resource.birch_bark = Birch bark
 gather_zone.resource.hazel_rods = Hazel rods
 gather_zone.resource.willow_rods = Osier rods
+gather_zone.resource.bramble_canes = Bramble canes
 gather_zone.resource.lime_poles = Young lime poles
 # Groups of resources (foldable rows; their setting limits each of their resources)
 gather_zone.group.wood = Wood
@@ -985,11 +989,14 @@ recipe.lime_bast = Part lime bast
 recipe.lime_cord = Lime bast cord
 recipe.net_bag = Looped net bag
 recipe.mat = Plaited mat
+recipe.split_canes = Split bramble canes
+recipe.coiled_basket = Coiled basket
 recipe.mend_cattail_basket = Mend a cattail basket
 recipe.mend_frame_basket = Mend a frame basket
 recipe.mend_pack_basket = Mend a pack basket
 recipe.mend_bark_box = Mend a bark box
 recipe.mend_net_bag = Mend a net bag
+recipe.mend_coiled_basket = Mend a coiled basket
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted

@@ -112,6 +112,9 @@ typedef enum ItemType {
     ITEM_LIME_CORD,      /* A hank of lime bast cord, coarser than nettle's, about 5 m. */
     ITEM_NET_BAG,        /* Looped of cord with the fingers: about 10 litres, slung. */
     ITEM_MAT,            /* Plaited of cattail leaves or reeds, rolled up: a bed's top. */
+    ITEM_BRAMBLE_CANES,  /* A bundle of long bramble canes, thorns and all. */
+    ITEM_SPLIT_CANES,    /* Canes stripped of their thorns and split in four: binding. */
+    ITEM_COILED_BASKET,  /* Coils of grass bound with split cane: slow to make, very strong. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,

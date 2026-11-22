@@ -286,8 +286,8 @@ static void test_net_bag(void)
 static void test_mending_containers(void)
 {
     static const RecipeType MENDS[] = {RECIPE_MEND_CATTAIL_BASKET, RECIPE_MEND_FRAME_BASKET,
-                                       RECIPE_MEND_PACK_BASKET, RECIPE_MEND_BARK_BOX,
-                                       RECIPE_MEND_NET_BAG};
+                                       RECIPE_MEND_PACK_BASKET,    RECIPE_MEND_BARK_BOX,
+                                       RECIPE_MEND_NET_BAG,        RECIPE_MEND_COILED_BASKET};
     for (size_t i = 0; i < sizeof(MENDS) / sizeof(MENDS[0]); i++) {
         const RecipeDef *def = recipe_def(MENDS[i]);
         CHECK(def->mends);
@@ -319,6 +319,28 @@ static void test_plaited_mat(void)
     REQUIRE(recipe_craft_with(RECIPE_MAT, reeds, (ItemStack){.type = ITEM_NONE}, 75.0, NULL, out) ==
             1);
     CHECK_EQ_INT(out[0].type, ITEM_MAT);
+}
+
+/* Coiled basket (docs/CONTAINERS.md §11): canes split into binding, then coils of dry grass or
+ * reeds sewn with it, 30 h; the strongest container. */
+static void test_coiled_basket(void)
+{
+    ItemStack canes[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_BRAMBLE_CANES, 1, 60, 0)};
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_SPLIT_CANES, canes, item_stack_make(ITEM_FLAKE, 1, 60, 0),
+                              75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_SPLIT_CANES);
+    CHECK_EQ_INT(out[0].count, 2);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_COILED_BASKET, 1)->moisture, ITEM_WANT_DRY);
+    CHECK(recipe_def(RECIPE_COILED_BASKET)->work >= 50000.0f);
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_SPLIT_CANES, 2, 60, 0),
+                                               item_stack_make(ITEM_REEDS, 4, 50, 0)};
+    REQUIRE(recipe_craft_with(RECIPE_COILED_BASKET, inputs,
+                              item_stack_make(ITEM_FLINT_BORER, 1, 60, 0), 75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_COILED_BASKET);
+    CHECK(carry_is_container(ITEM_COILED_BASKET));
+    CHECK(item_def(ITEM_COILED_BASKET)->max_hit_points >
+          2 * item_def(ITEM_FRAME_BASKET)->max_hit_points);
 }
 
 static void test_products(void)
@@ -463,6 +485,7 @@ int main(void)
     RUN_TEST(test_net_bag);
     RUN_TEST(test_mending_containers);
     RUN_TEST(test_plaited_mat);
+    RUN_TEST(test_coiled_basket);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

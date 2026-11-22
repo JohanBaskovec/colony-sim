@@ -92,6 +92,9 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
                            ONE(ITEM_HAZEL_RODS), GATHER_JOB_CUT_RODS, true, MATERIALS},
     [GATHER_WILLOW_RODS] = {"willow_rods", N_("gather_zone.resource.willow_rods"), ITEM_WILLOW_RODS,
                             ONE(ITEM_WILLOW_RODS), GATHER_JOB_CUT_RODS, true, MATERIALS},
+    [GATHER_BRAMBLE_CANES] = {"bramble_canes", N_("gather_zone.resource.bramble_canes"),
+                              ITEM_BRAMBLE_CANES, ONE(ITEM_BRAMBLE_CANES), GATHER_JOB_CUT_RODS,
+                              true, MATERIALS},
     [GATHER_LIME_POLES] = {"lime_poles", N_("gather_zone.resource.lime_poles"), ITEM_LIME_POLES,
                            ONE(ITEM_LIME_POLES), GATHER_JOB_CUT_POLES, false, MATERIALS},
 };
@@ -122,7 +125,8 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
     [GATHER_GROUP_MATERIALS] = {"materials", N_("gather_zone.group.materials"),
                                 MEMBER(GATHER_NETTLE_STEMS) | MEMBER(GATHER_CATTAIL_LEAVES) |
                                     MEMBER(GATHER_BIRCH_BARK) | MEMBER(GATHER_HAZEL_RODS) |
-                                    MEMBER(GATHER_WILLOW_RODS) | MEMBER(GATHER_LIME_POLES),
+                                    MEMBER(GATHER_WILLOW_RODS) | MEMBER(GATHER_LIME_POLES) |
+                                    MEMBER(GATHER_BRAMBLE_CANES),
                                 false},
 };
 
@@ -160,7 +164,8 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
     [GATHER_JOB_PEEL] = {"peel", N_("colonist.task.peel"), GATHERING, RESOURCE(GATHER_BIRCH_BARK),
                          TOOL_USE_PEELING, true},
     [GATHER_JOB_CUT_RODS] = {"cut_rods", N_("colonist.task.cut_rods"), GATHERING,
-                             RESOURCE(GATHER_HAZEL_RODS) | RESOURCE(GATHER_WILLOW_RODS),
+                             RESOURCE(GATHER_HAZEL_RODS) | RESOURCE(GATHER_WILLOW_RODS) |
+                                 RESOURCE(GATHER_BRAMBLE_CANES),
                              TOOL_USE_CUTTING_RODS, true},
     [GATHER_JOB_CUT_POLES] = {"cut_poles", N_("colonist.task.cut_poles"), GATHERING,
                               RESOURCE(GATHER_LIME_POLES), TOOL_USE_CUTTING_RODS, true},

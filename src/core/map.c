@@ -448,7 +448,17 @@ static const PlantDef PLANT_DEFS[PLANT_COUNT] = {
                                      .regrow_hours = 12,
                                      .warmth_from = 220.0f, /* The end of summer. */
                                      .lost_below = 10.0f,   /* Rotten in the autumn chill. */
-                                     .min_growth = 0.5f}}},
+                                     .min_growth = 0.5f},
+                                    /* Its long canes, cut for the binding of coiled baskets:
+                                     * best in autumn and winter, soft and weaker while they
+                                     * grow (docs/CONTAINERS.md §3.1). */
+                                    {.item = ITEM_BRAMBLE_CANES,
+                                     .capacity = 3,
+                                     .regrow_hours = 300,
+                                     .min_growth = 0.6f,
+                                     .quality_follows_plant = true,
+                                     .leafless = true,
+                                     .off_season = PLANT_OFF_SEASON_GREEN}}},
     /* Easily mistaken for lily of the valley or autumn crocus. */
     [PLANT_WILD_GARLIC] = {.id = "wild_garlic",
                            .name_key = N_("plant.wild_garlic"),

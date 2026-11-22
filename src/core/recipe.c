@@ -392,6 +392,38 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                     .product = ITEM_MAT,
                     .dirt = 2,
                     .tool_use = TOOL_USE_NONE},
+    /* Thorns scraped off with a flake, each cane split in four along its length:
+     * 0.5 h a bundle, two bundles of binding (docs/CONTAINERS.md §11). */
+    [RECIPE_SPLIT_CANES] = {.id = "split_canes",
+                            .name_key = N_("recipe.split_canes"),
+                            .stations = CRAFTING_SPOT,
+                            .ingredients = {{{ITEM_BRAMBLE_CANES, ITEM_NONE}, 1, ITEM_WANT_WET}},
+                            .input_min_quality = ITEM_QUALITY_WORST,
+                            .tools = {{ITEM_FLAKE}},
+                            .tool_shapes = true,
+                            .work = 1250.0f,
+                            .knowledge = KNOWLEDGE_BASKETRY,
+                            .min_level = 50.0f,
+                            .product = ITEM_SPLIT_CANES,
+                            .product_count = 2,
+                            .dirt = 2,
+                            .tool_use = TOOL_USE_CUTTING},
+    /* A coil of dry grass or reeds wound round and sewn to the coil below with split
+     * cane through holes opened with the borer: 30 h of patient work, the strongest
+     * basket there is. */
+    [RECIPE_COILED_BASKET] = {.id = "coiled_basket",
+                              .name_key = N_("recipe.coiled_basket"),
+                              .stations = CRAFTING_SPOT,
+                              .ingredients = {{{ITEM_SPLIT_CANES, ITEM_NONE}, 2, ITEM_WANT_WET},
+                                              {{ITEM_GRASS, ITEM_REEDS}, 4, ITEM_WANT_DRY}},
+                              .input_min_quality = ITEM_QUALITY_WORST,
+                              .tools = {{ITEM_FLINT_BORER, ITEM_FLAKE}},
+                              .work = 75000.0f,
+                              .knowledge = KNOWLEDGE_BASKETRY,
+                              .min_level = 65.0f,
+                              .product = ITEM_COILED_BASKET,
+                              .dirt = 2,
+                              .tool_use = TOOL_USE_NONE},
     /* Mending (docs/CONTAINERS.md §11): broken leaves plaited anew, 1 h. */
     [RECIPE_MEND_CATTAIL_BASKET] =
         MEND("mend_cattail_basket", N_("recipe.mend_cattail_basket"), ITEM_CATTAIL_BASKET,
@@ -412,6 +444,10 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
     [RECIPE_MEND_NET_BAG] =
         MEND("mend_net_bag", N_("recipe.mend_net_bag"), ITEM_NET_BAG, ITEM_NETTLE_CORD,
              ITEM_LIME_CORD, 1, ITEM_WANT_ANY, ITEM_NONE, ITEM_NONE, 2500.0f),
+    /* Broken stitches sewn again with split cane, 2 h. */
+    [RECIPE_MEND_COILED_BASKET] =
+        MEND("mend_coiled_basket", N_("recipe.mend_coiled_basket"), ITEM_COILED_BASKET,
+             ITEM_SPLIT_CANES, ITEM_NONE, 1, ITEM_WANT_WET, ITEM_FLINT_BORER, ITEM_FLAKE, 5000.0f),
 };
 
 #undef CRAFTING_SPOT

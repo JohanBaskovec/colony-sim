@@ -191,6 +191,7 @@ static const SDL_Color BIRCH_BARK_COLOR = {232, 226, 212, 255}; /* Its white out
 static const SDL_Color BIRCH_BARK_INNER_COLOR = {196, 132, 84, 255};
 static const SDL_Color HAZEL_ROD_COLOR = {128, 92, 60, 255}; /* Its glossy brown bark. */
 static const SDL_Color WILLOW_ROD_COLOR = {150, 140, 74, 255};
+static const SDL_Color BRAMBLE_CANE_COLOR = {118, 54, 62, 255};   /* Red purple. */
 static const SDL_Color LIME_BARK_COLOR = {116, 106, 92, 255};     /* Grey outside. */
 static const SDL_Color LIME_BAST_COLOR = {206, 186, 140, 255};    /* Pale, ribbon-like. */
 static const SDL_Color NETTLE_STEM_COLOR = {118, 132, 70, 255};   /* Stems drying, grey green. */
@@ -1735,10 +1736,15 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         break;
     }
     case ITEM_HAZEL_RODS:
-    case ITEM_WILLOW_RODS: {
+    case ITEM_WILLOW_RODS:
+    case ITEM_BRAMBLE_CANES:
+    case ITEM_SPLIT_CANES: {
         /* Long straight rods lying across the tile, thinning to their tips, tied twice:
          * the hazel's brown, the osier's yellow green. */
-        SDL_Color rod_color = type == ITEM_WILLOW_RODS ? WILLOW_ROD_COLOR : HAZEL_ROD_COLOR;
+        SDL_Color rod_color = type == ITEM_WILLOW_RODS     ? WILLOW_ROD_COLOR
+                              : type == ITEM_BRAMBLE_CANES ? BRAMBLE_CANE_COLOR
+                              : type == ITEM_SPLIT_CANES   ? shade(BRAMBLE_CANE_COLOR, 50)
+                                                           : HAZEL_ROD_COLOR;
         float rod = SDL_max(1.0f, floorf(h * 0.06f));
         for (int i = 0; i < 5; i++) {
             float y = tile->y + floorf(h * (0.38f + 0.06f * (float)i));
@@ -1820,6 +1826,19 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
                   tile->y + h * 0.2f, cord);
         batch_bar(renderer, shade(NETTLE_CORD_COLOR, -20), x1, y0, tile->x + w * 0.5f,
                   tile->y + h * 0.2f, cord);
+        break;
+    }
+    case ITEM_COILED_BASKET: {
+        /* A round basket of tight coils, drawn as thin bands. */
+        SDL_FRect body = {tile->x + floorf(w * 0.24f), tile->y + floorf(h * 0.38f),
+                          floorf(w * 0.52f), floorf(h * 0.4f)};
+        fill_outlined(renderer, body, CATTAIL_BASKET_COLOR);
+        float band = SDL_max(1.0f, floorf(body.h / 7.0f));
+        for (int i = 1; i < 7; i++) {
+            SDL_FRect coil = {body.x + 1.0f, body.y + band * (float)i, body.w - 2.0f,
+                              SDL_max(1.0f, floorf(band * 0.4f))};
+            batch_quad(renderer, shade(BRAMBLE_CANE_COLOR, 30), &coil);
+        }
         break;
     }
     case ITEM_MAT: {

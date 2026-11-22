@@ -91,6 +91,7 @@ typedef enum GatherResource {
     GATHER_BIRCH_BARK,     /* Peeled off birches (GATHER_JOB_PEEL); the tree lives. */
     GATHER_HAZEL_RODS,     /* Cut at the stool (GATHER_JOB_CUT_RODS); new ones grow. */
     GATHER_WILLOW_RODS,    /* The same, of osier by the water. */
+    GATHER_BRAMBLE_CANES,  /* Long canes cut from brambles, for coiled baskets. */
     GATHER_LIME_POLES,     /* Cut from young limes (GATHER_JOB_CUT_POLES) for their bast. */
     GATHER_RESOURCE_COUNT
 } GatherResource;

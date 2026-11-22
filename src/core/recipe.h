@@ -51,12 +51,15 @@ typedef enum RecipeType {
     RECIPE_LIME_CORD,      /* Bast twisted into two hanks of cord. */
     RECIPE_NET_BAG,        /* Cord looped with the fingers into a bag. */
     RECIPE_MAT,            /* Leaves or reeds plaited into a mat. */
+    RECIPE_SPLIT_CANES,    /* Bramble canes stripped of thorns and split. */
+    RECIPE_COILED_BASKET,  /* Grass coils bound with split cane. */
     /* Mending a worn container (RecipeDef.mends): a patched weave, a new rim. */
     RECIPE_MEND_CATTAIL_BASKET,
     RECIPE_MEND_FRAME_BASKET,
     RECIPE_MEND_PACK_BASKET,
     RECIPE_MEND_BARK_BOX,
     RECIPE_MEND_NET_BAG,
+    RECIPE_MEND_COILED_BASKET,
     RECIPE_COUNT
 } RecipeType;
 
