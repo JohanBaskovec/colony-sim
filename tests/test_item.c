@@ -928,8 +928,9 @@ static void test_moisture_wants(void)
     float dry_below = item_def(ITEM_BIRCH_BARK)->water.dry_below;
     float room = item_def(ITEM_BIRCH_BARK)->water.room;
     for (int want = 0; want < ITEM_WANT_COUNT; want++) {
+        /* Dry is asked of tinder, and birch bark lights damp. */
         CHECK(item_moisture_fits(ITEM_BIRCH_BARK, fresh, (ItemMoistureWant)want) ==
-              (want != ITEM_WANT_DRY));
+              (want != ITEM_WANT_DRY || item_def(ITEM_BIRCH_BARK)->lights_damp));
     }
     CHECK(item_moisture_fits(ITEM_BIRCH_BARK, settled, ITEM_WANT_DRY));
     CHECK(!item_moisture_fits(ITEM_BIRCH_BARK, settled, ITEM_WANT_WET));
@@ -1859,6 +1860,45 @@ static void test_lime_bark_rets_for_days(void)
     items_free(&items);
 }
 
+/* A sewn birch bark box keeps mould away (docs/CONTAINERS.md §7.2): the food lying with it rots
+ * at ×0.7, as much as its room holds (3 L: 6 bulk); more than that, and none of it is kept. */
+static void test_bark_boxes_keep_food(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 3, 1, 1));
+    ItemStack hazelnuts = item_stack_pristine(ITEM_HAZELNUTS, 10); /* 4 bulk. */
+    REQUIRE(items_add(&items, 0, 0, 0, hazelnuts) == 10);
+    REQUIRE(items_add(&items, 1, 0, 0, hazelnuts) == 10);
+    REQUIRE(items_add(&items, 1, 0, 0, item_stack_pristine(ITEM_BARK_BOX, 1)) == 1);
+    REQUIRE(items_add(&items, 2, 0, 0, item_stack_pristine(ITEM_HAZELNUTS, 30)) == 30);
+    REQUIRE(items_add(&items, 2, 0, 0, item_stack_pristine(ITEM_BARK_BOX, 1)) == 1);
+    ItemConditions shade = ITEM_CONDITIONS_STILL;
+    for (int hour = 0; hour < 24 * 20; hour++) {
+        items_advance(&items, 0, 3, 1, given, &shade);
+    }
+    int open = items_get(&items, 0, 0, 0).hit_points;
+    int boxed = items_get_group(&items, 1, 0, 0, item_stack_pristine(ITEM_HAZELNUTS, 1)).hit_points;
+    int crowded =
+        items_get_group(&items, 2, 0, 0, item_stack_pristine(ITEM_HAZELNUTS, 1)).hit_points;
+    int full = item_def(ITEM_HAZELNUTS)->max_hit_points;
+    CHECK(open < full);
+    CHECK(boxed > open);
+    CHECK_NEAR((double)(full - boxed), 0.7 * (double)(full - open), 2.0);
+    CHECK_EQ_INT(crowded, open); /* Too much for one box. */
+    items_free(&items);
+}
+
+/* Birch bark takes a spark even damp, for its oils: tinder fetched fresh. */
+static void test_birch_bark_lights_damp(void)
+{
+    CHECK(item_types_has(item_types_tinder(), ITEM_BIRCH_BARK));
+    float fresh = item_fresh_moisture(ITEM_BIRCH_BARK);
+    CHECK(!item_moisture_dry(ITEM_BIRCH_BARK, fresh));
+    CHECK(item_moisture_fits(ITEM_BIRCH_BARK, fresh, ITEM_WANT_DRY));
+    CHECK(item_moisture_fits(ITEM_BIRCH_BARK, fresh, ITEM_WANT_WET)); /* Still pliable. */
+    CHECK(!item_moisture_fits(ITEM_GRASS, item_fresh_moisture(ITEM_GRASS), ITEM_WANT_DRY));
+}
+
 int main(void)
 {
     RUN_TEST(test_form_names);
@@ -1901,6 +1941,8 @@ int main(void)
     RUN_TEST(test_logs_season_slowly);
     RUN_TEST(test_stems_ret_wet_and_warm);
     RUN_TEST(test_lime_bark_rets_for_days);
+    RUN_TEST(test_bark_boxes_keep_food);
+    RUN_TEST(test_birch_bark_lights_damp);
     RUN_TEST(test_rot_by_moisture);
     RUN_TEST(test_twigs_get_wet_in_the_rain_and_dry_again);
     RUN_TEST(test_eating_takes_weight_not_hit_points);

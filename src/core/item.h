@@ -374,7 +374,16 @@ typedef struct ItemDef {
     bool soft;
     /* A container of open mesh (the net bag): it holds no soft fruit. */
     bool net;
+    /* A closed box of birch bark, whose betulin keeps mould away: the food lying
+     * with it on a tile, as much as its room holds, rots at ×ITEM_BOX_ROT_FACTOR. */
+    bool keeps_food;
+    /* Takes a spark however damp (birch bark, for its oils): fetched as tinder
+     * when not dry (item_moisture_fits(), ITEM_WANT_DRY). */
+    bool lights_damp;
 } ItemDef;
+
+/* What a bark box does to the rot of the food kept in it (ItemDef.keeps_food). */
+#define ITEM_BOX_ROT_FACTOR 0.7f
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every
  * ITEM_ROT_DOUBLING_CELSIUS warmer (at most ×ITEM_ROT_RATE_MAX), half as
@@ -711,7 +720,8 @@ bool item_moisture_green(ItemType type, float moisture);
 
 /* Whether an item of a type at this moisture is as `want` asks (always for
  * ITEM_WANT_ANY, ITEM_WANT_RETTED and ITEM_WANT_WORN; for a type that takes no
- * water, only those and ITEM_WANT_DRY). */
+ * water, only those and ITEM_WANT_DRY; ITEM_WANT_DRY always for what lights
+ * damp, ItemDef.lights_damp, dry being asked of tinder). */
 bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want);
 /* A phrase that fits any item (never an adjective that would have to agree
  * with it), NULL for ITEM_MOISTURE_NONE. */

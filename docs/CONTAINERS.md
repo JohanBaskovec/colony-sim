@@ -552,6 +552,33 @@ Each step ends with a playable build, its unit tests, the translations
 
 ## 11. Later
 
+Steps taken after C7, in the order of the list below (L1 to L4 built), then the
+plan for what needs whole systems first (§11.1).
+
+- *Built (L1)*: **mending** worn containers at the crafting spot (Basketry 50):
+  a cattail basket with leaves, a frame or pack basket with pliable rods, a bark
+  box with cord or bast (the borer), a net bag with cord, a coiled basket with
+  split cane. `RecipeDef.mends`: the product is the worn item, whole again, its
+  quality kept; only a worn one is taken (`ITEM_WANT_WORN`: below three quarters
+  of its hit points, checked on each item).
+- *Built (L2)*: **mats** of three bundles of cattail leaves or reeds, plaited by
+  hand (3 h), and the **mat bed** (Basic shelters): a mat over 8 armfuls of dry
+  grass, rest ×1.15 (the grass bed ×1.0), 40 hit points packing down a point a
+  day (the grass bed 20), refreshed with grass. Mats as floors and walls of
+  shelters wait for floors.
+- *Built (L3)*: **coiled baskets**: bramble canes, the bramble's second product
+  (best leafless, its berries left), split with a flake (two bundles of binding),
+  then two bundles of split cane and four of dry grass or reeds sewn with the
+  borer, 30 h (Basketry 65): 15 L and 250 hit points, the strongest container.
+- *Built (L4)*: a **sewn bark box keeps food** (`ItemDef.keeps_food`): the food
+  lying on its tile rots at ×0.7 (`ITEM_BOX_ROT_FACTOR`) when the boxes' room
+  (two bulk a litre) holds all of it; more food than that, none is kept. **Birch
+  bark takes a spark however damp** (`ItemDef.lights_damp`, its oils): it is
+  tinder, fetched fresh. *Dead birches* (bark outliving the wood) wait for dead
+  standing trees: trees do not die of the weather in the game.
+- *Not done*: "more held on a tile" with baskets in a stockpile (a tile already
+  holds 1,000 bulk; nothing to gain until stockpiles count stacks); dyes and
+  decorated bark (nothing in the game values the look of an item yet).
 - **Storage in stockpiles**: baskets and boxes as storage in a stockpile
   (more held on a tile, food kept in bark at ×0.7 rot).
 - **Birch tar** (Hafting, `docs/KNOWLEDGE.md` §13): sealing seams, so a bark
@@ -569,6 +596,29 @@ Each step ends with a playable build, its unit tests, the translations
 - **Mending** containers; dyes; decorated bark (winter bark scraped in
   patterns).
 - **Dead birches**: their bark outlives the wood, brittle: tinder, not boxes.
+
+### 11.1 What needs whole systems first
+
+The rest of the list waits for systems of its own, each a step of the roadmap
+(in the order that unlocks the most):
+
+1. **Butchering** (designed: `docs/KNOWLEDGE.md` §9, a starting knowledge): the
+   butchering spot, carcasses cut into meat, fat, marrow, raw hides, bones and
+   **sinew**; settlers fetching the carcasses wolves leave (hunting by settlers
+   is a roadmap step of its own). Meat wants cooking (with fire, M4).
+2. **Bone working and sewing**: **sinew thread** (dried, pounded, shredded,
+   moistened), the **bone awl** and the **eyed needle**; then **hide bags** and
+   a **skin water bag** (with Skin working: scraping and drying hides).
+3. **Hafting** (`docs/KNOWLEDGE.md` §13) and **birch tar** (bark heated without
+   air: a pit or a covered pot, at a hearth): glue for hafted tools, and the
+   seams of a box or a bucket sealed so that it holds **water**.
+4. **Carrying water and boiling** (a watertight container, settlers filling it at
+   the water; boiling with hot stones, cooking).
+5. **Fine thread and knotted nets** (netting needle, mesh gauge; Cordage 70): for
+   **fishing** (fish in the water, a new food) and **traps** (with hunting).
+6. **Clothes** (hides and sewing): warmth (with temperature), moods.
+7. **Dyes and decorated bark**: once something values the look of an item
+   (a room's beauty, moods).
 
 ## Sources
 

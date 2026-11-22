@@ -243,7 +243,7 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
      * keeps it from rotting. */
     [ITEM_BIRCH_BARK] = {DEF("birch_bark", N_("item.birch_bark"), ITEM_CATEGORY_RESOURCES, 0.15f,
                              2.0f, 0.0f, 20, true, true),
-                         .length_cm = 60, .form = ITEM_FORM_BUNDLE,
+                         .length_cm = 60, .form = ITEM_FORM_BUNDLE, .lights_damp = true,
                          WATER(0.45f, 0.6f, 1.0f, 36.0f, 0.25f)},
     [ITEM_WOODEN_SCRAPER] = {DEF("wooden_scraper", N_("item.wooden_scraper"), ITEM_CATEGORY_TOOLS,
                                  0.15f, 0.6f, 0.0f, 40, true, true),
@@ -296,7 +296,7 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_BARK_BOX] = {DEF("bark_box", N_("item.bark_box"), ITEM_CATEGORY_TOOLS, 0.2f, 7.0f, 0.0f,
                            40, true, true),
                        .length_cm = 20, .form = ITEM_FORM_RIGID, .container_litres = 3.0f,
-                       WATER(0.15f, 0.5f, 1.0f, 36.0f, 0.25f)},
+                       .keeps_food = true, WATER(0.15f, 0.5f, 1.0f, 36.0f, 0.25f)},
     /* Stakes and weavers of rods: about 20 litres, open, carried in a hand. */
     [ITEM_FRAME_BASKET] = {DEF("frame_basket", N_("item.frame_basket"), ITEM_CATEGORY_TOOLS, 1.0f,
                                45.0f, 0.0f, 80, true, true),
@@ -414,7 +414,7 @@ ItemTypeMask item_types_list(const ItemType *types, int count)
 
 ItemTypeMask item_types_tinder(void)
 {
-    static const ItemType TINDER[] = {ITEM_GRASS, ITEM_BRACKEN, ITEM_MOSS};
+    static const ItemType TINDER[] = {ITEM_GRASS, ITEM_BRACKEN, ITEM_MOSS, ITEM_BIRCH_BARK};
     return item_types_list(TINDER, (int)COLONY_ARRAY_COUNT(TINDER));
 }
 
@@ -701,7 +701,9 @@ bool item_moisture_fits(ItemType type, float moisture, ItemMoistureWant want)
 {
     switch (want) {
     case ITEM_WANT_ANY: return true;
-    case ITEM_WANT_DRY: return item_moisture_dry(type, moisture);
+    case ITEM_WANT_DRY:
+        return ((unsigned)type < ITEM_TYPE_COUNT && ITEM_DEFS[type].lights_damp) ||
+               item_moisture_dry(type, moisture);
     case ITEM_WANT_GREEN: return item_moisture_green(type, moisture);
     case ITEM_WANT_WET: {
         ItemMoistureState state = item_moisture_state(type, moisture);
@@ -2680,6 +2682,23 @@ static bool advance_retting(Item *item, int hours, ItemConditions here)
     return true;
 }
 
+/* Whether the food lying on a tile is kept in bark boxes there (ItemDef.keeps_food): their
+ * room (two bulk a litre) holds all of it. */
+static bool kept_in_boxes(const Items *items, size_t index)
+{
+    float room = 0.0f, food = 0.0f;
+    for (uint32_t slot = items->heads[index]; slot != 0; slot = items->pool[slot - 1].next) {
+        const Item *item = &items->pool[slot - 1];
+        const ItemDef *def = &ITEM_DEFS[item->type];
+        if (def->keeps_food) {
+            room += def->container_litres * 2.0f;
+        } else if (def->nutrition > 0.0f) {
+            food += def->bulk;
+        }
+    }
+    return room > 0.0f && food <= room;
+}
+
 static ItemFate advance_item(Item *item, int hours, ItemConditions here)
 {
     const ItemDef *def = &ITEM_DEFS[item->type];
@@ -2726,6 +2745,10 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
     }
     int rotted = 0;
     const size_t level_size = (size_t)items->width * (size_t)items->height;
+    bool boxes = false; /* Any bark box at all: the tiles are looked over for food kept. */
+    for (int type = 0; type < ITEM_TYPE_COUNT && !boxes; type++) {
+        boxes = ITEM_DEFS[type].keeps_food && items->totals[type] > 0;
+    }
     for (size_t i = begin; i < end; i++) {
         if (items->level_stacks[i / level_size] == 0) {
             i = (i / level_size + 1) * level_size - 1; /* Nothing on this level. */
@@ -2734,7 +2757,7 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
         if (items->heads[i] == 0) {
             continue;
         }
-        bool asked = false, changed = false, wet = false, counted = false;
+        bool asked = false, changed = false, wet = false, counted = false, boxed = false;
         ItemConditions here = ITEM_CONDITIONS_STILL;
         uint32_t previous = 0;
         uint32_t slot = items->heads[i];
@@ -2749,8 +2772,13 @@ int items_advance(Items *items, size_t begin, size_t end, int hours, ItemConditi
             if (!asked) {
                 here = conditions != NULL ? conditions(context, i) : here;
                 asked = true;
+                boxed = boxes && kept_in_boxes(items, i);
             }
-            ItemFate fate = advance_item(item, hours, here);
+            ItemConditions kept = here;
+            if (boxed && ITEM_DEFS[item->type].nutrition > 0.0f) {
+                kept.rot_rate *= ITEM_BOX_ROT_FACTOR;
+            }
+            ItemFate fate = advance_item(item, hours, kept);
             if (fate == ITEM_FATE_GONE) {
                 items->rotted[item->type]++;
                 unlink_item(items, i, previous, slot);
