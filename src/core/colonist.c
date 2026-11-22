@@ -2137,18 +2137,6 @@ static GatherJobMask gather_jobs_for(const Colonist *colonist, WorkTypeMask mask
     return jobs;
 }
 
-/* Work types the colonist does at all. */
-static WorkTypeMask enabled_work_types(const Colonist *colonist)
-{
-    WorkTypeMask mask = 0;
-    for (int type = 0; type < WORK_TYPE_COUNT; type++) {
-        if (colonist->work_priorities[type] != WORK_PRIORITY_DISABLED) {
-            mask |= WORK_TYPE_BIT(type);
-        }
-    }
-    return mask;
-}
-
 static bool is_open_job(const WorkSearch *search, int x, int y, int z)
 {
     if (search->zones) {
@@ -3085,8 +3073,11 @@ static bool job_still_valid(const Colonist *colonist, const ColonistContext *con
         reservations_owner(context->reservations, RESERVATION_WORK, target) == context->worker_id;
     if (colonist->gathering) {
         GatherJob job = (GatherJob)colonist->work_type;
+        /* The job's work type done at all, and the knowledge for it (gather_jobs_for()). */
         return own && (unsigned)job < GATHER_JOB_COUNT &&
-               (gather_jobs_for(colonist, enabled_work_types(colonist)) & GATHER_JOB_BIT(job)) &&
+               colonist->work_priorities[gather_job_def(job)->work_type] !=
+                   WORK_PRIORITY_DISABLED &&
+               colonist_can_gather(colonist, job) &&
                gather_job_available(context->gather_zones,
                                     map_checked(context, target.x, target.y, target.z), target.x,
                                     target.y, target.z, job);
