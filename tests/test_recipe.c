@@ -161,6 +161,16 @@ static void test_nettle_cord_chain(void)
     int with_scraper = (40 * 3 + 80) / 4 + ITEM_QUALITY_CAP_BONUS;
     CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_NETTLE_FIBRE, inputs, scraper), with_scraper);
     CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_NETTLE_FIBRE, inputs, flake), with_scraper - 10);
+    /* Retted stems: a finer fibre, scraped twice as fast; over retted, a rotten one. */
+    CHECK_NEAR(recipe_work_factor(RECIPE_NETTLE_FIBRE, inputs), 1.0, 1e-6);
+    ItemStack retted[RECIPE_INGREDIENT_MAX] = {inputs[0]};
+    item_stack_set_retting(&retted[0], 1.0f);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_NETTLE_FIBRE, retted, scraper),
+                 with_scraper + ITEM_RETTING_CAP_BONUS);
+    CHECK_NEAR(recipe_work_factor(RECIPE_NETTLE_FIBRE, retted), 2.0, 1e-6);
+    item_stack_set_retting(&retted[0], 2.0f);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_NETTLE_FIBRE, retted, scraper),
+                 with_scraper + item_retting_cap_bonus(2.0f));
     ItemStack out[RECIPE_PRODUCT_MAX];
     REQUIRE(recipe_craft_with(RECIPE_NETTLE_FIBRE, inputs, scraper, 75.0, NULL, out) == 1);
     CHECK_EQ_INT(out[0].type, ITEM_NETTLE_FIBRE);

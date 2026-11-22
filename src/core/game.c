@@ -1321,6 +1321,8 @@ ItemConditions game_item_conditions(const Game *game, int x, int y, int z)
         .wetting = wetting,
         .in_water = map_water_class(map, x, y, z) >= WATER_WET,
         .drying = item_drying_speed(celsius, game_light_at(game, x, y, z)),
+        .celsius = celsius,
+        .dew = open && humidity >= ITEM_DEW_HUMIDITY && game_daylight(tick) <= GAME_DAYLIGHT_MIN,
     };
 }
 

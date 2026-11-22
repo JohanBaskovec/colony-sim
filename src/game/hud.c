@@ -661,6 +661,10 @@ static void build_tile_panel(App *app, Panel *panel, int x, int y, int z)
                                     item_stack_moisture(stack));
             TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_moisture"), moisture);
         }
+        char retting[64];
+        if (item_info_retting_text(retting, sizeof(retting), stack)) {
+            TR_FORMAT(panel_add(panel), HUD_LINE_SIZE, tr("hud.tile.item_retting"), retting);
+        }
         if (item_rots((ItemType)stack.type)) {
             /* At the tile's temperature now: an estimate. */
             float hours = item_stack_rot_hours(

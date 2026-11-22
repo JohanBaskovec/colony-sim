@@ -398,10 +398,31 @@ rods and the pack basket; then the net bag.
      the items of C2–C7 (about 14) would have brought it to the limit. *Done*: a set
      takes as many 64-bit words as the types need (`ITEM_TYPE_WORDS`), static tables
      list types (recipe tools, counted resources), so the number of types has no limit.
-2. **C2 Nettle cord**: nettle stems (a second product, cut whole, its season),
+2. **C2 Nettle cord** *(built)*: nettle stems (a second product, cut whole, its season),
    drying (existing), retting (progress, dew, shallow water, over retting),
    the wooden scraper, nettle fibre, nettle cord; raw quality from the
    plant's state and the moment.
+   - *As built*: the nettle's second product slot (`PlantProduct.cuts_plant`:
+     taking it resets the plant whatever `PlantDef.harvest` says,
+     `plant_product_harvest()`), in season from 260 degree-days (the start of a
+     game) until the plant dies back; `GATHER_JOB_CUT_STEMS` (`TOOL_USE_CUTTING`,
+     250 ticks a bundle) and the resource in a new group, *Craft materials*
+     (`GATHER_GROUP_MATERIALS`), so that the Fibres group (bedding, thatch, fuel)
+     does not count them. Quality: the gatherer's times `0.7 + 0.3 × growth` and
+     `0.5 + 0.5 × health` (`PlantProduct.quality_follows_plant`); the moment in
+     the window (−10 at its edges) is left for later.
+   - Retting: `ItemStack.retting`/`Item.retting` in thousandths, averaged like the
+     moisture. It runs while the stems are wetter than fresh (half way to soaked:
+     stems drying after the cut do not ret), or under the dew (`ItemConditions.dew`:
+     a night in the open with the air at 90 % humidity or more; the dew wets
+     nothing else, to leave the drying of hay as it was), above 5 °C: 60 hours
+     at 15 °C, up to ×1.5 warmer, ×2 in water (a summer day in the shallows over
+     rets them). Its effects: the fibre recipe's work ×(1 + retting) up to ×2
+     (`recipe_work_factor()`), its cap +15 × retting, less 10 every 0.25 past 1.5
+     (`item_retting_cap_bonus()`). Shown as *Retting: 70 %*, *done*, *overdone*.
+   - Recipes: nettle fibre (dry stems; the wooden scraper or a flake, cap −10
+     with a flake; a cobble; 2,500 ticks), nettle cord (a handful of fibre, two
+     hanks, 3,750 ticks, `RecipeDef.product_count`). `SAVE_VERSION` 14.
 3. **C3 Bark tray and cattail basket**: birch bark (window, winter bark, the
    tree peeled), softening in water (the folded tray is already there); cattail leaves
    (drying, green weaving), the plaited basket.

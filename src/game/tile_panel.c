@@ -316,6 +316,11 @@ static void single_item_rows(UiLayout *layout, const ThingRows *rows)
         TR_FORMAT(text, sizeof(text), tr("hud.tile.item_moisture"), moisture);
         ui_layout_label(layout, text, 0.0f, false);
     }
+    char retting[TEXT_SIZE];
+    if (item_info_retting_text(retting, sizeof(retting), one)) {
+        TR_FORMAT(text, sizeof(text), tr("hud.tile.item_retting"), retting);
+        ui_layout_label(layout, text, 0.0f, false);
+    }
     const Items *items = game_items_at(game, rows->x, rows->y, rows->z);
     size_t index = map_index(game_view_map(game), rows->x, rows->y, rows->z);
     int others = -1;

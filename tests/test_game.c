@@ -751,6 +751,41 @@ static void test_fresh_grass_dries_on_the_ground(void)
     game_shutdown(&game);
 }
 
+/* Nettle stems in a game (docs/CONTAINERS.md §4.4): dried stems left out in a day of summer rain
+ * ret, the tile's air temperature and the rain coming from the game (soaking in water and the dew
+ * are tested in test_item). */
+static void test_stems_ret_in_the_rain(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game, 8));
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(&game); slot++) {
+        game_remove_colonist(&game, game_colonist_id_at(&game, slot));
+    }
+    int x = -1, y = 2;
+    for (int tx = 1; tx < game.map.width && x < 0; tx++) {
+        if (map_is_passable(&game.map, tx, y, 0) && map_water(&game.map, tx, y, 0) == 0 &&
+            temperature_cover(&game.map, tx, y, 0) == TEMPERATURE_COVER_OPEN) {
+            x = tx;
+        }
+    }
+    REQUIRE(x >= 0);
+    ItemStack stems = item_stack_pristine(ITEM_NETTLE_STEMS, 1);
+    item_stack_set_moisture(&stems, 0.1f); /* Dried. */
+    REQUIRE(items_add(&game.items, x, y, 0, stems) == 1);
+    for (int i = 0; i < 24 * TICKS_PER_HOUR; i++) {
+        game.weather.type = WEATHER_STORM;
+        game.weather.spell = 5.0f;      /* Rain, not snow. */
+        game.weather.debug_rain = 1.0f; /* Every hour. */
+        game_tick(&game);
+    }
+    CHECK(game_item_conditions(&game, x, y, 0).celsius > ITEM_RETTING_MIN_CELSIUS);
+    CHECK(item_stack_moisture(items_get(&game.items, x, y, 0)) >
+          item_fresh_moisture(ITEM_NETTLE_STEMS));
+    float retting = item_stack_retting(items_get(&game.items, x, y, 0));
+    CHECK(retting > 0.2f && retting < 1.5f);
+    game_shutdown(&game);
+}
+
 static void test_food_rots_on_the_ground(void)
 {
     Game game;
@@ -1037,6 +1072,7 @@ int main(void)
     RUN_TEST(test_hash_covers_knowledge_and_carried_condition);
     RUN_TEST(test_fresh_grass_dries_on_the_ground);
     RUN_TEST(test_food_rots_on_the_ground);
+    RUN_TEST(test_stems_ret_in_the_rain);
     RUN_TEST(test_mushrooms_come_after_rain);
     RUN_TEST(test_grass_does_not_dry_in_a_storm);
     RUN_TEST(test_plant_stocks_grow_back);

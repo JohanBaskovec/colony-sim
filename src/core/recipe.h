@@ -133,6 +133,10 @@ ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input);
 ItemQuality recipe_quality_cap_of(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIENT_MAX],
                                   ItemStack tool);
 
+/* The factor on the work of a craft its inputs set: retted stems give their
+ * fibre up to twice as fast (item_retting_work_factor()); 1 otherwise. */
+float recipe_work_factor(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIENT_MAX]);
+
 /* Whether the recipe is made at a fire (a burning hearth). */
 bool recipe_needs_fire(RecipeType recipe);
 

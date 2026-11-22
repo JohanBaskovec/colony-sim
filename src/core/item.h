@@ -336,6 +336,8 @@ typedef struct ItemDef {
      * "Branches de {0}": wood_item_name()). */
     bool wooden;
     const char *wood_name_key;
+    /* Rets while it lies wet and warm (docs/CONTAINERS.md §4.4): ItemStack.retting. */
+    bool rets;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every
@@ -367,6 +369,30 @@ typedef struct ItemDef {
 #define ITEM_DRYING_SUN 2.0f
 #define ITEM_DRYING_FROZEN 0.2f
 #define ITEM_WETTING_SPEED 8.0f
+/* Retting (docs/CONTAINERS.md §4.4, tuning): what rets does while it is wet
+ * or soaked and the air above ITEM_RETTING_MIN_CELSIUS, retted in
+ * ITEM_RETTING_HOURS at ITEM_RETTING_REFERENCE_CELSIUS (the dew and the rain:
+ * about 2.5 game days), faster warmer (up to ×ITEM_RETTING_WARM_MAX),
+ * ×ITEM_RETTING_WATER lying in water. Retted (1), its fibre comes away twice
+ * as fast and finer (cap +ITEM_RETTING_CAP_BONUS); beyond ITEM_RETTING_OVER
+ * it rots: ITEM_RETTING_OVER_MALUS off the cap every ITEM_RETTING_OVER_STEP. */
+#define ITEM_RETTING_UNITS 1000
+/* Wet enough to ret: this share of the way from its fresh moisture to soaked. */
+#define ITEM_RETTING_WET_SHARE 0.5f
+/* The relative humidity of the air from which dew settles at night. */
+#define ITEM_DEW_HUMIDITY 0.9f
+#define ITEM_RETTING_HOURS 60.0f
+#define ITEM_RETTING_MIN_CELSIUS 5.0f
+#define ITEM_RETTING_REFERENCE_CELSIUS 15.0f
+#define ITEM_RETTING_WARM_MAX 1.5f
+#define ITEM_RETTING_WATER 2.0f
+#define ITEM_RETTING_CAP_BONUS 15
+#define ITEM_RETTING_OVER 1.5f
+#define ITEM_RETTING_OVER_STEP 0.25f
+#define ITEM_RETTING_OVER_MALUS 10
+/* The most a stack keeps of it (far over retted). */
+#define ITEM_RETTING_MAX 3.0f
+
 /* Rot units per hit point (see ItemStack.progress). */
 #define ITEM_ROT_STEP 1000
 
@@ -404,6 +430,10 @@ typedef struct ItemStack {
      * reference moisture, item_reference_moisture()). 0 for other types.
      * Never part of what makes stacks match. */
     uint16_t moisture;
+    /* Types that ret (ItemDef.rets): how far they are retted, in
+     * 1/ITEM_RETTING_UNITS (ITEM_RETTING_UNITS: retted), the items' average; 0
+     * for other types. Never part of what makes stacks match. */
+    uint16_t retting;
     /* A load in hand (see items_pick_up()): the very items, a list in the
      * item pool (slot + 1 of the first), the fields above their summary. 0
      * for a stack that is only numbers (what to add, what a tile holds):
@@ -429,6 +459,7 @@ typedef struct Item {
     uint8_t forbidden;   /* Non-zero: the player forbade it (see items_forbidden()). */
     WoodMask woods;      /* As ItemStack.woods. */
     uint16_t moisture;   /* As ItemStack.moisture, never 0 for a type that takes water. */
+    uint16_t retting;    /* As ItemStack.retting. */
     uint32_t made;       /* As ItemStack.made. */
     uint16_t maker;      /* As ItemStack.maker. */
     uint32_t next;       /* Next item of the same tile: slot + 1, 0 for none. */
@@ -577,6 +608,25 @@ float item_reference_moisture(ItemType type);
  * reference moisture), 0 .. 1; 0 for types that take no water. */
 float item_moisture(const Item *item);
 float item_stack_moisture(ItemStack stack);
+
+/* How far a stack is retted (0: not at all, 1: retted, beyond: over retted). */
+float item_stack_retting(ItemStack stack);
+void item_stack_set_retting(ItemStack *stack, float retting);
+
+/* What retting `retting` (item_stack_retting()) does to the fibre: the
+ * bonus (or malus) on the cap of its quality, and the factor on the work of
+ * scraping it (1 unretted, 2 retted). */
+int item_retting_cap_bonus(float retting);
+float item_retting_work_factor(float retting);
+
+/* How a retting stands, for what is shown (ITEM_RETTING_NONE: not retting). */
+typedef enum ItemRettingState {
+    ITEM_RETTING_NONE,
+    ITEM_RETTING_UNDER_WAY,
+    ITEM_RETTING_DONE,
+    ITEM_RETTING_OVERDONE,
+} ItemRettingState;
+ItemRettingState item_retting_state(float retting);
 
 /* Sets the moisture of a stack (clamped to 0 .. the type's room); nothing
  * for a type that takes no water. And a stack fresh: cut, felled, picked. */
@@ -1016,11 +1066,16 @@ typedef struct ItemConditions {
     float wetting;  /* Rain or snow falling on them (weather_wetting()), 0 under cover. */
     bool in_water;  /* They lie in water: soaked within the hour. */
     float drying;   /* Speed of drying, ×1 at ITEM_DRYING_REFERENCE_CELSIUS in the shade. */
+    float celsius;  /* The air's temperature (retting). */
+    /* Dew settles on them: a night of damp air in the open (dew retting, only:
+     * the moisture of items does not follow it, ITEM_DEW_HUMIDITY). */
+    bool dew;
 } ItemConditions;
 
 /* Rot ×1, out of the rain, in still air of the reference humidity. */
 #define ITEM_CONDITIONS_STILL                                                                      \
-    ((ItemConditions){1.0f, false, ITEM_MOISTURE_REFERENCE_HUMIDITY, 0.0f, false, 1.0f})
+    ((ItemConditions){1.0f, false, ITEM_MOISTURE_REFERENCE_HUMIDITY, 0.0f, false, 1.0f,            \
+                      ITEM_RETTING_REFERENCE_CELSIUS, false})
 
 /* The speed of drying (ItemConditions.drying) at a temperature with a share
  * of full sun (0 .. 1). */

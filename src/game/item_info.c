@@ -59,6 +59,21 @@ void item_info_moisture_text(char *out, size_t size, ItemType type, float moistu
     TR_FORMAT(out, size, tr("item.info.moisture.value"), percent, state != NULL ? tr(state) : "");
 }
 
+bool item_info_retting_text(char *out, size_t size, ItemStack stack)
+{
+    const ItemDef *def = item_def((ItemType)stack.type);
+    float retting = item_stack_retting(stack);
+    switch (def != NULL && def->rets ? item_retting_state(retting) : ITEM_RETTING_NONE) {
+    case ITEM_RETTING_NONE: return false;
+    case ITEM_RETTING_UNDER_WAY: item_info_percent_text(out, size, retting); return true;
+    case ITEM_RETTING_DONE: SDL_strlcpy(out, tr("item.info.retting.done"), size); return true;
+    case ITEM_RETTING_OVERDONE:
+        SDL_strlcpy(out, tr("item.info.retting.overdone"), size);
+        return true;
+    }
+    return false;
+}
+
 void item_info_picture(App *app, SDL_FRect rect, ItemType type)
 {
     ui_fill(&app->ui, rect, app->ui.theme.colors[THEME_ICON_WELL]);
@@ -283,6 +298,10 @@ static void state_rows(UiLayout *layout, const InfoRows *rows)
         drying_text(drying, sizeof(drying), game, rows);
         const char *tips[2] = {drying, tr("item.info.moisture.description")};
         item_info_row_tip(layout, "item.info.moisture", text, tips, 2);
+    }
+    if (item_info_retting_text(text, sizeof(text), rows->one)) {
+        const char *tips[1] = {tr("item.info.retting.description")};
+        item_info_row_tip(layout, "item.info.retting", text, tips, 1);
     }
     if (item->eaten > 0) {
         item_info_percent_text(text, sizeof(text), (float)item->eaten / (float)ITEM_EATEN_FULL);

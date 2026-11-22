@@ -1101,6 +1101,79 @@ static void test_twigs_get_wet_in_the_rain_and_dry_again(void)
     items_free(&items);
 }
 
+/* How far the stems lying on (x, y) are retted. */
+static float retting_at(const Items *items, int x, int y)
+{
+    return item_stack_retting(items_get(items, x, y, 0));
+}
+
+/* Nettle stems ret while they lie wet and warm (docs/CONTAINERS.md §4.4): in the rain or the dew
+ * about 2.5 days, twice as fast in water, not at all dry, drying after the cut, or in the cold;
+ * retted, a finer fibre scraped twice as fast, over retted a rotten one. */
+static void test_stems_ret_wet_and_warm(void)
+{
+    Items items;
+    REQUIRE(items_init(&items, 8, 1, 1));
+    ItemStack fresh = item_stack_pristine(ITEM_NETTLE_STEMS, 1);
+    item_stack_set_fresh(&fresh);
+    ItemStack soaked = fresh;
+    item_stack_set_moisture(&soaked, item_def(ITEM_NETTLE_STEMS)->water.room);
+    for (int x = 0; x < 6; x++) {
+        REQUIRE(items_add(&items, x, 0, 0, x == 0 ? fresh : soaked) == 1);
+    }
+    ItemConditions shade = ITEM_CONDITIONS_STILL; /* 15 °C, still air. */
+    ItemConditions water = shade;
+    water.in_water = true;
+    ItemConditions cold = water;
+    cold.celsius = 4.0f;
+    ItemConditions dew = shade;
+    dew.dew = true;
+    ItemConditions rain = shade;
+    rain.wetting = 1.0f;
+    rain.rained_on = true;
+    for (int hour = 0; hour < 30; hour++) {
+        items_advance(&items, 0, 1, 1, given, &shade); /* Fresh, drying after the cut. */
+        items_advance(&items, 1, 2, 1, given, &water);
+        items_advance(&items, 2, 3, 1, given, &cold);
+        items_advance(&items, 3, 4, 1, given, &dew);
+        items_advance(&items, 4, 5, 1, given, &rain);
+    }
+    CHECK_NEAR(retting_at(&items, 0, 0), 0.0, 1e-6);
+    CHECK_NEAR(retting_at(&items, 1, 0), 1.0, 0.02); /* In water: 30 hours. */
+    CHECK_NEAR(retting_at(&items, 2, 0), 0.0, 1e-6); /* Too cold. */
+    CHECK_NEAR(retting_at(&items, 3, 0), 0.5, 0.02); /* The dew: half of it. */
+    CHECK_NEAR(retting_at(&items, 4, 0), 0.5, 0.02); /* The rain as well. */
+    CHECK_EQ_INT(item_retting_state(1.0f), ITEM_RETTING_DONE);
+    CHECK_EQ_INT(item_retting_state(retting_at(&items, 3, 0)), ITEM_RETTING_UNDER_WAY);
+    CHECK_EQ_INT(item_retting_state(0.0f), ITEM_RETTING_NONE);
+    CHECK_EQ_INT(item_retting_state(1.6f), ITEM_RETTING_OVERDONE);
+    /* Left in the water: over retted, then as far as it goes. */
+    for (int hour = 0; hour < 24 * 10; hour++) {
+        items_advance(&items, 1, 2, 1, given, &water);
+    }
+    CHECK_NEAR(retting_at(&items, 1, 0), ITEM_RETTING_MAX, 1e-3);
+    /* What it does to the fibre. */
+    CHECK_EQ_INT(item_retting_cap_bonus(0.0f), 0);
+    CHECK_EQ_INT(item_retting_cap_bonus(0.5f), 8);
+    CHECK_EQ_INT(item_retting_cap_bonus(1.0f), ITEM_RETTING_CAP_BONUS);
+    CHECK_EQ_INT(item_retting_cap_bonus(1.5f), ITEM_RETTING_CAP_BONUS);
+    CHECK_EQ_INT(item_retting_cap_bonus(2.0f), ITEM_RETTING_CAP_BONUS - 20);
+    CHECK_NEAR(item_retting_work_factor(0.0f), 1.0, 1e-6);
+    CHECK_NEAR(item_retting_work_factor(0.5f), 1.5, 1e-6);
+    CHECK_NEAR(item_retting_work_factor(2.0f), 2.0, 1e-6);
+    /* Stacks merged: the retting weighed by count; a type that does not ret keeps none. */
+    ItemStack a = soaked, b = soaked;
+    item_stack_set_retting(&a, 1.0f);
+    item_stack_set_retting(&b, 0.0f);
+    b.count = 3;
+    REQUIRE(item_stack_merge(&a, b));
+    CHECK_NEAR(item_stack_retting(a), 0.25, 1e-3);
+    ItemStack grass = item_stack_pristine(ITEM_GRASS, 1);
+    item_stack_set_retting(&grass, 1.0f);
+    CHECK_EQ_INT(grass.retting, 0);
+    items_free(&items);
+}
+
 /* Green wood seasons over weeks, an hour at a time. */
 static void test_logs_season_slowly(void)
 {
@@ -1803,6 +1876,7 @@ int main(void)
     RUN_TEST(test_chosen_by_moisture);
     RUN_TEST(test_grass_dries);
     RUN_TEST(test_logs_season_slowly);
+    RUN_TEST(test_stems_ret_wet_and_warm);
     RUN_TEST(test_rot_by_moisture);
     RUN_TEST(test_twigs_get_wet_in_the_rain_and_dry_again);
     RUN_TEST(test_eating_takes_weight_not_hit_points);

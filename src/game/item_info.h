@@ -32,6 +32,10 @@ void item_info_percent_text(char *out, size_t size, float fraction);
  * §7.5). */
 void item_info_moisture_text(char *out, size_t size, ItemType type, float moisture);
 
+/* How far a stack that rets is retted, as shown: "70 %", "done", "overdone";
+ * false (nothing written) when it is not retting at all. */
+bool item_info_retting_text(char *out, size_t size, ItemStack stack);
+
 /* An item picture on its well. */
 void item_info_picture(App *app, SDL_FRect rect, ItemType type);
 

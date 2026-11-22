@@ -254,7 +254,7 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
      * broken and scraped for their fibre (docs/CONTAINERS.md §4.1). */
     [ITEM_NETTLE_STEMS] = {DEF("nettle_stems", N_("item.nettle_stems"), ITEM_CATEGORY_RESOURCES,
                                0.6f, 6.0f, 0.0f, 20, true, true),
-                           .length_cm = 120, .form = ITEM_FORM_BUNDLE,
+                           .length_cm = 120, .form = ITEM_FORM_BUNDLE, .rets = true,
                            WATER(0.75f, 0.85f, 1.0f, 48.0f, 0.2f)},
     [ITEM_NETTLE_FIBRE] = {DEF("nettle_fibre", N_("item.nettle_fibre"), ITEM_CATEGORY_RESOURCES,
                                0.02f, 0.5f, 0.0f, 20, true, true),
@@ -524,6 +524,50 @@ float item_moisture(const Item *item)
 float item_stack_moisture(ItemStack stack)
 {
     return moisture_of((ItemType)stack.type, stack.moisture);
+}
+
+float item_stack_retting(ItemStack stack)
+{
+    return (float)stack.retting / (float)ITEM_RETTING_UNITS;
+}
+
+void item_stack_set_retting(ItemStack *stack, float retting)
+{
+    if ((unsigned)stack->type >= ITEM_TYPE_COUNT || !ITEM_DEFS[stack->type].rets) {
+        stack->retting = 0;
+        return;
+    }
+    stack->retting =
+        (uint16_t)lroundf(clampf(retting, 0.0f, ITEM_RETTING_MAX) * (float)ITEM_RETTING_UNITS);
+}
+
+int item_retting_cap_bonus(float retting)
+{
+    if (retting <= 0.0f) {
+        return 0;
+    }
+    float bonus = (float)ITEM_RETTING_CAP_BONUS * (retting < 1.0f ? retting : 1.0f);
+    if (retting > ITEM_RETTING_OVER) {
+        bonus -=
+            (float)ITEM_RETTING_OVER_MALUS * (retting - ITEM_RETTING_OVER) / ITEM_RETTING_OVER_STEP;
+    }
+    return (int)lroundf(bonus);
+}
+
+float item_retting_work_factor(float retting)
+{
+    return 1.0f + clampf(retting, 0.0f, 1.0f);
+}
+
+ItemRettingState item_retting_state(float retting)
+{
+    if (retting <= 0.0f) {
+        return ITEM_RETTING_NONE;
+    }
+    if (retting < 1.0f) {
+        return ITEM_RETTING_UNDER_WAY;
+    }
+    return retting <= ITEM_RETTING_OVER ? ITEM_RETTING_DONE : ITEM_RETTING_OVERDONE;
 }
 
 void item_stack_set_moisture(ItemStack *stack, float moisture)
@@ -853,6 +897,8 @@ bool item_stack_merge(ItemStack *into, ItemStack from)
         float total = (float)into->count + (float)from.count;
         item_stack_set_moisture(into, (a * (float)into->count + b * (float)from.count) / total);
     }
+    into->retting =
+        (uint16_t)weighted_average(into->retting, into->count, from.retting, from.count);
     into->count = (uint16_t)count;
     return true;
 }
@@ -993,6 +1039,7 @@ static void count_item(Items *items, const Item *item, int sign)
 static ItemStack group_of(const Items *items, size_t index, ItemStack key)
 {
     long count = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0, moisture = 0;
+    long retting = 0;
     for (const Item *item = slot_item(items, items->heads[index]); item != NULL;
          item = slot_item(items, item->next)) {
         if (item_matches(item, &key)) {
@@ -1002,6 +1049,7 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
             progress += item->progress;
             eaten += item->eaten;
             moisture += item->moisture;
+            retting += item->retting;
         }
     }
     if (count == 0) {
@@ -1016,7 +1064,8 @@ static ItemStack group_of(const Items *items, size_t index, ItemStack key)
                        .hit_points = (uint16_t)((hit_points + count / 2) / count),
                        .progress = (uint16_t)((progress + count / 2) / count),
                        .eaten = (uint16_t)((eaten + count / 2) / count),
-                       .moisture = (uint16_t)((moisture + count / 2) / count)};
+                       .moisture = (uint16_t)((moisture + count / 2) / count),
+                       .retting = (uint16_t)((retting + count / 2) / count)};
 }
 
 /* An item as the key of its group. */
@@ -1260,7 +1309,7 @@ int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int ca
     /* One pass: each item added to its group's sums (groups beyond
      * `capacity` are left out). */
     enum { MOST = 16 };
-    long sums[MOST][6] = {{0}};
+    long sums[MOST][7] = {{0}};
     capacity = capacity < MOST ? capacity : MOST;
     int count = 0;
     for (const Item *item = items_first(items, index); item != NULL;
@@ -1282,6 +1331,7 @@ int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int ca
         sum[3] += item->progress;
         sum[4] += item->eaten;
         sum[5] += item->moisture;
+        sum[6] += item->retting;
     }
     for (int group = 0; group < count; group++) {
         const long *sum = sums[group];
@@ -1292,6 +1342,7 @@ int items_groups(const Items *items, int x, int y, int z, ItemStack *out, int ca
         out[group].progress = (uint16_t)((sum[3] + n / 2) / n);
         out[group].eaten = (uint16_t)((sum[4] + n / 2) / n);
         out[group].moisture = (uint16_t)((sum[5] + n / 2) / n);
+        out[group].retting = (uint16_t)((sum[6] + n / 2) / n);
     }
     return count;
 }
@@ -1401,6 +1452,7 @@ static ItemStack valid_batch(ItemStack batch)
     valid.made = batch.made;
     valid.maker = batch.maker;
     valid.moisture = valid_moisture(type, batch.moisture);
+    valid.retting = ITEM_DEFS[type].rets ? batch.retting : 0;
     return valid;
 }
 
@@ -1447,6 +1499,7 @@ static uint32_t new_item(Items *items, const ItemStack *batch, uint32_t tile)
                        .corpse = batch->corpse,
                        .woods = batch->woods,
                        .moisture = valid_moisture((ItemType)batch->type, batch->moisture),
+                       .retting = ITEM_DEFS[batch->type].rets ? batch->retting : 0,
                        .forbidden = batch->forbidden,
                        .made = batch->made != 0 ? batch->made : items->now + 1,
                        .maker = batch->maker,
@@ -1507,6 +1560,7 @@ static void refresh_load(const Items *items, ItemStack *load)
         return;
     }
     long count = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0, moisture = 0;
+    long retting = 0;
     for (const Item *item = head; item != NULL; item = slot_item(items, item->next)) {
         count++;
         quality += item->quality;
@@ -1514,6 +1568,7 @@ static void refresh_load(const Items *items, ItemStack *load)
         progress += item->progress;
         eaten += item->eaten;
         moisture += item->moisture;
+        retting += item->retting;
     }
     *load = (ItemStack){.type = head->type,
                         .corpse = head->corpse,
@@ -1527,6 +1582,7 @@ static void refresh_load(const Items *items, ItemStack *load)
                         .progress = (uint16_t)((progress + count / 2) / count),
                         .eaten = (uint16_t)((eaten + count / 2) / count),
                         .moisture = (uint16_t)((moisture + count / 2) / count),
+                        .retting = (uint16_t)((retting + count / 2) / count),
                         .held = load->held};
 }
 
@@ -2002,6 +2058,7 @@ static ItemStack take_group(Items *items, size_t index, const ItemStack stack, i
         return (ItemStack){.type = ITEM_NONE};
     }
     long taken = 0, quality = 0, hit_points = 0, progress = 0, eaten = 0, moisture = 0;
+    long retting = 0;
     uint32_t previous = 0;
     uint32_t slot = items->heads[index];
     while (slot != 0 && taken < count) {
@@ -2014,6 +2071,7 @@ static ItemStack take_group(Items *items, size_t index, const ItemStack stack, i
             progress += item->progress;
             eaten += item->eaten;
             moisture += item->moisture;
+            retting += item->retting;
             unlink_item(items, index, previous, slot);
         } else {
             previous = slot;
@@ -2031,6 +2089,7 @@ static ItemStack take_group(Items *items, size_t index, const ItemStack stack, i
     result.progress = (uint16_t)((progress + taken / 2) / taken);
     result.eaten = (uint16_t)((eaten + taken / 2) / taken);
     result.moisture = (uint16_t)((moisture + taken / 2) / taken);
+    result.retting = (uint16_t)((retting + taken / 2) / taken);
     return result;
 }
 
@@ -2221,7 +2280,8 @@ ItemStack item_as_stack(const Item *item)
                        .forbidden = item->forbidden != 0,
                        .made = item->made,
                        .maker = item->maker,
-                       .moisture = item->moisture};
+                       .moisture = item->moisture,
+                       .retting = item->retting};
 }
 
 void items_set_now(Items *items, uint64_t tick)
@@ -2498,10 +2558,37 @@ static bool advance_moisture(Item *item, int hours, ItemConditions here)
     return true;
 }
 
+/* Rets an item lying wet and warm enough (ItemDef.rets): wetter than it was
+ * cut, past ITEM_RETTING_WET_SHARE of the way from fresh to soaked (rain,
+ * water; stems drying after the cut do not ret), or under the dew of a damp
+ * night in the open; whether it changed. */
+static bool advance_retting(Item *item, int hours, ItemConditions here)
+{
+    const ItemWater *water = &ITEM_DEFS[item->type].water;
+    float wet = water->fresh + ITEM_RETTING_WET_SHARE * (water->room - water->fresh);
+    if (here.celsius <= ITEM_RETTING_MIN_CELSIUS || (item_moisture(item) < wet && !here.dew)) {
+        return false;
+    }
+    float warmth = (here.celsius - ITEM_RETTING_MIN_CELSIUS) /
+                   (ITEM_RETTING_REFERENCE_CELSIUS - ITEM_RETTING_MIN_CELSIUS);
+    float rate = (warmth < ITEM_RETTING_WARM_MAX ? warmth : ITEM_RETTING_WARM_MAX) *
+                 (here.in_water ? ITEM_RETTING_WATER : 1.0f);
+    long units = lroundf((float)ITEM_RETTING_UNITS * rate * (float)hours / ITEM_RETTING_HOURS);
+    long most = lroundf(ITEM_RETTING_MAX * (float)ITEM_RETTING_UNITS);
+    long retting = (long)item->retting + (units > 1 ? units : 1);
+    retting = retting < most ? retting : most;
+    if (retting == item->retting) {
+        return false;
+    }
+    item->retting = (uint16_t)retting;
+    return true;
+}
+
 static ItemFate advance_item(Item *item, int hours, ItemConditions here)
 {
     const ItemDef *def = &ITEM_DEFS[item->type];
     bool wet = def->water.room > 0.0f && advance_moisture(item, hours, here);
+    bool retted = def->rets && advance_retting(item, hours, here);
     if (def->rot_days > 0.0f && here.rot_rate > 0.0f) {
         float rate = here.rot_rate;
         if (def->water.room > 0.0f) {
@@ -2518,6 +2605,9 @@ static ItemFate advance_item(Item *item, int hours, ItemConditions here)
         item->hit_points = (uint16_t)(item->hit_points - lost);
         item->progress = (uint16_t)(total % ITEM_ROT_STEP);
         return ITEM_FATE_CHANGED;
+    }
+    if (retted) {
+        return ITEM_FATE_CHANGED; /* Shown on the tile: a new stamp. */
     }
     return wet ? ITEM_FATE_MOISTURE : ITEM_FATE_SAME;
 }
@@ -2634,7 +2724,7 @@ ItemsCheck items_check(const Items *items)
                 stack->forbidden != expected.forbidden || stack->quality != expected.quality ||
                 stack->hit_points != expected.hit_points || stack->progress != expected.progress ||
                 stack->moisture != expected.moisture || stack->eaten != expected.eaten ||
-                stack->held != 0) {
+                stack->retting != expected.retting || stack->held != 0) {
                 found(&check, "a tile's summary is not its newest group", (long)i);
             }
             bool mixed = false;
@@ -2761,6 +2851,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
             if (item->moisture != 0) {
                 hash = hash_fnv1a64(hash, &item->moisture, sizeof(item->moisture));
             }
+            if (item->retting != 0) { /* Hashes of games without retting stay as they were. */
+                hash = hash_fnv1a64(hash, &item->retting, sizeof(item->retting));
+            }
         }
     }
     /* Items in loads, by slot. */
@@ -2785,6 +2878,9 @@ uint64_t items_hash(const Items *items, uint64_t hash)
         if (item->moisture != 0) {
             hash = hash_fnv1a64(hash, &item->moisture, sizeof(item->moisture));
         }
+        if (item->retting != 0) {
+            hash = hash_fnv1a64(hash, &item->retting, sizeof(item->retting));
+        }
     }
     return hash;
 }
@@ -2803,6 +2899,7 @@ void item_stack_serialize(Serializer *s, ItemStack *stack)
     ser_u32(s, &stack->made);
     ser_u16(s, &stack->maker);
     ser_u16(s, &stack->moisture);
+    ser_u16(s, &stack->retting);
     ser_u32(s, &stack->held);
 }
 
@@ -2817,7 +2914,7 @@ static bool stack_is_empty(const ItemStack *stack)
     return stack->type == 0 && stack->quality == 0 && stack->count == 0 && stack->hit_points == 0 &&
            stack->progress == 0 && stack->eaten == 0 && stack->corpse == 0 &&
            stack->forbidden == 0 && stack->woods == 0 && stack->made == 0 && stack->maker == 0 &&
-           stack->moisture == 0 && stack->held == 0;
+           stack->moisture == 0 && stack->retting == 0 && stack->held == 0;
 }
 
 /* The summaries of the tiles: those not empty, each after the gap since the
@@ -2871,6 +2968,7 @@ static void item_serialize(Serializer *s, Item *item)
     ser_u8(s, &item->forbidden);
     ser_u16(s, &item->woods);
     ser_u16(s, &item->moisture);
+    ser_u16(s, &item->retting);
     ser_u32(s, &item->made);
     ser_u16(s, &item->maker);
     ser_u32(s, &item->next);

@@ -388,6 +388,11 @@ ItemQuality recipe_quality_cap_of(RecipeType recipe, const ItemStack inputs[RECI
         base = (1.0 - SHAPING_TOOL_SHARE) * base + SHAPING_TOOL_SHARE * (double)tool.quality;
     }
     int cap = (int)floor(base + 0.5) + ITEM_QUALITY_CAP_BONUS;
+    /* Retted stems give a finer fibre; over retted, a rotten one. */
+    if (inputs[0].count > 0 && item_def((ItemType)inputs[0].type) != NULL &&
+        item_def((ItemType)inputs[0].type)->rets) {
+        cap += item_retting_cap_bonus(item_stack_retting(inputs[0]));
+    }
     if (def->tool_use == TOOL_USE_SCRAPING && tool.count > 0 && tool.type == ITEM_FLAKE) {
         cap -= FLAKE_SCRAPING_CAP_MALUS;
     }
@@ -398,6 +403,15 @@ ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
 {
     ItemStack inputs[RECIPE_INGREDIENT_MAX] = {input};
     return recipe_quality_cap_of(recipe, inputs, (ItemStack){.type = ITEM_NONE});
+}
+
+float recipe_work_factor(RecipeType recipe, const ItemStack inputs[RECIPE_INGREDIENT_MAX])
+{
+    const ItemDef *main = item_def((ItemType)inputs[0].type);
+    if (recipe_def(recipe) == NULL || inputs[0].count <= 0 || main == NULL || !main->rets) {
+        return 1.0f;
+    }
+    return item_retting_work_factor(item_stack_retting(inputs[0]));
 }
 
 bool recipe_needs_fire(RecipeType recipe)

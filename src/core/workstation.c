@@ -711,7 +711,7 @@ bool workstation_add_craft_work(Workstations *workstations, int index, int bill,
         return false;
     }
     RecipeType recipe = (RecipeType)station->work_recipe;
-    station->work_progress += work;
+    station->work_progress += work * recipe_work_factor(recipe, station->work_inputs);
     if (station->work_progress < recipe_def(recipe)->work) {
         return false;
     }
