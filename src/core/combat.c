@@ -49,6 +49,14 @@ static const AttackDef ATTACK_DEFS[ATTACK_TYPE_COUNT] = {
     [ATTACK_HARDENED_LIGHT_SPEAR_THRUST] = {"hardened_light_spear_thrust",
                                             N_("attack.spear_thrust"), INJURY_CUT, 8.4f, 0.75f,
                                             1.3f, 1, BODY_LIMB_ARMS, STRIKE_MARK_CUT},
+    /* A flint point cuts deeper than fire-hardened wood. */
+    [ATTACK_STONE_SPEAR_THRUST] = {"stone_spear_thrust", N_("attack.spear_thrust"), INJURY_CUT,
+                                   14.0f, 0.8f, 1.4f, 1, BODY_LIMB_ARMS, STRIKE_MARK_CUT},
+    [ATTACK_STONE_LIGHT_SPEAR_THRUST] = {"stone_light_spear_thrust", N_("attack.spear_thrust"),
+                                         INJURY_CUT, 10.5f, 0.75f, 1.3f, 1, BODY_LIMB_ARMS,
+                                         STRIKE_MARK_CUT},
+    [ATTACK_HAFTED_AXE_CHOP] = {"hafted_axe_chop", N_("attack.chop"), INJURY_CUT, 10.0f, 0.7f, 1.4f,
+                                1, BODY_LIMB_ARMS, STRIKE_MARK_CUT},
 };
 
 const AttackDef *attack_def(AttackType type)

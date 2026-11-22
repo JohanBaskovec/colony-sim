@@ -19,6 +19,8 @@ static const KnowledgeDef KNOWLEDGE_DEFS[KNOWLEDGE_COUNT] = {
     /* Starting knowledges too, until knowledges can be learnt or invented. */
     [KNOWLEDGE_SKIN_WORKING] = {"skin_working", N_("knowledge.skin_working"), true},
     [KNOWLEDGE_BONE_WORKING] = {"bone_working", N_("knowledge.bone_working"), true},
+    [KNOWLEDGE_HAFTING] = {"hafting", N_("knowledge.hafting"), true},
+    [KNOWLEDGE_FELLING] = {"felling", N_("knowledge.felling"), true},
 };
 
 const KnowledgeDef *knowledge_def(KnowledgeType knowledge)

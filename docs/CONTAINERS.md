@@ -610,7 +610,7 @@ The rest of the list waits for systems of its own, each a step of the roadmap
    **sinew thread** (dried, pounded, shredded, moistened), the **bone awl** and the
    **eyed needle**; then **hide bags** and a **skin water bag** (with Skin working:
    scraping and drying hides).
-3. **Hafting** (`docs/KNOWLEDGE.md` §13) and **birch tar** (bark heated without
+3. *(Built, but the watertight box: docs/KNOWLEDGE.md §13)* **Hafting** (`docs/KNOWLEDGE.md` §13) and **birch tar** (bark heated without
    air: a pit or a covered pot, at a hearth): glue for hafted tools, and the
    seams of a box or a bucket sealed so that it holds **water**.
 4. **Carrying water and boiling** (a watertight container, settlers filling it at

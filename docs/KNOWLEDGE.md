@@ -1176,6 +1176,21 @@ tar). Spear making and stone knapping lead to it (§1.5). It makes at once:
 - the **hafted axe**, the first axe, which unlocks felling trees (with the
   Felling knowledge).
 
+*As built* (with Felling): **Hafting** and **Felling** are starting knowledges
+for now (the later stream). **Birch tar**: three sheets of birch bark heated at
+an open hearth (a fire burning), Hafting 50, 1 h: a lump. **Stone-tipped
+spears** (Hafting 50, 1 h): a throwing or thrusting spear, fire-hardened or not,
+a flake and a lump of tar, a flake or a hand axe to split the tip; the spear
+keeps its wood; attacks 14 (thrusting, the fire-hardened one 11) and 10.5
+(throwing, 8.4). The **hafted axe** (Hafting 55, 1.5 h): a hand axe, a branch
+for the handle and tar; a weapon too (10). **Felling** (`TOOL_USE_FELLING`):
+the hafted axe ×1, a hand axe in the fist 0.2, a chopper 0.15, bare hands
+nothing; the felling orders and the woodcutting zones need Felling 50, and
+are offered only to a settler carrying a tool for them (`handy_for()` in
+core/colonist.c, as rods and poles are), who fetches a better axe close by;
+the tree falls as `tree_fell()` says. Glue in other crafts and the watertight
+box (with carrying water) come later. `SAVE_VERSION` 23.
+
 **Blade technology** (knowledge). Long regular blades struck from a prepared
 core: better spear points, and real knife blades that can be hafted. Stone
 knapping leads to it (§1.5).

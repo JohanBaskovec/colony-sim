@@ -1653,6 +1653,45 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         fill_outlined(renderer, tip, shade(wood, hardened ? -90 : -50));
         break;
     }
+    case ITEM_STONE_TIPPED_THROWING_SPEAR:
+    case ITEM_STONE_TIPPED_THRUSTING_SPEAR: {
+        /* A shaft, a black band of tar and a grey flint point. */
+        bool thrusting = type == ITEM_STONE_TIPPED_THRUSTING_SPEAR;
+        float thickness = SDL_max(1.0f, floorf(h * (thrusting ? 0.12f : 0.08f)));
+        SDL_FRect shaft = {tile->x + floorf(w * 0.06f), tile->y + floorf(h * 0.5f),
+                           floorf(w * 0.68f), thickness};
+        fill_outlined(renderer, shaft, SPEAR_COLOR);
+        SDL_FRect tar = {shaft.x + shaft.w - floorf(w * 0.06f), shaft.y, floorf(w * 0.06f),
+                         thickness};
+        batch_quad(renderer, (SDL_Color){30, 26, 22, 255}, &tar);
+        SDL_FRect point = {shaft.x + shaft.w, shaft.y - floorf(thickness * 0.3f), floorf(w * 0.18f),
+                           thickness + floorf(thickness * 0.6f)};
+        fill_outlined(renderer, point, FLINT_COLOR);
+        break;
+    }
+    case ITEM_HAFTED_AXE: {
+        /* A wooden handle, the flint head set across its end with tar. */
+        float thickness = SDL_max(1.0f, floorf(h * 0.1f));
+        SDL_FRect handle = {tile->x + floorf(w * 0.18f), tile->y + floorf(h * 0.56f),
+                            floorf(w * 0.6f), thickness};
+        fill_outlined(renderer, handle, SPEAR_COLOR);
+        SDL_FRect head = {handle.x + handle.w - floorf(w * 0.08f), tile->y + floorf(h * 0.32f),
+                          floorf(w * 0.16f), floorf(h * 0.4f)};
+        fill_outlined(renderer, head, FLINT_COLOR);
+        SDL_FRect tar = {head.x, handle.y, head.w, thickness};
+        batch_quad(renderer, (SDL_Color){30, 26, 22, 255}, &tar);
+        break;
+    }
+    case ITEM_BIRCH_TAR: {
+        /* A small black lump, glossy on top. */
+        SDL_FRect lump = {tile->x + floorf(w * 0.38f), tile->y + floorf(h * 0.5f),
+                          floorf(w * 0.24f), floorf(h * 0.18f)};
+        fill_outlined(renderer, lump, (SDL_Color){34, 28, 24, 255});
+        SDL_FRect shine = {lump.x + 2.0f, lump.y + 1.0f, SDL_max(1.0f, floorf(lump.w * 0.3f)),
+                           SDL_max(1.0f, floorf(lump.h * 0.25f))};
+        batch_quad(renderer, (SDL_Color){110, 100, 90, 255}, &shine);
+        break;
+    }
     case ITEM_BRANCHES:
     case ITEM_TWIGS: {
         /* Long thin branches, or a pile of short twigs. */

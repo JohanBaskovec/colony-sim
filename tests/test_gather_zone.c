@@ -164,7 +164,7 @@ static void test_definitions(void)
     CHECK(gather_job_def(GATHER_JOB_DIG)->fetches_tool);
     CHECK(!gather_job_def(GATHER_JOB_CUT_GRASS)->fetches_tool);
     CHECK(!gather_job_doable_at(GATHER_JOB_HARVEST, KNOWLEDGE_MASTERY_LEVEL - 0.1));
-    CHECK(!gather_job_doable_at(GATHER_JOB_CHOP, KNOWLEDGE_LEVEL_MAX));
+    CHECK(gather_job_doable_at(GATHER_JOB_CHOP, KNOWLEDGE_MASTERY_LEVEL)); /* With an axe. */
     CHECK(gather_job_def(GATHER_JOB_CHOP)->work_type == WORK_WOODCUTTING);
 }
 

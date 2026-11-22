@@ -173,8 +173,8 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
                          RESOURCE(GATHER_HAZELNUTS) | RESOURCE(GATHER_CHESTNUTS) |
                              RESOURCE(GATHER_APPLES) | RESOURCE(GATHER_PEARS),
                          TOOL_USE_NONE, false},
-    [GATHER_JOB_CHOP] = {"chop", N_("colonist.task.chop"), WORK_WOODCUTTING, KNOWLEDGE_NONE,
-                         KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_NONE, false},
+    [GATHER_JOB_CHOP] = {"chop", N_("colonist.task.chop"), WORK_WOODCUTTING, KNOWLEDGE_FELLING,
+                         KNOWLEDGE_MASTERY_LEVEL, RESOURCE(GATHER_WOOD), TOOL_USE_FELLING, true},
 };
 
 #undef GATHERING

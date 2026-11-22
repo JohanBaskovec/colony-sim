@@ -959,6 +959,32 @@ static void test_rods_wait_for_an_edge(void)
     game_shutdown(&game);
 }
 
+/* Felling (docs/KNOWLEDGE.md §13): an order to fell a tree waits for a settler carrying an axe;
+ * with a hafted axe it is felled, and its logs lie where it fell. */
+static void test_a_hafted_axe_fells_a_tree(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist->work_priorities[WORK_HAULING] = WORK_PRIORITY_DISABLED;
+    Map *map = &game.map;
+    map->plants[map_index(map, 16, 10, 0)] = (Plant){.type = PLANT_BIRCH, .growth = 1.0f};
+    tree_build(map, 16, 10, 0);
+    REQUIRE(game_designate_rect(&game, 16, 10, 16, 10, 0, DESIGNATION_CHOP) == 1);
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT(map->plants[map_index(map, 16, 10, 0)].type, PLANT_BIRCH); /* No axe. */
+    CHECK(!(colonist->task == TASK_WORK && !colonist->gathering));
+    colonist_add_tool(colonist, item_stack_make(ITEM_HAFTED_AXE, 1, ITEM_QUALITY_STANDARD, 150));
+    for (int i = 0; i < 40000 && map->plants[map_index(map, 16, 10, 0)].type == PLANT_BIRCH; i++) {
+        run_ticks(&game, 1);
+    }
+    CHECK_EQ_INT(map->plants[map_index(map, 16, 10, 0)].type, PLANT_NONE);
+    CHECK((int)game.items.totals[ITEM_WOOD] > 0);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 /* Nettle stems at their moisture (0 .. 1). */
 static ItemStack stems_at(float moisture)
 {
@@ -1560,6 +1586,7 @@ int main(void)
     RUN_TEST(test_a_worn_basket_is_mended);
     RUN_TEST(test_a_carcass_is_butchered);
     RUN_TEST(test_rods_wait_for_an_edge);
+    RUN_TEST(test_a_hafted_axe_fells_a_tree);
     RUN_TEST(test_a_tray_wants_pliable_bark);
     RUN_TEST(test_nettle_stems_become_fibre_then_cord);
     RUN_TEST(test_a_bill_without_pliable_bark_lets_the_next_one_go);

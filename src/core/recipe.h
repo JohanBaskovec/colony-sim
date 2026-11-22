@@ -71,6 +71,11 @@ typedef enum RecipeType {
     RECIPE_DRESS_HIDE,   /* A raw hide scraped and worked soft with fat. */
     RECIPE_HIDE_BAG,     /* Dressed hide sewn into a bag. */
     RECIPE_MEND_HIDE_BAG,
+    /* Hafting (docs/KNOWLEDGE.md §13). */
+    RECIPE_BIRCH_TAR,                    /* Birch bark heated without air. */
+    RECIPE_STONE_TIPPED_THROWING_SPEAR,  /* A flake set in tar on a throwing spear. */
+    RECIPE_STONE_TIPPED_THRUSTING_SPEAR, /* The same on a thrusting spear. */
+    RECIPE_HAFTED_AXE,                   /* A hand axe set in a handle with tar. */
     RECIPE_COUNT
 } RecipeType;
 

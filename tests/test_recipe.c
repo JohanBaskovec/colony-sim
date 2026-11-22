@@ -1,5 +1,9 @@
 #include "core/carry.h"
 #include "core/recipe.h"
+#include "core/designation.h"
+#include "core/gather_zone.h"
+#include "core/weapon.h"
+#include "core/combat.h"
 #include "core/tool.h"
 #include "core/wood.h"
 #include "core/workstation.h"
@@ -462,6 +466,45 @@ static void test_skins_bone_and_sewing(void)
     CHECK(item_types_has(recipe_tool_types(recipe_def(RECIPE_BARK_BOX), 0), ITEM_BONE_AWL));
 }
 
+/* Hafting (docs/KNOWLEDGE.md §13): birch bark heated at a hearth into tar; a flake set in tar on a
+ * spear (fire-hardened or not), a stone point cutting deeper; a hand axe set in a handle, the
+ * first axe, which fells trees. */
+static void test_hafting(void)
+{
+    CHECK(recipe_needs_fire(RECIPE_BIRCH_TAR));
+    CHECK_EQ_INT(recipe_def(RECIPE_BIRCH_TAR)->knowledge, KNOWLEDGE_HAFTING);
+    ItemStack bark[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_BIRCH_BARK, 3, 60, 20)};
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_BIRCH_TAR, bark, (ItemStack){.type = ITEM_NONE}, 75.0, NULL,
+                              out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_BIRCH_TAR);
+    CHECK(recipe_accepts_ingredient(RECIPE_STONE_TIPPED_THRUSTING_SPEAR, 0,
+                                    item_stack_make(ITEM_THRUSTING_SPEAR, 1, 60, 70)));
+    ItemStack spear = item_stack_make(ITEM_THRUSTING_SPEAR_HARDENED, 1, 60, 100);
+    spear.woods = wood_bit(PLANT_ASH);
+    ItemStack parts[RECIPE_INGREDIENT_MAX] = {spear, item_stack_make(ITEM_FLAKE, 1, 70, 15),
+                                              item_stack_make(ITEM_BIRCH_TAR, 1, 60, 50)};
+    REQUIRE(recipe_craft_with(RECIPE_STONE_TIPPED_THRUSTING_SPEAR, parts,
+                              item_stack_make(ITEM_FLAKE, 1, 60, 15), 75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_STONE_TIPPED_THRUSTING_SPEAR);
+    CHECK_EQ_INT(out[0].woods, wood_bit(PLANT_ASH)); /* Its shaft's wood. */
+    const AttackDef *stone = attack_def(weapon_def(ITEM_STONE_TIPPED_THRUSTING_SPEAR)->attack);
+    const AttackDef *hardened = attack_def(weapon_def(ITEM_THRUSTING_SPEAR_HARDENED)->attack);
+    CHECK(stone->damage > hardened->damage);
+    CHECK(weapon_def(ITEM_STONE_TIPPED_THROWING_SPEAR)->spear);
+    ItemStack axe[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_HAND_AXE, 1, 60, 120),
+                                            item_stack_make(ITEM_BRANCHES, 1, 50, 20),
+                                            item_stack_make(ITEM_BIRCH_TAR, 1, 60, 50)};
+    REQUIRE(recipe_craft_with(RECIPE_HAFTED_AXE, axe, item_stack_make(ITEM_FLAKE, 1, 60, 15), 75.0,
+                              NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_HAFTED_AXE);
+    CHECK(tool_type_factor(TOOL_USE_FELLING, ITEM_HAFTED_AXE) >
+          4.0f * tool_type_factor(TOOL_USE_FELLING, ITEM_HAND_AXE));
+    CHECK(tool_type_factor(TOOL_USE_FELLING, ITEM_NONE) == 0.0f);
+    CHECK_EQ_INT(gather_job_def(GATHER_JOB_CHOP)->knowledge, KNOWLEDGE_FELLING);
+    CHECK_EQ_INT(designation_def(DESIGNATION_CHOP)->tool_use, TOOL_USE_FELLING);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -607,6 +650,7 @@ int main(void)
     RUN_TEST(test_coiled_basket);
     RUN_TEST(test_butchering);
     RUN_TEST(test_skins_bone_and_sewing);
+    RUN_TEST(test_hafting);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

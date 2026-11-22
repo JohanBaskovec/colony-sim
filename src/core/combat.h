@@ -87,6 +87,9 @@ typedef enum AttackType {
     ATTACK_HARDENED_STAFF,              /* The same, fire-hardened. */
     ATTACK_LIGHT_SPEAR_THRUST,          /* A throwing spear, in melee. */
     ATTACK_HARDENED_LIGHT_SPEAR_THRUST, /* The same, fire-hardened. */
+    ATTACK_STONE_SPEAR_THRUST,          /* A thrusting spear tipped with flint. */
+    ATTACK_STONE_LIGHT_SPEAR_THRUST,    /* A throwing spear tipped with flint, in melee. */
+    ATTACK_HAFTED_AXE_CHOP,             /* A hafted axe. */
     ATTACK_TYPE_COUNT
 } AttackType;
 

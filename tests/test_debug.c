@@ -337,8 +337,8 @@ static void test_instant_deconstruct(void)
     game_shutdown(&game);
 }
 
-/* Orders to fell trees and to mine rock, which nobody can carry out yet, can
- * be given with the cheat on, and are carried out at once. */
+/* Orders to mine rock, which nobody can carry out yet, and to fell trees, which needs an axe
+ * nobody carries here, are carried out at once with the cheat on. */
 static void test_instant_fell_and_mine(void)
 {
     Game game;
@@ -349,7 +349,7 @@ static void test_instant_fell_and_mine(void)
     tree_build(map, 10, 10, 0);
     map_set_rock(map, 20, 20, 0, ROCK_GRANITE);
     map_set_rock(map, 22, 20, 0, ROCK_GRANITE);
-    CHECK(!game_designation_available(&game, DESIGNATION_CHOP));
+    CHECK(game_designation_available(&game, DESIGNATION_CHOP)); /* Felling is known... */
     CHECK(game_designation_available(&game, DESIGNATION_MINE)); /* A shelter builder digs earth. */
     CHECK(game_designation_available(&game, DESIGNATION_DIG));
     /* Given from a tile of the trunk: the order goes on its foot. */
@@ -357,7 +357,7 @@ static void test_instant_fell_and_mine(void)
     CHECK_EQ_INT(designation_get(&game.designations, 10, 10, 0), DESIGNATION_CHOP);
     CHECK_EQ_INT(game_designate_rect(&game, 20, 20, 20, 20, 0, DESIGNATION_MINE), 1);
     run_ticks(&game, 10);
-    CHECK(map->rock[map_index(map, 10, 10, 0)] == ROCK_WOOD); /* Nobody to do it. */
+    CHECK(map->rock[map_index(map, 10, 10, 0)] == ROCK_WOOD); /* ...but nobody has an axe. */
     CHECK(map->rock[map_index(map, 20, 20, 0)] == ROCK_GRANITE);
 
     game_set_instant_fell_and_mine(&game, true);

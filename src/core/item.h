@@ -130,6 +130,11 @@ typedef enum ItemType {
     ITEM_BONE_NEEDLE,  /* A thin bone needle with an eye drilled through: sews. */
     ITEM_LEATHER,      /* A piece of dressed hide (about a quarter of a square metre). */
     ITEM_HIDE_BAG,     /* Sewn of dressed hide, slung: about 12 litres, closed. */
+    /* Hafting (docs/KNOWLEDGE.md §13). */
+    ITEM_BIRCH_TAR,                    /* A lump of tar drawn from birch bark: glue. */
+    ITEM_STONE_TIPPED_THROWING_SPEAR,  /* A flake point set in tar on a throwing spear. */
+    ITEM_STONE_TIPPED_THRUSTING_SPEAR, /* The same on a thrusting spear. */
+    ITEM_HAFTED_AXE, /* A hand axe set in a wooden handle with tar: fells trees. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,

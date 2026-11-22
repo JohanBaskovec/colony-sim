@@ -33,6 +33,8 @@ typedef enum KnowledgeType {
     KNOWLEDGE_BASKETRY,     /* Trays, baskets, bags, bark boxes. */
     KNOWLEDGE_SKIN_WORKING, /* Dressing hides, sewing them (docs/KNOWLEDGE.md §9). */
     KNOWLEDGE_BONE_WORKING, /* Awls and needles of bone. */
+    KNOWLEDGE_HAFTING,      /* Birch tar, stone points and blades fixed on shafts (§13). */
+    KNOWLEDGE_FELLING,      /* Felling trees, with an axe. */
     KNOWLEDGE_COUNT
 } KnowledgeType;
 

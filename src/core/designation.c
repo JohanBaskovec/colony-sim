@@ -29,7 +29,8 @@ static const DesignationDef DESIGNATION_DEFS[DESIGNATION_COUNT] = {
                               TOOL_USE_DIGGING},
     /* Felling needs an axe and the Woodcutting knowledge: neither exists yet. */
     [DESIGNATION_CHOP] = {"chop", N_("designation.chop"), N_("colonist.task.chop"),
-                          WORK_WOODCUTTING, KNOWLEDGE_NONE, KNOWLEDGE_MASTERY_LEVEL, TOOL_USE_NONE},
+                          WORK_WOODCUTTING, KNOWLEDGE_FELLING, KNOWLEDGE_MASTERY_LEVEL,
+                          TOOL_USE_FELLING},
     /* Gatherers' work; the plant decides the level and the tool
      * (designation_min_level_at(), designation_tool_use_at()). */
     [DESIGNATION_HARVEST] = {"harvest", N_("designation.harvest"), N_("colonist.task.harvest"),

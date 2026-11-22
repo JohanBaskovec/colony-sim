@@ -410,6 +410,26 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                            150, true, true),
                        .length_cm = 40, .form = ITEM_FORM_LIMP, .strap = true,
                        .container_litres = 12.0f, WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    /* Birch bark heated without air (under a mound of hot ashes, or rolled against a
+     * cold stone): a sticky black tar, the oldest glue (docs/KNOWLEDGE.md §13). */
+    [ITEM_BIRCH_TAR] = {DEF("birch_tar", N_("item.birch_tar"), ITEM_CATEGORY_RESOURCES, 0.02f, 0.1f,
+                            0.0f, 50, true, true),
+                        .length_cm = 4, .form = ITEM_FORM_RIGID},
+    [ITEM_STONE_TIPPED_THROWING_SPEAR] =
+        {DEF("stone_tipped_throwing_spear", N_("item.stone_tipped_throwing_spear"),
+             ITEM_CATEGORY_WEAPONS, 0.85f, 10.0f, 0.0f, 80, true, true),
+         .length_cm = 185, .form = ITEM_FORM_RIGID, .wooden = true,
+         .wood_name_key = N_("item.stone_tipped_throwing_spear.of_wood"), TOOL_WATER},
+    [ITEM_STONE_TIPPED_THRUSTING_SPEAR] =
+        {DEF("stone_tipped_thrusting_spear", N_("item.stone_tipped_thrusting_spear"),
+             ITEM_CATEGORY_WEAPONS, 1.55f, 12.0f, 0.0f, 110, true, true),
+         .length_cm = 225, .form = ITEM_FORM_RIGID, .wooden = true,
+         .wood_name_key = N_("item.stone_tipped_thrusting_spear.of_wood"), TOOL_WATER},
+    /* The hand axe set into a split handle with tar and bound: the first axe. */
+    [ITEM_HAFTED_AXE] = {DEF("hafted_axe", N_("item.hafted_axe"), ITEM_CATEGORY_TOOLS, 1.2f, 4.0f,
+                             0.0f, 150, true, true),
+                         .length_cm = 50, .form = ITEM_FORM_RIGID, .wooden = true,
+                         .wood_name_key = N_("item.hafted_axe.of_wood"), TOOL_WATER},
     [ITEM_SETTLER_BODY] = {DEF("settler_body", N_("item.settler_body"), ITEM_CATEGORY_BODIES, 65.0f,
                                1000.0f, 0.0f, 100, false, true),
                            .length_cm = 170, .form = ITEM_FORM_LIMP, .rot_days = 10.0f},

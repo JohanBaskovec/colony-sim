@@ -2124,6 +2124,7 @@ typedef struct WorkSearch {
      * the same. */
     bool pick_jobs;
     uint8_t self;
+    bool no_tools; /* GameDebug.no_tools: no work waits for a tool (handy_for()). */
     /* When set: is_open_job() and is_open_pick() answers kept for the search
      * under way (pathfinder_memo_start() before it), each tile being asked
      * about once per neighbor. */
@@ -2134,16 +2135,22 @@ typedef struct WorkSearch {
 enum { MEMO_OPEN_JOB, MEMO_OPEN_PICK };
 
 /* Gathering jobs a colonist may do: work type among `mask`, and knowledge. */
+/* Whether a colonist can do work of a kind at all: bare hands do it, or it carries a tool for
+ * it (with GameDebug.no_tools, always). Work that bare hands cannot do (rods, poles, felling)
+ * is left to those carrying a tool: they would stand there for ever otherwise. */
+static bool handy_for(const Colonist *colonist, ToolUse use, bool no_tools)
+{
+    return no_tools || use == TOOL_USE_NONE || tool_type_factor(use, ITEM_NONE) > 0.0f ||
+           colonist_tool_factor(colonist, use, item_types_all()) > 0.0f;
+}
+
 /* The gathering jobs a colonist may take among the work types of `mask`: those it knows
- * enough for, and, for those that bare hands cannot do (rods, poles), only while it carries a
- * tool for them (with GameDebug.no_tools, any): it would stand there for ever otherwise. */
+ * enough for and is handy for (handy_for()). */
 static GatherJobMask gather_jobs_for(const Colonist *colonist, WorkTypeMask mask, bool no_tools)
 {
     GatherJobMask jobs = 0;
     for (int job = 0; job < GATHER_JOB_COUNT; job++) {
-        ToolUse use = gather_job_def((GatherJob)job)->tool_use;
-        bool handy = no_tools || use == TOOL_USE_NONE || tool_type_factor(use, ITEM_NONE) > 0.0f ||
-                     colonist_tool_factor(colonist, use, item_types_all()) > 0.0f;
+        bool handy = handy_for(colonist, gather_job_def((GatherJob)job)->tool_use, no_tools);
         if ((mask & WORK_TYPE_BIT(gather_job_def((GatherJob)job)->work_type)) && handy &&
             colonist_can_gather(colonist, (GatherJob)job)) {
             jobs |= GATHER_JOB_BIT(job);
@@ -2167,6 +2174,8 @@ static bool is_open_job(const WorkSearch *search, int x, int y, int z)
         if (type == DESIGNATION_NONE ||
             !(search->mask & WORK_TYPE_BIT(designation_def(type)->work_type)) ||
             !colonist_can_do_at(search->worker, search->map, x, y, z, type) ||
+            !handy_for(search->worker, designation_tool_use_at(search->map, x, y, z, type),
+                       search->no_tools) ||
             designation_waits_for_support(search->designations, search->map, x, y, z) ||
             designation_waits_to_ripen(search->designations, search->map, x, y, z) ||
             designation_forbidden(search->designations, search->map, x, y, z)) {
@@ -2541,7 +2550,8 @@ static bool try_designation_job(Colonist *colonist, const ColonistContext *conte
                          .reservations = context->reservations,
                          .worker = colonist,
                          .mask = mask,
-                         .self = context->worker_id};
+                         .self = context->worker_id,
+                         .no_tools = context->no_tools};
     /* Only taking a roof apart is ordered on a roof tile (a roof site is
      * found among the construction sites). */
     search.roof_jobs = !zones && context->plan_map->roof_count > 0 &&

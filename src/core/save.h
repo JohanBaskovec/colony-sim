@@ -15,7 +15,7 @@
 #include <stdint.h>
 
 /* Raised whenever what is saved changes: other versions are refused. */
-#define SAVE_VERSION 22
+#define SAVE_VERSION 23
 
 typedef enum SaveError {
     SAVE_OK,

@@ -65,6 +65,12 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
          N_("tool_use.sewing"),
          0.0f,
          {[ITEM_BONE_NEEDLE] = 1.0f, [ITEM_BONE_AWL] = 0.6f, [ITEM_FLINT_BORER] = 0.3f}},
+    /* A tree is felled with a hafted axe; a hand axe held in the fist only gnaws at it. */
+    [TOOL_USE_FELLING] =
+        {"felling",
+         N_("tool_use.felling"),
+         0.0f,
+         {[ITEM_HAFTED_AXE] = 1.0f, [ITEM_HAND_AXE] = 0.2f, [ITEM_CHOPPER] = 0.15f}},
 };
 
 /* Speed factor of a tool of the worst and of the best quality, linear in

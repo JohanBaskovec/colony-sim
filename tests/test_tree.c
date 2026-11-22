@@ -1216,11 +1216,12 @@ static void test_chop_order(void)
     grow_tree(&map, 12, 12, 0, GROWN, 2);
     put_tree(&map, 16, 4, 0, SAPLING);
 
-    /* Nobody can fell yet (woodcutting and axes come later). */
+    /* Felling: a knowledge, and an axe (handy_for() in core/colonist.c). */
     const DesignationDef *def = designation_def(DESIGNATION_CHOP);
     REQUIRE(def != NULL);
     CHECK_EQ_INT(def->work_type, WORK_WOODCUTTING);
-    CHECK(!designation_doable_at(DESIGNATION_CHOP, 100.0));
+    CHECK(designation_doable_at(DESIGNATION_CHOP, 100.0));
+    CHECK_EQ_INT(def->tool_use, TOOL_USE_FELLING);
 
     /* On a tree's foot or a sapling; the order's tile from any trunk tile. */
     CHECK(designation_can_apply(&map, 4, 4, 0, DESIGNATION_CHOP));
