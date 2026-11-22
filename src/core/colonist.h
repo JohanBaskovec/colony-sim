@@ -55,6 +55,7 @@
 
 #include "core/serialize.h"
 
+#include "core/allowed_area.h"
 #include "core/animal.h"
 #include "core/appearance.h"
 #include "core/attributes.h"
@@ -567,6 +568,9 @@ typedef struct Colonist {
      * hashed). */
     bool drafted;
     uint8_t draft_end;
+    /* Its allowed area (core/allowed_area.h): an index in Game.areas, 0 (the
+     * default area) at first. */
+    uint8_t area;
     /* The animal the player ordered it to attack while mobilized
      * (colonist_order_attack()): it goes after it; NONE otherwise. */
     Combatant attack_target;
@@ -629,6 +633,9 @@ typedef struct ColonistContext {
     /* Who stops where (core/occupancy.h): a settler never stops on a tile
      * someone else holds. NULL: anyone stops anywhere. */
     Occupancy *occupancy;
+    /* The allowed areas (core/allowed_area.h): its searches and walks keep to
+     * its own (Colonist.area) on its turn. NULL: it goes anywhere. */
+    const AllowedAreas *areas;
 } ColonistContext;
 
 /* Fighting (docs/COMBAT.md): an enemy further than this many tiles is forgotten,
@@ -638,6 +645,10 @@ typedef struct ColonistContext {
 #define COLONIST_FLEE_DISTANCE 18
 #define COLONIST_FLEE_MAX_COST 70.0f
 #define COLONIST_CHASE_MAX_COST 50.0f
+
+/* How far a settler out of its allowed area with nothing to do looks for the
+ * way back into it (travel cost). */
+#define COLONIST_AREA_RETURN_MAX_COST 600.0f
 /* Making way (core/occupancy.h): the nearest free tile within this travel cost. */
 #define COLONIST_MAKE_WAY_MAX_COST 12.0f
 /* Power of a blow by strength: ×(COLONIST_POWER_BASE + COLONIST_POWER_PER_STRENGTH
@@ -702,6 +713,11 @@ bool colonist_is_night(uint64_t tick);
 bool colonist_is_night_for(uint64_t tick, uint8_t worker_id);
 
 void colonist_tick(Colonist *colonist, const ColonistContext *context);
+
+/* Its allowed area (or the area itself) changed: it looks for work, food...
+ * again at once, and gives up what it was doing outside the area now (not
+ * the player's orders, a fight, sleep). */
+void colonist_area_changed(Colonist *colonist, const ColonistContext *context);
 
 /*
  * Changes how much a colonist favors a work type (WORK_PRIORITY_DISABLED:

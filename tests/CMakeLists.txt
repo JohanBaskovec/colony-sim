@@ -3,6 +3,7 @@
 
 set(COLONY_UNIT_TESTS
     test_alert
+    test_allowed_area
     test_animal
     test_appearance
     test_attributes
@@ -87,6 +88,7 @@ set(COLONY_UNIT_TESTS
 # are read from the RUN_TEST lines; the file is a configure dependency, so a
 # new test is picked up at the next build.
 set(COLONY_SPLIT_TESTS
+    test_allowed_area
     test_animal
     test_colonist
     test_crafting

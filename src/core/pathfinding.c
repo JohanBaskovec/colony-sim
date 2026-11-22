@@ -248,6 +248,12 @@ bool path_walker_can_step(PathWalker walker, const Map *map, TilePos from, TileP
            climb_cost(map, animal, map_index(map, low.x, low.y, low.z)) > 0.0f;
 }
 
+/* Whether the walker's allowed area holds the tile (always, with none set). */
+static inline bool area_allows(const Pathfinder *finder, uint32_t index)
+{
+    return finder->area_bit == 0 || (finder->area_masks[index] & finder->area_bit) != 0;
+}
+
 typedef struct SearchGoal {
     const TilePos *goal;     /* A* when set... */
     TilePredicate predicate; /* ...Dijkstra towards a predicate otherwise... */
@@ -298,6 +304,11 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
                                                        target->goal->y, target->goal->z)) {
         return -1; /* Would explore the whole reachable area for nothing. */
     }
+    if (target->goal != NULL &&
+        !area_allows(finder,
+                     (uint32_t)map_index(map, target->goal->x, target->goal->y, target->goal->z))) {
+        return -1; /* Out of the walker's allowed area. */
+    }
 
     const uint32_t width = (uint32_t)map->width;
     const uint32_t level = width * (uint32_t)map->height; /* Tiles of a level. */
@@ -324,6 +335,7 @@ static int64_t search(Pathfinder *finder, const Map *map, TilePos start, const S
             target->goal != NULL
                 ? (x == target->goal->x && y == target->goal->y && z == target->goal->z)
                 : (target->predicate != NULL && target->predicate(map, x, y, z, target->userdata) &&
+                   area_allows(finder, current) &&
                    (finder->stop_filter == NULL ||
                     finder->stop_filter(map, x, y, z, finder->stop_userdata)));
         if (reached) {

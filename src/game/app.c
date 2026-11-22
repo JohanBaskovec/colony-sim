@@ -6,6 +6,7 @@
 #include "core/scenario.h"
 #include "core/tree.h"
 #include "core/util.h"
+#include "game/areas_window.h"
 #include "game/bottom_bar.h"
 #include "game/hud.h"
 #include "game/inspector.h"
@@ -64,7 +65,8 @@ bool app_tool_active(const App *app, AppTool tool, int type)
     case APP_TOOL_BUILD: return (int)app->build_type == type;
     case APP_TOOL_STRUCTURE: return (int)app->structure_type == type;
     case APP_TOOL_STOCKPILE:
-    case APP_TOOL_GATHER: return app->zone_mode == type;
+    case APP_TOOL_GATHER:
+    case APP_TOOL_AREA: return app->zone_mode == type;
     case APP_TOOL_DEBUG: return app->debug_mode == type;
     case APP_TOOL_FORBID: return app->forbid_allows == (type == APP_ALLOW);
     default: return true;
@@ -83,7 +85,7 @@ void app_toggle_tool(App *app, AppTool tool, int type)
             app->build_type = (WorkstationType)type;
         } else if (tool == APP_TOOL_STRUCTURE) {
             app->structure_type = (StructureType)type;
-        } else if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER) {
+        } else if (tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER || tool == APP_TOOL_AREA) {
             app->zone_mode = type;
         } else if (tool == APP_TOOL_DEBUG) {
             app->debug_mode = type;
@@ -822,6 +824,7 @@ bool app_init(App *app, const CliOptions *options)
     app->tuning = render_tuning_default();
     app->move_item_id = ITEM_ID_NONE;
     app->selected_item.id = ITEM_ID_NONE;
+    app->area_naming = ALLOWED_AREA_NONE;
     log_set_sink(sdl_log_sink, NULL);
     SDL_SetAppMetadata("Thawmoor", COLONY_VERSION, "io.github.colony-sim");
 
@@ -907,7 +910,7 @@ bool app_init(App *app, const CliOptions *options)
                           ? GAME_WILDLIFE_DENSITY * (float)options->wildlife / 100.0f
                           : GAME_WILDLIFE_DENSITY;
     params.world.river.width = options->river;
-    params.free_radius = GAME_START_FREE_RADIUS;
+    params.start_area = GAME_START_AREA_SIZE;
     if (!game_init(&app->game, &params)) {
         LOG_ERROR("World generation failed");
         return false;
@@ -969,6 +972,7 @@ static void close_window(App *app, AppWindow window)
     case APP_WINDOW_INSPECTOR_TAB: app->inspector_tab = -1; break;
     case APP_WINDOW_WORK: app->show_work_panel = false; break;
     case APP_WINDOW_LOG: app->show_log = false; break;
+    case APP_WINDOW_AREAS: areas_window_set_open(app, false); break;
     case APP_WINDOW_HELP: app->show_help = false; break;
     case APP_WINDOW_ITEM_INFO: app->show_item_info = false; break;
     case APP_WINDOW_DEBUG: app->show_debug_menu = false; break;
@@ -1473,6 +1477,8 @@ static void close_game_windows(App *app)
 {
     app->show_work_panel = false;
     app->show_log = false;
+    areas_window_set_open(app, false);
+    app->area_selected = 0;
     app->show_help = false;
     app->show_debug_menu = false;
     app->show_items_menu = false;
@@ -1773,7 +1779,22 @@ static void tool_rect(const App *app, float screen_x, float screen_y, int *x0, i
 static bool tool_drags_area(AppTool tool)
 {
     return tool == APP_TOOL_DESIGNATE || tool == APP_TOOL_STOCKPILE || tool == APP_TOOL_GATHER ||
-           tool == APP_TOOL_FORBID;
+           tool == APP_TOOL_FORBID || tool == APP_TOOL_AREA;
+}
+
+bool app_drag_box(const App *app, int *x0, int *y0, int *x1, int *y1)
+{
+    if (!tool_drags_area(app->tool) || !app->left_button_down) {
+        return false;
+    }
+    int ax, ay, bx, by;
+    tool_rect(app, app->ui.mouse_x, app->ui.mouse_y, &ax, &ay, &bx, &by);
+    const Map *map = &app->game.map;
+    *x0 = SDL_clamp(SDL_min(ax, bx), 0, map->width - 1);
+    *y0 = SDL_clamp(SDL_min(ay, by), 0, map->height - 1);
+    *x1 = SDL_clamp(SDL_max(ax, bx), 0, map->width - 1);
+    *y1 = SDL_clamp(SDL_max(ay, by), 0, map->height - 1);
+    return true;
 }
 
 /* Whether a zone tool drag removes tiles: in the removal or shrinking mode,
@@ -1784,15 +1805,63 @@ static bool zone_tool_removes(const App *app)
            (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
 }
 
-/* Whether the zone tool works on the selected zone alone. */
+/* Whether the zone tool edits the selected zone alone (extending or shrinking it). */
 static bool zone_tool_edits(const App *app)
 {
     return app->zone_mode == APP_ZONE_EXTEND || app->zone_mode == APP_ZONE_SHRINK;
 }
 
-/* Stockpile tool release: adds the rectangle to the selected stockpile and
- * those it overlaps (merged into one), or creates a new one, which becomes
- * selected; or removes zone tiles. */
+/* What a stockpile or gathering zone drag does, as apply_stockpile_tool() and
+ * apply_gather_tool() do it. */
+static ZoneDrag zone_tool_drag(const App *app)
+{
+    if (zone_tool_edits(app)) {
+        return zone_tool_removes(app) ? ZONE_DRAG_SHRINK : ZONE_DRAG_EXTEND;
+    }
+    if (zone_tool_removes(app)) {
+        return ZONE_DRAG_REMOVE;
+    }
+    return app->zone_mode == APP_ZONE_ADD_UPROOT ? ZONE_DRAG_ADD_UPROOT : ZONE_DRAG_ADD;
+}
+
+bool app_drag_zone_size(App *app, long *size, bool *removed)
+{
+    bool zone_tool = app->tool == APP_TOOL_STOCKPILE || app->tool == APP_TOOL_GATHER ||
+                     app->tool == APP_TOOL_AREA;
+    int x0, y0, x1, y1;
+    if (!zone_tool || !app_drag_box(app, &x0, &y0, &x1, &y1)) {
+        return false;
+    }
+    const Game *game = &app->game;
+    ZoneDrag drag = zone_tool_drag(app);
+    bool held = !zone_tool_removes(app);
+    int index = app->tool == APP_TOOL_STOCKPILE ? app->selected_stockpile
+                : app->tool == APP_TOOL_GATHER  ? app->selected_gather_zone
+                                                : app->area_selected;
+    uint32_t revision = app->tool == APP_TOOL_STOCKPILE ? game->stockpiles.revision
+                        : app->tool == APP_TOOL_GATHER  ? game->gather_zones.revision
+                                                        : game->areas.revision;
+    int key[11] = {(int)app->tool + 1, (int)drag,         held,         index, x0, y0, x1, y1,
+                   app->drag_level,    app->camera.level, (int)revision};
+    if (memcmp(key, app->drag_size.key, sizeof(key)) != 0) {
+        memcpy(app->drag_size.key, key, sizeof(key));
+        int z0 = app->drag_level, z1 = app->camera.level;
+        if (app->tool == APP_TOOL_STOCKPILE) {
+            app->drag_size.size =
+                game_stockpile_drag_size(game, drag, index, x0, y0, x1, y1, z0, z1);
+        } else if (app->tool == APP_TOOL_GATHER) {
+            app->drag_size.size =
+                game_gather_zone_drag_size(game, drag, index, x0, y0, x1, y1, z0, z1);
+        } else {
+            app->drag_size.size = game_area_drag_size(game, index, x0, y0, x1, y1, z0, z1, held);
+        }
+    }
+    *size = app->drag_size.size;
+    *removed = app->tool != APP_TOOL_AREA && drag == ZONE_DRAG_REMOVE;
+    return true;
+}
+
+/* Whether the zone tool works on the selected zone alone. */
 /* The debug tool: the chosen item (one, or a full stack) on the tile, the
  * selected colonists moved there, a tree planted or grown, an animal, or a
  * blow on whoever is there. */
@@ -1852,52 +1921,83 @@ static void apply_debug_tool(App *app, float screen_x, float screen_y)
     }
 }
 
+/* The levels a zone drag covers: from the one shown when the button was pressed to the one
+ * shown now. */
+static void drag_levels(const App *app, int *low, int *high)
+{
+    *low = SDL_min(app->drag_level, app->camera.level);
+    *high = SDL_max(app->drag_level, app->camera.level);
+}
+
+/* Stockpile tool release: adds the rectangle to the selected stockpile and
+ * those it overlaps (merged into one), or creates a new one, which becomes
+ * selected; or removes zone tiles, on each level the drag covers. */
 static void apply_stockpile_tool(App *app, float screen_x, float screen_y)
 {
-    const int z = app->camera.level; /* The level shown. */
-    int x0, y0, x1, y1;
+    int x0, y0, x1, y1, low, high;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
-    if (zone_tool_edits(app)) {
-        int index = app->selected_stockpile;
-        if (zone_tool_removes(app)) {
-            game_shrink_stockpile_rect(&app->game, index, x0, y0, x1, y1, z);
+    drag_levels(app, &low, &high);
+    for (int z = low; z <= high; z++) { /* Each level shown, as a drag on it would. */
+        if (zone_tool_edits(app)) {
+            int index = app->selected_stockpile;
+            if (zone_tool_removes(app)) {
+                game_shrink_stockpile_rect(&app->game, index, x0, y0, x1, y1, z);
+                prune_stockpile_selection(app);
+            } else {
+                game_extend_stockpile_rect(&app->game, index, x0, y0, x1, y1, z);
+            }
+        } else if (zone_tool_removes(app)) {
+            game_remove_stockpile_rect(&app->game, x0, y0, x1, y1, z);
             prune_stockpile_selection(app);
         } else {
-            game_extend_stockpile_rect(&app->game, index, x0, y0, x1, y1, z);
+            int index =
+                game_add_stockpile_rect(&app->game, x0, y0, x1, y1, z, app->selected_stockpile);
+            if (index != STOCKPILE_NONE) { /* The next levels join it. */
+                select_stockpile(app, index);
+            }
         }
-    } else if (zone_tool_removes(app)) {
-        game_remove_stockpile_rect(&app->game, x0, y0, x1, y1, z);
-        prune_stockpile_selection(app);
-    } else {
-        select_stockpile(
-            app, game_add_stockpile_rect(&app->game, x0, y0, x1, y1, z, app->selected_stockpile));
     }
 }
 
 /* Gathering zone tool release: like the stockpile tool. */
 static void apply_gather_tool(App *app, float screen_x, float screen_y)
 {
-    const int z = app->camera.level; /* The level shown. */
-    int x0, y0, x1, y1;
+    int x0, y0, x1, y1, low, high;
     tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
-    if (zone_tool_edits(app)) {
-        int index = app->selected_gather_zone;
-        if (zone_tool_removes(app)) {
-            game_shrink_gather_zone_rect(&app->game, index, x0, y0, x1, y1, z);
+    drag_levels(app, &low, &high);
+    for (int z = low; z <= high; z++) {
+        if (zone_tool_edits(app)) {
+            int index = app->selected_gather_zone;
+            if (zone_tool_removes(app)) {
+                game_shrink_gather_zone_rect(&app->game, index, x0, y0, x1, y1, z);
+                prune_gather_zone_selection(app);
+            } else {
+                game_extend_gather_zone_rect(&app->game, index, x0, y0, x1, y1, z);
+            }
+        } else if (zone_tool_removes(app)) {
+            game_remove_gather_zone_rect(&app->game, x0, y0, x1, y1, z);
             prune_gather_zone_selection(app);
         } else {
-            game_extend_gather_zone_rect(&app->game, index, x0, y0, x1, y1, z);
+            int index = app->zone_mode == APP_ZONE_ADD_UPROOT
+                            ? game_add_uproot_zone_rect(&app->game, x0, y0, x1, y1, z,
+                                                        app->selected_gather_zone)
+                            : game_add_gather_zone_rect(&app->game, x0, y0, x1, y1, z,
+                                                        app->selected_gather_zone);
+            if (index != GATHER_ZONE_NONE) { /* The next levels join it. */
+                select_gather_zone(app, index);
+            }
         }
-    } else if (zone_tool_removes(app)) {
-        game_remove_gather_zone_rect(&app->game, x0, y0, x1, y1, z);
-        prune_gather_zone_selection(app);
-    } else if (app->zone_mode == APP_ZONE_ADD_UPROOT) {
-        select_gather_zone(app, game_add_uproot_zone_rect(&app->game, x0, y0, x1, y1, z,
-                                                          app->selected_gather_zone));
-    } else {
-        select_gather_zone(app, game_add_gather_zone_rect(&app->game, x0, y0, x1, y1, z,
-                                                          app->selected_gather_zone));
     }
+}
+
+/* Allowed area tool release: the box of tiles from the level where the drag began to the one
+ * shown, added to the area painted (or taken away). */
+static void apply_area_tool(App *app, float screen_x, float screen_y)
+{
+    int x0, y0, x1, y1;
+    tool_rect(app, screen_x, screen_y, &x0, &y0, &x1, &y1);
+    game_set_area_rect(&app->game, app->area_selected, x0, y0, x1, y1, app->drag_level,
+                       app->camera.level, !zone_tool_removes(app));
 }
 
 static void drag_held_item(App *app, float screen_x, float screen_y);
@@ -1956,6 +2056,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         app->drag_start_y = button->y;
         camera_screen_to_world(&app->camera, button->x, button->y, &app->drag_world_x,
                                &app->drag_world_y);
+        app->drag_level = app->camera.level;
         if (app_tool_active(app, APP_TOOL_DEBUG, APP_DEBUG_MOVE_ITEM)) {
             app->debug_held = app_item_under(app, button->x, button->y);
         }
@@ -2066,6 +2167,8 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
         apply_stockpile_tool(app, button->x, button->y);
     } else if (app->tool == APP_TOOL_GATHER) {
         apply_gather_tool(app, button->x, button->y);
+    } else if (app->tool == APP_TOOL_AREA) {
+        apply_area_tool(app, button->x, button->y);
     } else {
         if (app->box_selecting) {
             select_in_box(app, button->x, button->y, additive);
@@ -2077,6 +2180,7 @@ static void handle_mouse_button(App *app, const SDL_MouseButtonEvent *button)
             app->build_menu_open = false;
             app->show_work_panel = false;
             app->show_log = false;
+            areas_window_set_open(app, false);
         }
     }
     app->left_button_down = false;
@@ -2122,6 +2226,9 @@ static void handle_event(App *app, const SDL_Event *event)
     if (app->screen == APP_SCREEN_TITLE) {
         title_screen_handle_event(app, event);
         return;
+    }
+    if (areas_window_handle_event(app, event)) {
+        return; /* An area's name being typed. */
     }
     switch (event->type) {
     case SDL_EVENT_QUIT: app->running = false; break;
@@ -2192,6 +2299,9 @@ static void update_camera(App *app, float dt)
                (float)(keys[APP_KEY_LEFT] || keys[SDL_SCANCODE_LEFT]);
     float dy = (float)(keys[APP_KEY_DOWN] || keys[SDL_SCANCODE_DOWN]) -
                (float)(keys[APP_KEY_UP] || keys[SDL_SCANCODE_UP]);
+    if (app->area_naming != ALLOWED_AREA_NONE) {
+        dx = dy = 0.0f; /* The keys type a name. */
+    }
     if (dx != 0.0f || dy != 0.0f) {
         float speed = APP_PAN_SPEED * dt;
         if (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) {
@@ -2356,6 +2466,8 @@ static void draw_area_preview(App *app)
             render_area_outline(app->renderer, &app->camera, map->width, map->height,
                                 stockpile_area_contains, &area);
         }
+    } else if (preview.kind == AREA_PREVIEW_ALLOWED) {
+        render_allowed_area(app->renderer, &app->game, &app->camera, preview.stockpile);
     } else if (preview.kind == AREA_PREVIEW_REACH) {
         const uint8_t *mask = reach_mask(app, map, &preview);
         if (mask != NULL) {
@@ -2466,6 +2578,8 @@ static void render_frame(App *app)
                                app->zone_mode == APP_ZONE_ADD_UPROOT);
         } else if (app->tool == APP_TOOL_FORBID) {
             render_forbid_area(app->renderer, &app->camera, x0, y0, x1, y1, !app->forbid_allows);
+        } else if (app->tool == APP_TOOL_AREA) {
+            render_allowed_area_rect(app->renderer, &app->camera, x0, y0, x1, y1, remove);
         } else {
             render_designation_area(app->renderer, &app->camera, x0, y0, x1, y1, app->tool_type);
             render_designation_warnings(app->renderer, &app->game, &app->camera, x0, y0, x1, y1,

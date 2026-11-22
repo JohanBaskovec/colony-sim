@@ -134,6 +134,14 @@ int stockpile_extend_view(Stockpiles *stockpiles, const Map *map, int index, int
 int stockpile_shrink_view(Stockpiles *stockpiles, const Map *map, int index, int x0, int y0, int x1,
                           int y1, int z);
 
+/* The tiles a drag of the rectangle over the levels z0 to z1 (in any order) would meet, each seen
+ * through `map` as by the _view functions and counted once (two levels may see the same ground):
+ * `free_tiles` gets those no stockpile holds that one may cover (`blocked` as in
+ * stockpiles_add_rect()), `held[i]` those stockpile i holds. Changes nothing. */
+void stockpiles_count_view_box(const Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1,
+                               int y1, int z0, int z1, const uint8_t *const *blocked,
+                               long *free_tiles, long held[STOCKPILE_MAX]);
+
 void stockpile_delete(Stockpiles *stockpiles, int index);
 
 /* NULL when the index is out of range or the slot is unused. */

@@ -574,6 +574,18 @@ static void climb_row(UiLayout *layout, const GatherZone *zone, Action *action)
     layout->y += layout->row;
 }
 
+/* Tiles of the zone no settler's allowed area holds: nobody goes there of their own accord. */
+static void out_of_areas_row(UiLayout *layout, const Game *game, int index)
+{
+    long outside = game_gather_zone_tiles_out_of_areas(game, index);
+    if (outside > 0) {
+        char number[16], text[TEXT_SIZE];
+        tr_integer(number, sizeof(number), outside);
+        TR_FORMAT(text, sizeof(text), tr_plural("zone.out_of_areas", outside), number);
+        ui_layout_label(layout, text, 0.0f, false);
+    }
+}
+
 /* Size, priority, climbing. */
 static void summary_rows(UiLayout *layout, void *userdata)
 {
@@ -588,6 +600,7 @@ static void summary_rows(UiLayout *layout, void *userdata)
     if (zone->forbidden) {
         ui_layout_label(layout, tr("gather_zone.left_alone"), 0.0f, true);
     }
+    out_of_areas_row(layout, &rows->app->game, rows->index);
 }
 
 /* What to gather in it. */
@@ -740,6 +753,7 @@ static void uproot_summary_rows(UiLayout *layout, void *userdata)
     if (zone->forbidden) {
         ui_layout_label(layout, tr("uproot_zone.left_alone"), 0.0f, true);
     }
+    out_of_areas_row(layout, &rows->app->game, rows->index);
 }
 
 /* One check box for all the plants, then one for each. */

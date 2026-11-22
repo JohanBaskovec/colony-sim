@@ -50,6 +50,14 @@ void alerts_compute(const Game *game, Alerts *out)
         if (need_level(colonist->needs[NEED_WATER]) == NEED_LEVEL_CRITICAL) {
             count_for(&found[ALERT_THIRSTY], id);
         }
+        if (colonist->needs[NEED_FOOD] < NEED_LOW_THRESHOLD &&
+            colonist->search_failures[SEARCH_FOOD] > 0) {
+            count_for(&found[ALERT_FOOD_OUT_OF_REACH], id);
+        }
+        if (colonist->needs[NEED_WATER] < NEED_LOW_THRESHOLD &&
+            colonist->search_failures[SEARCH_WATER] > 0) {
+            count_for(&found[ALERT_WATER_OUT_OF_REACH], id);
+        }
         if (need_level(colonist->needs[NEED_REST]) == NEED_LEVEL_CRITICAL) {
             count_for(&found[ALERT_EXHAUSTED], id);
         }
@@ -76,10 +84,15 @@ void alerts_compute(const Game *game, Alerts *out)
 const char *alert_name_key(AlertType type)
 {
     static const char *const KEYS[ALERT_TYPE_COUNT] = {
-        [ALERT_IN_DANGER] = NP_("alert.in_danger"), [ALERT_STARVING] = NP_("alert.starving"),
-        [ALERT_THIRSTY] = NP_("alert.thirsty"),     [ALERT_EXHAUSTED] = NP_("alert.exhausted"),
-        [ALERT_NO_FOOD] = NP_("alert.no_food"),     [ALERT_BREAKDOWN] = NP_("alert.breakdown"),
+        [ALERT_IN_DANGER] = NP_("alert.in_danger"),
+        [ALERT_STARVING] = NP_("alert.starving"),
+        [ALERT_THIRSTY] = NP_("alert.thirsty"),
+        [ALERT_EXHAUSTED] = NP_("alert.exhausted"),
+        [ALERT_NO_FOOD] = NP_("alert.no_food"),
+        [ALERT_BREAKDOWN] = NP_("alert.breakdown"),
         [ALERT_NO_BED] = NP_("alert.no_bed"),
+        [ALERT_FOOD_OUT_OF_REACH] = NP_("alert.food_out_of_reach"),
+        [ALERT_WATER_OUT_OF_REACH] = NP_("alert.water_out_of_reach"),
     };
     return (unsigned)type < ALERT_TYPE_COUNT ? KEYS[type] : NULL;
 }
@@ -94,6 +107,8 @@ const char *alert_description_key(AlertType type)
         [ALERT_NO_FOOD] = N_("alert.no_food.description"),
         [ALERT_BREAKDOWN] = N_("alert.breakdown.description"),
         [ALERT_NO_BED] = N_("alert.no_bed.description"),
+        [ALERT_FOOD_OUT_OF_REACH] = N_("alert.food_out_of_reach.description"),
+        [ALERT_WATER_OUT_OF_REACH] = N_("alert.water_out_of_reach.description"),
     };
     return (unsigned)type < ALERT_TYPE_COUNT ? KEYS[type] : NULL;
 }

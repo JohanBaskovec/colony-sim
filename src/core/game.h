@@ -7,6 +7,7 @@
 #ifndef COLONY_CORE_GAME_H
 #define COLONY_CORE_GAME_H
 
+#include "core/allowed_area.h"
 #include "core/animal.h"
 #include "core/bed.h"
 #include "core/blood.h"
@@ -137,9 +138,9 @@ typedef struct GameDebug {
 /* The density of wild animals in a game as played (NewGameParams.wildlife). */
 #define GAME_WILDLIFE_DENSITY 1.0f
 
-/* Tiles around the arrival point where the items lie allowed at the start of a game as played
- * (NewGameParams.free_radius). */
-#define GAME_START_FREE_RADIUS 10
+/* Side of the square around the arrival point that the settlers' allowed area holds at the
+ * start of a game as played (NewGameParams.start_area), on every level. */
+#define GAME_START_AREA_SIZE 16
 
 typedef struct NewGameParams {
     WorldGenParams world;
@@ -149,11 +150,11 @@ typedef struct NewGameParams {
      * played). 0, the default: none, as for tests and benchmarks that are
      * not about them. */
     float wildlife;
-    /* Items start forbidden (nobody fetches them) beyond this many tiles of the arrival point,
-     * so that settlers do not walk across the map for materials; those within it start
-     * allowed. 0, the default: none forbidden (tests and benchmarks). GAME_START_FREE_RADIUS
+    /* The default allowed area (core/allowed_area.h) holds a square of this side around the
+     * arrival point, on every level, so that settlers do not walk across the map for
+     * materials. 0, the default: the whole map (tests and benchmarks). GAME_START_AREA_SIZE
      * in a game as played. */
-    int free_radius;
+    int start_area;
 } NewGameParams;
 
 typedef struct Game {
@@ -207,10 +208,10 @@ typedef struct Game {
     bool fog_on;
     bool fog_started; /* The start was explored. */
     TilePos arrival;  /* Where the starting settlers arrived. */
-    /* Tiles around the arrival point where things start allowed (NewGameParams.free_radius):
-     * beyond it, what falls from the trees lands forbidden. 0: nothing is forbidden. */
-    int free_radius;
     bool has_arrival;
+    /* Where each settler may go of its own accord (core/allowed_area.h,
+     * Colonist.area). */
+    AllowedAreas areas;
     Weather weather; /* The sky, warm and cold spells, snow on the ground. */
     /* Where roofs were last checked for support (core/roof.h): derived from
      * the map, not part of game_hash(). */
@@ -901,6 +902,66 @@ int game_extend_stockpile_rect(Game *game, int index, int x0, int y0, int x1, in
 int game_shrink_stockpile_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z);
 int game_extend_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z);
 int game_shrink_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z);
+
+/* What a drag of a zone tool does, as the frontend applies it level by level. */
+typedef enum ZoneDrag {
+    ZONE_DRAG_ADD,        /* game_add_stockpile_rect() (or gathering zone), `index` preferred. */
+    ZONE_DRAG_ADD_UPROOT, /* game_add_uproot_zone_rect() (gathering zones only). */
+    ZONE_DRAG_EXTEND,     /* game_extend_..._rect() of zone `index`. */
+    ZONE_DRAG_SHRINK,     /* game_shrink_..._rect() of zone `index`. */
+    ZONE_DRAG_REMOVE,     /* game_remove_..._rect(): out of every zone. */
+} ZoneDrag;
+
+/* What a drag of the rectangle over the levels shown from z0 to z1 would leave, without doing
+ * it: the size in tiles of the zone drawn, extended or shrunk once done (the zones it joins
+ * included; 0 when none would be left), or for ZONE_DRAG_REMOVE the tiles it takes out of the
+ * zones. */
+long game_stockpile_drag_size(const Game *game, ZoneDrag drag, int index, int x0, int y0, int x1,
+                              int y1, int z0, int z1);
+long game_gather_zone_drag_size(const Game *game, ZoneDrag drag, int index, int x0, int y0, int x1,
+                                int y1, int z0, int z1);
+
+/* ---- Allowed areas (core/allowed_area.h) --------------------------------- */
+
+/* A new area holding no tile, named so (cut to fit). Its index, or ALLOWED_AREA_NONE when there
+ * are ALLOWED_AREA_MAX already. */
+int game_add_area(Game *game, const char *name);
+
+/* Deletes an area (never the last one): its settlers get the default area (the first one). */
+bool game_remove_area(Game *game, int index);
+
+bool game_rename_area(Game *game, int index, const char *name);
+
+/* The area holds every tile it did not hold, and none of the others. */
+bool game_invert_area(Game *game, int index);
+
+/* Adds (`held`) or takes away the tiles of a rectangle (corners in any order) on the levels shown
+ * from z0 to z1 (in any order) to an area: what is seen in it, so on each column down to the
+ * ground seen from the lowest of them (map_view_level()), up to the highest. Returns how many
+ * tiles changed. Settlers bound to the area look again for what to do, and give up what they did
+ * outside it now. */
+long game_set_area_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z0, int z1,
+                        bool held);
+
+/* The tiles the area would hold once game_set_area_rect() is done with these arguments (0 for an
+ * area out of the list). Changes nothing. */
+long game_area_drag_size(const Game *game, int index, int x0, int y0, int x1, int y1, int z0,
+                         int z1, bool held);
+
+/* Whether the area holds the tile seen at (x, y) from level z (map_view_level()): what the
+ * frontend outlines. */
+bool game_area_holds_seen(const Game *game, int index, int x, int y, int z);
+
+/* Gives a settler an allowed area. */
+bool game_set_colonist_area(Game *game, EntityId id, int index);
+
+/* Living settlers bound to an area. */
+int game_area_settler_count(const Game *game, int index);
+
+/* Tiles of a stockpile or a gathering zone that no living settler's allowed area holds (nobody
+ * goes there of their own accord); 0 with no settler. */
+long game_stockpile_tiles_out_of_areas(const Game *game, int index);
+long game_gather_zone_tiles_out_of_areas(const Game *game, int index);
 
 /* ---- Workstations -------------------------------------------------------- */
 

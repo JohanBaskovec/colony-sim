@@ -180,6 +180,15 @@ void render_gather_zones(SDL_Renderer *renderer, const Game *game, const Camera 
 void render_gather_area(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
                         int y1, bool remove, bool uproot);
 
+/* An allowed area (core/allowed_area.h) on the level shown: a tint over the tiles it holds
+ * there (the ground seen through open space, game_area_holds_seen()) and a line along its
+ * edges. */
+void render_allowed_area(SDL_Renderer *renderer, const Game *game, const Camera *camera, int index);
+
+/* Rectangle of tiles being added to (or removed from) an allowed area. */
+void render_allowed_area_rect(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                              int y1, bool remove);
+
 /* Plants (trees, shrubs, low plants), colonists (with what they carry) and
  * the animals the colony sees (game_animal_seen()), from the back to the
  * front so that tall sprites overlap correctly; selected colonists get a
@@ -254,6 +263,7 @@ typedef enum RenderIcon {
     RENDER_ICON_CHANGE_WEAPON,  /* A blade between two arrows going round. */
     RENDER_ICON_ATTACK,         /* A spear point thrust at a red mark. */
     RENDER_ICON_INFO,           /* A lowercase "i" in a ring: what is known of the item. */
+    RENDER_ICON_ALLOWED_AREA,   /* A dashed square with a walker's footprints in it. */
 } RenderIcon;
 
 void render_workstation_icon(SDL_Renderer *renderer, SDL_FRect rect, WorkstationType type);

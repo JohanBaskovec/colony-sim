@@ -61,7 +61,7 @@ void game_default_params(NewGameParams *params)
     worldgen_default_params(&params->world);
     params->colonist_count = GAME_DEFAULT_COLONIST_COUNT;
     params->wildlife = 0.0f;
-    params->free_radius = 0;
+    params->start_area = 0;
 }
 
 /* ---- Colonist storage ---------------------------------------------------- */
@@ -208,6 +208,7 @@ static ColonistContext colonist_context(Game *game, uint32_t slot)
         .animals = &game->animals,
         .combat = &game->combat,
         .occupancy = &game->occupancy,
+        .areas = &game->areas,
         .self = game_colonist_id_at(game, slot),
     };
     return context;
@@ -626,7 +627,8 @@ static bool init_modules(Game *game)
         !pathfinder_init(&game->pathfinder, game->map.width, game->map.height, game->map.depth) ||
         !regions_init(&game->regions, game->map.width, game->map.height, game->map.depth) ||
         !pool_init(&game->colonist_pool, COLONIST_MAX) || !animals_init(&game->animals) ||
-        !occupancy_init(&game->occupancy, game->map.width, game->map.height, game->map.depth)) {
+        !occupancy_init(&game->occupancy, game->map.width, game->map.height, game->map.depth) ||
+        !allowed_areas_init(&game->areas, game->map.width, game->map.height, game->map.depth)) {
         return false;
     }
     /* Items dropped keep off storage they would mix up. */
@@ -745,25 +747,16 @@ static void update_river(Game *game)
     }
 }
 
-/* Every item lying more than `radius` tiles (straight line on the map) from the arrival point
- * is forbidden, to be allowed by the player when wanted. */
-static void forbid_far_items(Game *game, int radius)
+/* The default allowed area holds a square of side `size` around the arrival point, on every
+ * level, and nothing else. */
+static void start_area(Game *game, int size)
 {
     const Map *map = &game->map;
-    const long limit = (long)radius * radius;
-    for (int z = 0; z < map->depth; z++) {
-        if (game->items.level_stacks[z] == 0) {
-            continue;
-        }
-        for (int y = 0; y < map->height; y++) {
-            for (int x = 0; x < map->width; x++) {
-                long dx = x - game->arrival.x, dy = y - game->arrival.y;
-                if (dx * dx + dy * dy > limit) {
-                    items_set_forbidden(&game->items, x, y, z, true);
-                }
-            }
-        }
-    }
+    AllowedAreas *areas = &game->areas;
+    allowed_areas_set_box(areas, 0, 0, 0, 0, map->width - 1, map->height - 1, map->depth - 1,
+                          false);
+    int x0 = game->arrival.x - size / 2, y0 = game->arrival.y - size / 2;
+    allowed_areas_set_box(areas, 0, x0, y0, 0, x0 + size - 1, y0 + size - 1, map->depth - 1, true);
 }
 
 bool game_init(Game *game, const NewGameParams *params)
@@ -800,9 +793,8 @@ bool game_init(Game *game, const NewGameParams *params)
     /* The light of the world was worked out with it (the plants are set where
      * they can live all year); brought up to date at the end. */
     spawn_starting_colonists(game, params->colonist_count);
-    game->free_radius = params->free_radius;
-    if (params->free_radius > 0 && game->has_arrival) {
-        forbid_far_items(game, params->free_radius);
+    if (params->start_area > 0 && game->has_arrival) {
+        start_area(game, params->start_area);
     }
     regions_update(&game->regions, &game->map); /* Built here, not during the first tick. */
     if (params->wildlife > 0.0f) {
@@ -893,6 +885,7 @@ void game_shutdown(Game *game)
     workstations_free(&game->workstations);
     constructions_free(&game->constructions);
     beds_free(&game->beds);
+    allowed_areas_free(&game->areas);
     map_free(&game->map);
     memset(game, 0, sizeof(*game));
 }
@@ -1162,13 +1155,7 @@ static void update_crowns(Game *game, uint64_t phase)
                       .day = crowns->day,
                       .day_of_year = game_day_of_year(tick),
                       .storm = game->weather.type == WEATHER_STORM};
-    /* What falls far from the colony lands forbidden: nobody walks across the map for it. */
-    if (game->free_radius > 0 && game->has_arrival) {
-        items_forbid_drops_beyond(&game->items, game->arrival.x, game->arrival.y,
-                                  game->free_radius);
-    }
     crowns_hour(crowns, &game->map, &game->items, begin, end, &hour);
-    items_forbid_drops_beyond(&game->items, 0, 0, 0);
 }
 
 static void update_plants(Game *game)
@@ -3264,6 +3251,17 @@ uint64_t game_hash(const Game *game)
         hash = animals_hash(&game->animals, hash);
         hash = hash_fnv1a64(hash, &game->wildlife_rng.state, sizeof(game->wildlife_rng.state));
     }
+    const AllowedAreas *areas = &game->areas;
+    bool whole_map =
+        areas->count == 1 && (size_t)areas->list[0].tiles == map_tile_count(&game->map);
+    if (!whole_map) { /* Apart: hashes of games that bind nobody stay as they were. */
+        hash = allowed_areas_hash(areas, hash);
+        for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+            if (!entity_id_is_none(game_colonist_id_at(game, slot))) {
+                hash = hash_fnv1a64(hash, &game->colonists[slot].area, 1);
+            }
+        }
+    }
     hash = social_hash(&game->social, &game->colonist_pool, hash);
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         EntityId id = game_colonist_id_at(game, slot);
@@ -4097,6 +4095,280 @@ int game_extend_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, 
 int game_shrink_gather_zone_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z)
 {
     return gather_zone_shrink_view(&game->gather_zones, &game->map, index, x0, y0, x1, y1, z);
+}
+
+/* What a drag would leave, from the tiles it meets: `held[i]` those of zone i, `free_tiles` the
+ * free ones the zone drawn may cover. `joins(i)` tells the zones an added box merges into the
+ * zone drawn (those of its kind); `can_create` whether a new zone may be made. */
+static long zone_drag_size(ZoneDrag drag, int index, long free_tiles, const long *held,
+                           const long *cells, const bool *joins, int max, bool can_create)
+{
+    bool valid = index >= 0 && index < max && cells[index] > 0;
+    long size = 0;
+    switch (drag) {
+    case ZONE_DRAG_EXTEND: return valid ? cells[index] + free_tiles : 0;
+    case ZONE_DRAG_SHRINK: return valid ? cells[index] - held[index] : 0;
+    case ZONE_DRAG_REMOVE:
+        for (int i = 0; i < max; i++) {
+            size += held[i];
+        }
+        return size;
+    case ZONE_DRAG_ADD:
+    case ZONE_DRAG_ADD_UPROOT: break;
+    }
+    /* The zone preferred (if of the kind drawn), and every zone of its kind the box touches,
+     * become one, with the free tiles. */
+    bool into = valid && joins[index];
+    size = into ? cells[index] : 0;
+    for (int i = 0; i < max; i++) {
+        if (held[i] > 0 && joins[i] && !(into && i == index)) {
+            size += cells[i];
+            into = true;
+        }
+    }
+    return into || can_create ? size + free_tiles : 0;
+}
+
+long game_stockpile_drag_size(const Game *game, ZoneDrag drag, int index, int x0, int y0, int x1,
+                              int y1, int z0, int z1)
+{
+    if (drag == ZONE_DRAG_ADD_UPROOT) {
+        return 0;
+    }
+    const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
+    /* The same levels as the tools: tiles added are seen in the known world, those taken out in
+     * the map itself. */
+    bool adds = drag == ZONE_DRAG_ADD || drag == ZONE_DRAG_EXTEND;
+    long free_tiles, held[STOCKPILE_MAX], cells[STOCKPILE_MAX];
+    bool joins[STOCKPILE_MAX];
+    stockpiles_count_view_box(&game->stockpiles, adds ? game_view_map(game) : &game->map, x0, y0,
+                              x1, y1, z0, z1, blocked, &free_tiles, held);
+    for (int i = 0; i < STOCKPILE_MAX; i++) {
+        const Stockpile *stockpile = &game->stockpiles.list[i];
+        cells[i] = stockpile->used ? stockpile->cell_count : 0;
+        joins[i] = stockpile->used;
+    }
+    return zone_drag_size(drag, index, free_tiles, held, cells, joins, STOCKPILE_MAX,
+                          game->stockpiles.used_count < STOCKPILE_MAX);
+}
+
+long game_gather_zone_drag_size(const Game *game, ZoneDrag drag, int index, int x0, int y0, int x1,
+                                int y1, int z0, int z1)
+{
+    const uint8_t *blocked[] = {game->workstations.at, game->constructions.workstation_tiles, NULL};
+    bool adds = drag == ZONE_DRAG_ADD || drag == ZONE_DRAG_ADD_UPROOT || drag == ZONE_DRAG_EXTEND;
+    long free_tiles, held[GATHER_ZONE_MAX], cells[GATHER_ZONE_MAX];
+    bool joins[GATHER_ZONE_MAX];
+    gather_zones_count_view_box(&game->gather_zones, adds ? game_view_map(game) : &game->map, x0,
+                                y0, x1, y1, z0, z1, blocked, &free_tiles, held);
+    bool uproot = drag == ZONE_DRAG_ADD_UPROOT;
+    for (int i = 0; i < GATHER_ZONE_MAX; i++) {
+        const GatherZone *zone = &game->gather_zones.list[i];
+        cells[i] = zone->used ? zone->cell_count : 0;
+        joins[i] = zone->used && zone->uproot == uproot; /* Only zones of the kind drawn merge. */
+    }
+    return zone_drag_size(drag, index, free_tiles, held, cells, joins, GATHER_ZONE_MAX,
+                          game->gather_zones.used_count < GATHER_ZONE_MAX);
+}
+
+/* ---- Allowed areas ------------------------------------------------------- */
+
+/* Settlers bound to the areas of `bits` look again for what to do. */
+static void areas_changed(Game *game, uint16_t bits)
+{
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        EntityId id = game_colonist_id_at(game, slot);
+        Colonist *colonist = game_colonist(game, id);
+        if (colonist != NULL && (allowed_area_bit(colonist->area) & bits) != 0) {
+            ColonistContext context = colonist_context(game, slot);
+            colonist_area_changed(colonist, &context);
+        }
+    }
+}
+
+int game_add_area(Game *game, const char *name)
+{
+    return allowed_areas_add(&game->areas, name);
+}
+
+bool game_remove_area(Game *game, int index)
+{
+    if (!allowed_areas_remove(&game->areas, index)) {
+        return false;
+    }
+    uint16_t moved = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        Colonist *colonist = &game->colonists[slot];
+        if (colonist->area == index) {
+            colonist->area = 0;
+            moved |= allowed_area_bit(0);
+        } else if (colonist->area > index) {
+            colonist->area--; /* The same area, one place up. */
+        }
+    }
+    areas_changed(game, moved);
+    return true;
+}
+
+bool game_rename_area(Game *game, int index, const char *name)
+{
+    return allowed_areas_rename(&game->areas, index, name);
+}
+
+bool game_invert_area(Game *game, int index)
+{
+    if (!allowed_areas_invert(&game->areas, index)) {
+        return false;
+    }
+    areas_changed(game, allowed_area_bit(index));
+    return true;
+}
+
+/* The tiles game_set_area_rect() paints: a rectangle (corners in any order) from the lowest
+ * level shown, or the ground seen from it, up to the highest. */
+typedef struct AreaBox {
+    int left, top, right, bottom, low, high;
+} AreaBox;
+
+static AreaBox area_box(const Map *view, int x0, int y0, int x1, int y1, int z0, int z1)
+{
+    return (AreaBox){.low = clampi(z0 < z1 ? z0 : z1, 0, view->depth - 1),
+                     .high = clampi(z0 < z1 ? z1 : z0, 0, view->depth - 1),
+                     .left = clampi(x0 < x1 ? x0 : x1, 0, view->width - 1),
+                     .right = clampi(x0 < x1 ? x1 : x0, 0, view->width - 1),
+                     .top = clampi(y0 < y1 ? y0 : y1, 0, view->height - 1),
+                     .bottom = clampi(y0 < y1 ? y1 : y0, 0, view->height - 1)};
+}
+
+/* The lowest level of a column the box paints. */
+static int area_box_from(const Map *view, const AreaBox *box, int x, int y)
+{
+    int seen = map_view_level(view, x, y, box->low);
+    return seen >= 0 && seen < box->low ? seen : box->low;
+}
+
+long game_area_drag_size(const Game *game, int index, int x0, int y0, int x1, int y1, int z0,
+                         int z1, bool held)
+{
+    const AllowedArea *area = allowed_areas_get(&game->areas, index);
+    if (area == NULL) {
+        return 0;
+    }
+    const Map *view = game_view_map(game);
+    AreaBox box = area_box(view, x0, y0, x1, y1, z0, z1);
+    long changed = 0; /* Tiles of the box the area does not hold (adding), or holds. */
+    for (int y = box.top; y <= box.bottom; y++) {
+        for (int x = box.left; x <= box.right; x++) {
+            for (int z = area_box_from(view, &box, x, y); z <= box.high; z++) {
+                changed += allowed_areas_holds(&game->areas, index, x, y, z) != held;
+            }
+        }
+    }
+    return held ? area->tiles + changed : area->tiles - changed;
+}
+
+long game_set_area_rect(Game *game, int index, int x0, int y0, int x1, int y1, int z0, int z1,
+                        bool held)
+{
+    const Map *view = game_view_map(game);
+    if (!allowed_areas_valid(&game->areas, index)) {
+        return 0;
+    }
+    AreaBox box = area_box(view, x0, y0, x1, y1, z0, z1);
+    long changed = 0;
+    for (int y = box.top; y <= box.bottom; y++) {
+        for (int x = box.left; x <= box.right; x++) {
+            int from = area_box_from(view, &box, x, y);
+            changed += allowed_areas_set_box(&game->areas, index, x, y, from, x, y, box.high, held);
+        }
+    }
+    if (changed > 0) {
+        areas_changed(game, allowed_area_bit(index));
+    }
+    return changed;
+}
+
+bool game_area_holds_seen(const Game *game, int index, int x, int y, int z)
+{
+    int seen = map_view_level(game_view_map(game), x, y, z);
+    return allowed_areas_holds(&game->areas, index, x, y, seen >= 0 ? seen : z);
+}
+
+bool game_set_colonist_area(Game *game, EntityId id, int index)
+{
+    Colonist *colonist = game_colonist(game, id);
+    if (colonist == NULL || !allowed_areas_valid(&game->areas, index)) {
+        return false;
+    }
+    if (colonist->area != index) {
+        colonist->area = (uint8_t)index;
+        ColonistContext context = colonist_context(game, id.index);
+        colonist_area_changed(colonist, &context);
+    }
+    return true;
+}
+
+int game_area_settler_count(const Game *game, int index)
+{
+    int count = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = game_colonist_const(game, game_colonist_id_at(game, slot));
+        count += colonist != NULL && colonist->area == index;
+    }
+    return count;
+}
+
+/* The areas of the living settlers, a bit each. */
+static uint16_t areas_in_use(const Game *game)
+{
+    uint16_t bits = 0;
+    for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
+        const Colonist *colonist = game_colonist_const(game, game_colonist_id_at(game, slot));
+        if (colonist != NULL) {
+            bits |= allowed_area_bit(colonist->area);
+        }
+    }
+    return bits;
+}
+
+/* Tiles of `zone` (index + 1 per tile) equal to `value` in a box that no area of `bits` holds. */
+static long tiles_out_of_areas(const Game *game, const uint8_t *zone, uint8_t value,
+                               const TileBox *box, uint16_t bits)
+{
+    if (bits == 0 || tile_box_is_empty(box)) {
+        return 0;
+    }
+    const Map *map = &game->map;
+    long count = 0;
+    for (int z = box->z0; z <= box->z1; z++) {
+        for (int y = box->y0; y <= box->y1; y++) {
+            for (int x = box->x0; x <= box->x1; x++) {
+                size_t at = map_index(map, x, y, z);
+                count += zone[at] == value && (game->areas.masks[at] & bits) == 0;
+            }
+        }
+    }
+    return count;
+}
+
+long game_stockpile_tiles_out_of_areas(const Game *game, int index)
+{
+    const Stockpile *pile = stockpile_get(&game->stockpiles, index);
+    if (pile == NULL || pile->cell_count == 0) {
+        return 0;
+    }
+    TileBox box = {pile->min_x, pile->min_y, pile->min_z, pile->max_x, pile->max_y, pile->max_z};
+    return tiles_out_of_areas(game, game->stockpiles.zone, (uint8_t)(index + 1), &box,
+                              areas_in_use(game));
+}
+
+long game_gather_zone_tiles_out_of_areas(const Game *game, int index)
+{
+    if (gather_zone_get(&game->gather_zones, index) == NULL) {
+        return 0;
+    }
+    return tiles_out_of_areas(game, game->gather_zones.zone, (uint8_t)(index + 1),
+                              &game->gather_zones.box, areas_in_use(game));
 }
 
 /* ---- Picking ------------------------------------------------------------- */

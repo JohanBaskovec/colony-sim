@@ -7,6 +7,7 @@
 #include "core/tree.h"
 #include "core/wood.h"
 #include "game/animals_panel.h"
+#include "game/areas_window.h"
 #include "game/scenarios_panel.h"
 #include "game/attributes_panel.h"
 #include "game/debug_panel.h"
@@ -1985,20 +1986,21 @@ void hud_inspect_colonists(App *app)
     bool open = one ? inspector_box(app, INSPECT_COLONIST, title, summary_rows, app)
                     : inspector_box(app, INSPECT_COLONISTS, title, panel_rows, &summary);
     inspector_move_action(app, 0);
+    inspector_area_action(app, 1);
     bool draftable = app_selection_draftable(app);
     bool any_drafted = false;
     for (int i = 0; i < app->selected_count; i++) {
         any_drafted |= game_is_drafted(&app->game, app->selected[i]);
     }
     if (!one && draftable) {
-        inspector_draft_action(app, 1);
+        inspector_draft_action(app, 2);
         if (any_drafted) {
-            inspector_attack_action(app, 2);
+            inspector_attack_action(app, 3);
         }
     }
     if (one) {
-        inspector_follow_action(app, 1, FOLLOW_COLONIST, app->selected[0]);
-        int slot = 2;
+        inspector_follow_action(app, 2, FOLLOW_COLONIST, app->selected[0]);
+        int slot = 3;
         if (!colonist_is_down(colonist)) {
             inspector_carry_action(app, slot++);
         }
@@ -2197,6 +2199,7 @@ static void draw_window(App *app, AppWindow window)
     case APP_WINDOW_INSPECTOR: inspector_draw(app); break;
     case APP_WINDOW_WORK: work_panel_draw(app); break;
     case APP_WINDOW_LOG: log_window_draw(app); break;
+    case APP_WINDOW_AREAS: areas_window_draw(app); break;
     case APP_WINDOW_HELP: help_window(app); break;
     case APP_WINDOW_ITEM_INFO: item_info_draw(app); break;
     case APP_WINDOW_DEBUG: debug_panel_draw(app); break;
@@ -2233,6 +2236,9 @@ int hud_open_windows(const App *app, AppWindow out[APP_WINDOW_COUNT])
     }
     if (app->show_log) {
         out[count++] = APP_WINDOW_LOG;
+    }
+    if (app->show_areas) {
+        out[count++] = APP_WINDOW_AREAS;
     }
     if (app->show_help) {
         out[count++] = APP_WINDOW_HELP;
@@ -2376,7 +2382,7 @@ static void draw_notices(App *app)
  * drawn last frame; the bottom of the screen when none is open. */
 static float left_windows_top(const App *app)
 {
-    AppWindow windows[4];
+    AppWindow windows[5];
     int count = 0;
     if (inspector_kind(app) != INSPECT_NONE) {
         windows[count++] = APP_WINDOW_INSPECTOR;
@@ -2390,6 +2396,9 @@ static float left_windows_top(const App *app)
     if (app->show_log) {
         windows[count++] = APP_WINDOW_LOG;
     }
+    if (app->show_areas) {
+        windows[count++] = APP_WINDOW_AREAS;
+    }
     float top = app->ui.screen_height;
     for (int i = 0; i < count; i++) {
         SDL_FRect rect = ui_window_rect(&app->ui, (int)windows[i]);
@@ -2398,6 +2407,47 @@ static float left_windows_top(const App *app)
         }
     }
     return top;
+}
+
+/* While a box of tiles is dragged out (zones, orders): its size; for a zone, the size the zone
+ * will have once the button is released (or the tiles the removal takes out), and the levels
+ * covered when the drag went over several. */
+static void drag_tooltip(App *app)
+{
+    int x0, y0, x1, y1;
+    if (!app_drag_box(app, &x0, &y0, &x1, &y1)) {
+        return;
+    }
+    int width = x1 - x0 + 1, height = y1 - y0 + 1;
+    char count[24], across[16], down[16], size[HUD_LINE_SIZE], levels[HUD_LINE_SIZE];
+    tr_integer(count, sizeof(count), (long long)width * height);
+    tr_integer(across, sizeof(across), width);
+    tr_integer(down, sizeof(down), height);
+    TR_FORMAT(size, sizeof(size), tr_plural("hud.drag_size", (long long)width * height), count,
+              across, down);
+    const char *lines[3] = {size};
+    int line_count = 1;
+    long zone_size;
+    bool removed;
+    char zone[HUD_LINE_SIZE];
+    if (app_drag_zone_size(app, &zone_size, &removed)) { /* What the zone will be. */
+        char tiles[24];
+        tr_integer(tiles, sizeof(tiles), zone_size);
+        TR_FORMAT(zone, sizeof(zone),
+                  removed ? tr_plural("hud.drag_removed", zone_size)
+                          : tr_plural("hud.drag_zone", zone_size),
+                  tiles);
+        lines[line_count++] = zone;
+        if (app->drag_level != app->camera.level) {
+            char low[16], high[16];
+            const Map *map = &app->game.map;
+            hud_level_text(low, sizeof(low), map, SDL_min(app->drag_level, app->camera.level));
+            hud_level_text(high, sizeof(high), map, SDL_max(app->drag_level, app->camera.level));
+            TR_FORMAT(levels, sizeof(levels), tr("hud.drag_levels"), low, high);
+            lines[line_count++] = levels;
+        }
+    }
+    ui_tooltip(&app->ui, lines, line_count);
 }
 
 void hud_draw(App *app)
@@ -2433,7 +2483,7 @@ void hud_draw(App *app)
     float left_top = menu_top; /* Top of what the left side shows, under the resources. */
     /* The main windows take the place of the readout. */
     if (app->hover_valid && inspector_kind(app) == INSPECT_NONE && !app->show_work_panel &&
-        !app->show_log) {
+        !app->show_log && !app->show_areas) {
         Panel tile = {0};
         build_tile_panel(app, &tile, app->hover_x, app->hover_y, app->camera.level);
         panel_size(app, &tile, &width, &height);
@@ -2457,6 +2507,7 @@ void hud_draw(App *app)
     build_menu_draw(app);
     view_controls_draw(app);
     bottom_bar_draw(app);
+    drag_tooltip(app);
     /* Over the windows: it tells what one did (a game saved). */
     hud_draw_message(app, colonist_bar_bottom(app) + HUD_MARGIN);
     ui_draw_popup(&app->ui);

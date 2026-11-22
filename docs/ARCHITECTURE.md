@@ -732,11 +732,35 @@ the setting as the station's default (`Workstation.defaults`, `workstation_save_
 The next bill added there starts from them (`workstation_bill_draft()`: `bill_init()` with what
 was saved, as far as the recipe allows; the frontend drops a saved settler who is gone).
 
-**Falling items and the free radius.** At the start of a game as played the items beyond
-`NewGameParams.free_radius` of the arrival point are forbidden; the dead wood and fruit that
-fall from the crowns later land forbidden there too (`update_crowns()` turns
-`items_forbid_drops_beyond()` on around `crowns_hour()`; `Game.free_radius` is saved), so that
-settlers do not walk across the map for a branch.
+**Allowed areas** (`core/allowed_area.h`, `Game.areas`). Where each settler may go of its
+own accord: a list of at most 16 areas, each a bit of a per-tile `uint16_t` layer (boxes of
+tiles on any levels, added, taken away, inverted); every settler has one (`Colonist.area`),
+the first of the list being the default one (new settlers get it, those of a deleted area go
+back to it; deleting an area moves the bits above it down one). A game as played starts with
+the default area holding a square of `GAME_START_AREA_SIZE` (16) tiles around the arrival
+point on every level (`NewGameParams.start_area`; 0, as for tests and benchmarks: the whole
+map), so that settlers do not walk across the map for a branch; nothing lies forbidden.
+
+The rule lives in the pathfinder (`Pathfinder.area_masks`, `area_bit`), set around a
+settler's turn (`colonist_tick()`): a search for the nearest tile accepts only tiles of the
+area (jobs, food, water, beds, haul sources and destinations, a stroll), and a search toward a
+goal outside it fails (a bed of its own outside, a station). The way there may cross outside
+(round a lake), and work done from a tile of the area may reach a tile beside it. The player's
+orders go anywhere (`start_move()`, an item move, Carry), and so do fights and flights
+(`engage()`), making way (`settle()`) and a mobilized settler; one out of its area with nothing
+to do walks back into it (`return_to_area()`). A change to an area (or a settler's area) makes
+its settlers look again at once and give up what they did outside it
+(`colonist_area_changed()`). Alerts tell of hungry or thirsty settlers whose last search for
+food or water failed (`ALERT_FOOD_OUT_OF_REACH`, `ALERT_WATER_OUT_OF_REACH`), and the zone
+windows of the tiles no settler's area holds (`game_stockpile_tiles_out_of_areas()`). The
+frontend paints areas with a drag that may change level on the way (`App.drag_level`: the box
+covers the levels from the one where the button was pressed to the one shown at release, down
+to the ground seen from the lowest, `game_set_area_rect()`); the stockpile and gathering zone
+tools cover those levels too. While dragging, the size the zone will have is worked out
+without changing anything (`game_area_drag_size()`, `game_stockpile_drag_size()`,
+`game_gather_zone_drag_size()`, from `stockpiles_count_view_box()`: each tile of the box seen
+from those levels counted once). Hashed only when not the default (one area, the whole map), so
+the hashes of games that bind nobody stay as they were.
 
 **Harvest when ripe** (`DESIGNATION_HARVEST_RIPE`) is Harvest that waits for the
 plant's full harvest, the rule of a zone's "wait for the full harvest"

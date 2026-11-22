@@ -53,7 +53,8 @@ footer   u64 FNV-1a hash of everything before it
 Saved: the map and all its layers, revisions and logs; every module of
 `Game` with its state (designations, dirt, zones, items and their pool,
 crowns, corpses, stockpiles, workstations and bills, construction sites,
-beds, reservations, item moves, the clock's tick, every random stream,
+beds, reservations, item moves, allowed areas (their tile counts worked out again
+on load), the clock's tick, every random stream,
 temperatures, soil, the water's active blocks and their flows, the land
 beyond the map's edges, the pore water of the ground (`Map.pore`) and the
 mud (`Map.mud`) with the
@@ -122,7 +123,9 @@ round-trip test (§5) shows they come back the same; otherwise they are saved.
   STCK, WKST, CNST, BEDS, RSRV, MOVE, ITEM, CRWN, DEAD, TEMP, SOIL, WATR,
   LIGH, SKY, SETL (the settlers' pool, the settlers, the social bonds), ANIM,
   BEIN (occupancy, the blows waiting, blood, the colony log), VISN and KNOW
-  (each with a flag: only while followed).
+  (each with a flag: only while followed), AREA (the allowed areas: names and
+  the per-tile layer; the tile counts are worked out again on load, and a bit
+  of an area that does not exist is refused; since SAVE_VERSION 11).
 - **Loading** reads GAME, allocates the map and reads it, allocates every
   other module without working anything out (`game_prepare_load()`; the
   light, temperatures and soil have an `_init_empty()`: their full init was

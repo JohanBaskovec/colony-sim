@@ -199,6 +199,112 @@ static void test_zones_cover_the_levels_seen(void)
     game_shutdown(&game);
 }
 
+/* A stockpile drag over the levels z0..z1 as the frontend applies it: level by level, the zone
+ * drawn on one level preferred on the next. Returns the zone drawn (or edited). */
+static int drag_stockpile(Game *game, ZoneDrag drag, int index, int x0, int y0, int x1, int y1,
+                          int z0, int z1)
+{
+    for (int z = z0; z <= z1; z++) {
+        if (drag == ZONE_DRAG_EXTEND) {
+            game_extend_stockpile_rect(game, index, x0, y0, x1, y1, z);
+        } else if (drag == ZONE_DRAG_SHRINK) {
+            game_shrink_stockpile_rect(game, index, x0, y0, x1, y1, z);
+        } else if (drag == ZONE_DRAG_REMOVE) {
+            game_remove_stockpile_rect(game, x0, y0, x1, y1, z);
+        } else {
+            int drawn = game_add_stockpile_rect(game, x0, y0, x1, y1, z, index);
+            index = drawn != STOCKPILE_NONE ? drawn : index;
+        }
+    }
+    return index;
+}
+
+static long stockpile_cells(const Game *game, int index)
+{
+    const Stockpile *stockpile = stockpile_get(&game->stockpiles, index);
+    return stockpile != NULL ? stockpile->cell_count : 0;
+}
+
+/* The size a zone drag announces while dragged is the one the zone has once it is done, the
+ * ground seen from two levels counted once. */
+static void test_a_stockpile_drag_tells_its_size_beforehand(void)
+{
+    Game game;
+    REQUIRE(init_raised_game(&game));
+    /* From the plains to the open air over the plateau: x 20..23 is seen on LOW from the three
+     * levels, x 24..27 on HIGH from the two upper ones (LOW is the earth under the plateau). */
+    long size = game_stockpile_drag_size(&game, ZONE_DRAG_ADD, STOCKPILE_NONE, 27, 11, 20, 10, LOW,
+                                         HIGH + 1);
+    CHECK_EQ_INT((int)size, 16);
+    CHECK_EQ_INT(game.stockpiles.used_count, 0); /* Nothing done. */
+    int first = drag_stockpile(&game, ZONE_DRAG_ADD, STOCKPILE_NONE, 20, 10, 27, 11, LOW, HIGH + 1);
+    REQUIRE(first != STOCKPILE_NONE);
+    CHECK_EQ_INT((int)stockpile_cells(&game, first), 16);
+
+    /* Another one, then a box over both and free tiles: they become one. */
+    int second = game_add_stockpile_rect(&game, 10, 20, 12, 22, LOW, STOCKPILE_NONE);
+    REQUIRE(second != STOCKPILE_NONE && second != first);
+    size = game_stockpile_drag_size(&game, ZONE_DRAG_ADD, STOCKPILE_NONE, 12, 11, 21, 20, LOW, LOW);
+    int joined = drag_stockpile(&game, ZONE_DRAG_ADD, STOCKPILE_NONE, 12, 11, 21, 20, LOW, LOW);
+    CHECK_EQ_INT((int)stockpile_cells(&game, joined), (int)size);
+    CHECK_EQ_INT(game.stockpiles.used_count, 1);
+    CHECK(size > 16 + 9);
+
+    /* A box drawn with a zone selected joins it, even far from it. */
+    size = game_stockpile_drag_size(&game, ZONE_DRAG_ADD, joined, 2, 40, 4, 42, LOW, LOW);
+    CHECK_EQ_INT((int)size, (int)stockpile_cells(&game, joined) + 9);
+    CHECK_EQ_INT(drag_stockpile(&game, ZONE_DRAG_ADD, joined, 2, 40, 4, 42, LOW, LOW), joined);
+    CHECK_EQ_INT((int)stockpile_cells(&game, joined), (int)size);
+
+    /* Extending, shrinking, removing. */
+    size = game_stockpile_drag_size(&game, ZONE_DRAG_EXTEND, joined, 30, 30, 33, 33, LOW, HIGH);
+    CHECK_EQ_INT((int)size, (int)stockpile_cells(&game, joined) + 16);
+    drag_stockpile(&game, ZONE_DRAG_EXTEND, joined, 30, 30, 33, 33, LOW, HIGH);
+    CHECK_EQ_INT((int)stockpile_cells(&game, joined), (int)size);
+    size = game_stockpile_drag_size(&game, ZONE_DRAG_SHRINK, joined, 18, 0, 47, 15, LOW, HIGH + 2);
+    drag_stockpile(&game, ZONE_DRAG_SHRINK, joined, 18, 0, 47, 15, LOW, HIGH + 2);
+    CHECK_EQ_INT((int)stockpile_cells(&game, joined), (int)size);
+    long before = stockpile_cells(&game, joined);
+    long removed =
+        game_stockpile_drag_size(&game, ZONE_DRAG_REMOVE, STOCKPILE_NONE, 0, 0, 47, 47, LOW, HIGH);
+    CHECK_EQ_INT((int)removed, (int)before);
+    drag_stockpile(&game, ZONE_DRAG_REMOVE, STOCKPILE_NONE, 0, 0, 47, 47, LOW, HIGH);
+    CHECK_EQ_INT(game.stockpiles.used_count, 0);
+
+    /* Nothing to cover, no zone: 0. Out of the list: 0. */
+    CHECK_EQ_INT((int)game_stockpile_drag_size(&game, ZONE_DRAG_ADD, STOCKPILE_NONE, 30, 20, 33, 21,
+                                               LOW, LOW),
+                 0);
+    CHECK_EQ_INT(
+        (int)game_stockpile_drag_size(&game, ZONE_DRAG_EXTEND, 3, 30, 20, 33, 21, HIGH, HIGH), 0);
+    game_shutdown(&game);
+}
+
+/* Gathering zones likewise; an uprooting zone drawn over a gathering zone does not join it. */
+static void test_a_gather_zone_drag_tells_its_size_beforehand(void)
+{
+    Game game;
+    REQUIRE(init_raised_game(&game));
+    int zone = game_add_gather_zone_rect(&game, 10, 10, 13, 13, LOW, GATHER_ZONE_NONE);
+    REQUIRE(zone != GATHER_ZONE_NONE);
+    long size = game_gather_zone_drag_size(&game, ZONE_DRAG_ADD, GATHER_ZONE_NONE, 12, 12, 15, 15,
+                                           LOW, HIGH);
+    CHECK_EQ_INT((int)size, 16 + 16 - 4);
+    long uproot =
+        game_gather_zone_drag_size(&game, ZONE_DRAG_ADD_UPROOT, zone, 12, 12, 15, 15, LOW, HIGH);
+    CHECK_EQ_INT((int)uproot, 16 - 4); /* The tiles of the other kind's zone stay its own. */
+    int drawn = game_add_uproot_zone_rect(&game, 12, 12, 15, 15, LOW, zone);
+    REQUIRE(drawn != GATHER_ZONE_NONE && drawn != zone);
+    CHECK_EQ_INT(gather_zone_get(&game.gather_zones, drawn)->cell_count, 12);
+    CHECK_EQ_INT(
+        (int)game_gather_zone_drag_size(&game, ZONE_DRAG_SHRINK, zone, 10, 10, 10, 13, LOW, LOW),
+        12);
+    CHECK_EQ_INT((int)game_gather_zone_drag_size(&game, ZONE_DRAG_REMOVE, GATHER_ZONE_NONE, 0, 0,
+                                                 47, 47, HIGH + 1, HIGH + 1),
+                 16 + 12);
+    game_shutdown(&game);
+}
+
 /* Building follows what is seen: from the plateau's level, the plains below are
  * built on as if they were the level shown; a roof goes on the open level over
  * the ground seen. */
@@ -452,5 +558,7 @@ int main(void)
     RUN_TEST(test_built_stations_on_their_level);
     RUN_TEST(test_crafting_on_a_raised_level);
     RUN_TEST(test_hearth_on_its_level);
+    RUN_TEST(test_a_stockpile_drag_tells_its_size_beforehand);
+    RUN_TEST(test_a_gather_zone_drag_tells_its_size_beforehand);
     return test_summary();
 }

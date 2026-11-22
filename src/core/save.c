@@ -31,7 +31,6 @@ static void game_fields_serialize(Serializer *s, Game *game)
     ser_bool(s, &game->fog_started);
     tile_pos_serialize(s, &game->arrival);
     ser_bool(s, &game->has_arrival);
-    ser_int(s, &game->free_radius);
     ser_bool(s, &game->colony_lost);
     ser_u32(s, &game->strikes_resolved);
     ser_u32(s, &game->tree_falls_seen);
@@ -97,6 +96,11 @@ static void reservations_section(Serializer *s, Game *game)
 static void item_moves_section(Serializer *s, Game *game)
 {
     item_moves_serialize(s, &game->item_moves);
+}
+
+static void areas_section(Serializer *s, Game *game)
+{
+    allowed_areas_serialize(s, &game->areas);
 }
 
 static void items_section(Serializer *s, Game *game)
@@ -213,7 +217,7 @@ static const SaveSection SECTIONS[] = {
     {{'L', 'I', 'G', 'H'}, light_section},         {{'S', 'K', 'Y', ' '}, weather_section},
     {{'S', 'E', 'T', 'L'}, colonists_section},     {{'A', 'N', 'I', 'M'}, animals_section},
     {{'B', 'E', 'I', 'N'}, beings_section},        {{'V', 'I', 'S', 'N'}, vision_section},
-    {{'K', 'N', 'O', 'W'}, known_section},
+    {{'K', 'N', 'O', 'W'}, known_section},         {{'A', 'R', 'E', 'A'}, areas_section},
 };
 
 /* Writes or reads every section after the header. */

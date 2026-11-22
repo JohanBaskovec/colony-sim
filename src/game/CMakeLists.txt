@@ -4,6 +4,7 @@ add_executable(colony_sim
     animal_panel.c
     attributes_panel.c
     animals_panel.c
+    areas_window.c
     bottom_bar.c
     build_menu.c
     colonist_bar.c

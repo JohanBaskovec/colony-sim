@@ -56,6 +56,10 @@ typedef enum AppTool {
     /* Attack: a click on an animal sends the mobilized settlers selected
      * after it (game_order_attack()); armed by their Attack action. */
     APP_TOOL_ATTACK,
+    /* Allowed areas (game/areas_window.h): a drag adds tiles to the area `area_selected`
+     * (zone_mode APP_ZONE_EXTEND) or takes them away (APP_ZONE_SHRINK, or with Shift), from the
+     * level where the button was pressed to the level shown when it is released. */
+    APP_TOOL_AREA,
 } AppTool;
 
 /* The branches of the Gear tab's tree (game/hud.c): a place of the body
@@ -153,6 +157,7 @@ typedef enum AppWindow {
     APP_WINDOW_ITEM_INFO,      /* Everything known of the item selected (game/item_info.h). */
     APP_WINDOW_WORK,           /* Work priorities grid. */
     APP_WINDOW_LOG,            /* Colony log (game/log_window.h). */
+    APP_WINDOW_AREAS,          /* Allowed areas (game/areas_window.h). */
     APP_WINDOW_HELP,           /* Controls. */
     APP_WINDOW_DEBUG,          /* Debug menu (cheats). */
     APP_WINDOW_ITEMS,          /* Items menu (debug). */
@@ -224,6 +229,7 @@ typedef enum AreaPreviewKind {
     AREA_PREVIEW_NONE,
     AREA_PREVIEW_STOCKPILE, /* The tiles a stockpile takes items from (its radius). */
     AREA_PREVIEW_REACH,     /* The tiles within a walking cost of a workstation (a bill's range). */
+    AREA_PREVIEW_ALLOWED,   /* An allowed area (`stockpile` holds its index). */
 } AreaPreviewKind;
 
 typedef struct AreaPreview {
@@ -282,10 +288,18 @@ typedef struct App {
     float drag_start_y;
     /* The same point in world coordinates: the fixed corner of a drag rectangle
      * or selection box. The camera may move under a held button; only the
-     * corner at the cursor follows it. No level is kept: the level shown when
-     * the button is released is the one used. */
+     * corner at the cursor follows it. The level shown when the button was
+     * pressed is kept too: zone tools cover the levels from it to the one shown
+     * when the button is released (the others use the level shown then). */
     float drag_world_x;
     float drag_world_y;
+    int drag_level;
+    /* The size of the zone a drag leaves (app_drag_zone_size()), worked out again only when the
+     * drag or the zones change. */
+    struct {
+        int key[11];
+        long size;
+    } drag_size;
 
     /* Selected stockpile zone (STOCKPILE_NONE if none), exclusive with the
      * colonist selection. The number guards against a reused index. */
@@ -431,6 +445,16 @@ typedef struct App {
     /* A middle/right button press that started on a panel does not pan the view. */
     bool pan_blocked;
 
+    /* The allowed areas window (game/areas_window.h), and the area it shows on the map (and
+     * that APP_TOOL_AREA paints). */
+    bool show_areas;
+    int area_selected;
+    /* Typing the name of an area: `area_naming` (ALLOWED_AREA_NONE: none) is the area renamed,
+     * or ALLOWED_AREA_MAX for a new one (painted once named); the text so far. */
+    int area_naming;
+    char area_name[ALLOWED_AREA_NAME_SIZE];
+    bool area_name_fresh; /* The text proposed, untouched: the first key typed replaces it. */
+
     AppTool tool;
     DesignationType tool_type;    /* For APP_TOOL_DESIGNATE. */
     int zone_mode;                /* For the zone tools: APP_ZONE_ADD... */
@@ -519,6 +543,15 @@ bool app_cancel_selection(App *app);
 
 /* Whether this tool (same `type` rules) is the one in use. */
 bool app_tool_active(const App *app, AppTool tool, int type);
+
+/* While a tool drags out a box of tiles (zones, orders, forbidding): the box under the cursor,
+ * cut to the map, corners sorted. False when no such drag is under way. */
+bool app_drag_box(const App *app, int *x0, int *y0, int *x1, int *y1);
+
+/* While a zone tool drags out a box (stockpile, gathering or uprooting zone, allowed area): the
+ * size in tiles the zone drawn, extended or shrunk will have once the button is released, or with
+ * `removed` set, the tiles the removal tool takes out of the zones. False for the other drags. */
+bool app_drag_zone_size(App *app, long *size, bool *removed);
 
 /* The item drawn under a point of the screen (the level shown, else the one
  * seen there), ITEM_ID_NONE when none. */

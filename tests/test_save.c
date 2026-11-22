@@ -147,6 +147,33 @@ static void test_uprooting_zones_play_on_alike(void)
     game_shutdown(&game);
 }
 
+static void test_allowed_areas_play_on_alike(void)
+{
+    Game game;
+    REQUIRE(start_game(&game, 64, 4, 0.0f, SCENARIO_NONE));
+    int x = game.arrival.x, y = game.arrival.y, top = game.map.depth - 1;
+    int camp = game_add_area(&game, "Camp");
+    REQUIRE(camp == 1);
+    REQUIRE(game_set_area_rect(&game, camp, x - 5, y - 5, x + 5, y + 5, 0, top, true) > 0);
+    REQUIRE(game_set_colonist_area(&game, game_colonist_id_at(&game, 1), camp));
+    REQUIRE(game_set_area_rect(&game, 0, 0, 0, 63, 63, 0, top, false) > 0);
+    REQUIRE(game_set_area_rect(&game, 0, x - 20, y - 20, x + 20, y + 20, 0, top, true) > 0);
+    run_ticks(&game, TICKS_PER_HOUR);
+    check_future_unchanged(&game, 0, TICKS_PER_HOUR);
+    size_t size = 0;
+    uint8_t *data = game_save(&game, &size);
+    REQUIRE(data != NULL);
+    Game loaded;
+    REQUIRE(game_load(&loaded, data, size) == SAVE_OK);
+    CHECK_EQ_INT(loaded.areas.count, 2);
+    CHECK_STR_EQ(loaded.areas.list[camp].name, "Camp");
+    CHECK_EQ_INT((int)loaded.areas.list[camp].tiles, (int)game.areas.list[camp].tiles);
+    CHECK_EQ_INT(loaded.colonists[1].area, camp);
+    free(data);
+    game_shutdown(&loaded);
+    game_shutdown(&game);
+}
+
 static void test_feuds_and_brawls_play_on_alike(void)
 {
     Game game;
@@ -345,7 +372,9 @@ static void test_serialized_structs_keep_their_size(void)
         size_t size;
         size_t expected;
     } SIZES[] = {
-        {"Game", sizeof(Game), 2719032},
+        {"Game", sizeof(Game), 2719664},
+        {"AllowedAreas", sizeof(AllowedAreas), 672},
+        {"AllowedArea", sizeof(AllowedArea), 40},
         {"Map", sizeof(Map), 1096},
         {"Plant", sizeof(Plant), 20},
         {"MapTopologyChange", sizeof(MapTopologyChange), 8},
@@ -361,7 +390,7 @@ static void test_serialized_structs_keep_their_size(void)
         {"GatherZone", sizeof(GatherZone), 224},
         {"GatherOrder", sizeof(GatherOrder), 8},
         {"GatherGroupOrder", sizeof(GatherGroupOrder), 6},
-        {"Items", sizeof(Items), 11112},
+        {"Items", sizeof(Items), 11088},
         {"Item", sizeof(Item), 36},
         {"ItemStack", sizeof(ItemStack), 28},
         {"ItemId", sizeof(ItemId), 8},
@@ -393,7 +422,7 @@ static void test_serialized_structs_keep_their_size(void)
         {"TileLightSweep", sizeof(TileLightSweep), 40},
         {"Vision", sizeof(Vision), 2696},
         {"VisionViewer", sizeof(VisionViewer), 40},
-        {"KnownWorld", sizeof(KnownWorld), 20872},
+        {"KnownWorld", sizeof(KnownWorld), 20848},
         {"KnownStation", sizeof(KnownStation), 4},
         {"KnownAnimal", sizeof(KnownAnimal), 32},
         {"Weather", sizeof(Weather), 48},
@@ -443,6 +472,7 @@ int main(void)
     RUN_TEST(test_settlers_gathering_play_on_alike);
     RUN_TEST(test_building_plays_on_alike);
     RUN_TEST(test_uprooting_zones_play_on_alike);
+    RUN_TEST(test_allowed_areas_play_on_alike);
     RUN_TEST(test_feuds_and_brawls_play_on_alike);
     RUN_TEST(test_cooking_plays_on_alike);
     RUN_TEST(test_wild_animals_play_on_alike);

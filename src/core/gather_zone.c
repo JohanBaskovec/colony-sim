@@ -575,6 +575,37 @@ int gather_zone_shrink_view(GatherZones *zones, const Map *map, int index, int x
     return is_valid(zones, index) ? remove_rect(zones, map, x0, y0, x1, y1, z, index) : 0;
 }
 
+void gather_zones_count_view_box(const GatherZones *zones, const Map *map, int x0, int y0, int x1,
+                                 int y1, int z0, int z1, const uint8_t *const *blocked,
+                                 long *free_tiles, long held[GATHER_ZONE_MAX])
+{
+    *free_tiles = 0;
+    memset(held, 0, sizeof(long) * GATHER_ZONE_MAX);
+    int min_x, min_y, max_x, max_y;
+    clip_rect(zones, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
+    int low = clampi(z0 < z1 ? z0 : z1, 0, zones->depth - 1);
+    int high = clampi(z0 < z1 ? z1 : z0, 0, zones->depth - 1);
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            int last = -1; /* The level seen from z + 1 is z + 1 or the one seen from z. */
+            for (int z = low; z <= high; z++) {
+                int level = map_view_level(map, x, y, z);
+                if (level < 0 || level == last) {
+                    continue;
+                }
+                last = level;
+                size_t i = index_of(zones, x, y, level);
+                int zone = zones->zone[i];
+                if (zone != 0) {
+                    held[zone - 1]++;
+                } else if (!layers_any_set(blocked, i) && gather_zone_can_cover(map, x, y, level)) {
+                    (*free_tiles)++;
+                }
+            }
+        }
+    }
+}
+
 void gather_zone_delete(GatherZones *zones, int index)
 {
     if (!is_valid(zones, index)) {

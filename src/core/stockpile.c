@@ -315,6 +315,37 @@ int stockpile_shrink_view(Stockpiles *stockpiles, const Map *map, int index, int
     return is_valid(stockpiles, index) ? remove_rect(stockpiles, map, x0, y0, x1, y1, z, index) : 0;
 }
 
+void stockpiles_count_view_box(const Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1,
+                               int y1, int z0, int z1, const uint8_t *const *blocked,
+                               long *free_tiles, long held[STOCKPILE_MAX])
+{
+    *free_tiles = 0;
+    memset(held, 0, sizeof(long) * STOCKPILE_MAX);
+    int min_x, min_y, max_x, max_y;
+    clip_rect(stockpiles, x0, y0, x1, y1, &min_x, &min_y, &max_x, &max_y);
+    int low = clampi(z0 < z1 ? z0 : z1, 0, stockpiles->depth - 1);
+    int high = clampi(z0 < z1 ? z1 : z0, 0, stockpiles->depth - 1);
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            int last = -1; /* The level seen from z + 1 is z + 1 or the one seen from z. */
+            for (int z = low; z <= high; z++) {
+                int level = map_view_level(map, x, y, z);
+                if (level < 0 || level == last) {
+                    continue;
+                }
+                last = level;
+                size_t i = index_of(stockpiles, x, y, level);
+                int zone = stockpiles->zone[i];
+                if (zone != 0) {
+                    held[zone - 1]++;
+                } else if (!layers_any_set(blocked, i) && stockpile_can_cover(map, x, y, level)) {
+                    (*free_tiles)++;
+                }
+            }
+        }
+    }
+}
+
 void stockpile_delete(Stockpiles *stockpiles, int index)
 {
     if (!is_valid(stockpiles, index)) {

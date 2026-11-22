@@ -9,6 +9,7 @@
 #include "game/station_panel.h"
 #include "game/stockpile_panel.h"
 #include "game/view_controls.h"
+#include "game/areas_window.h"
 #include "game/gather_zone_panel.h"
 #include "game/tile_panel.h"
 #include "game/hud.h"
@@ -17,7 +18,7 @@
 
 InspectorKind inspector_kind(const App *app)
 {
-    if (app->build_menu_open || app->show_work_panel || app->show_log) {
+    if (app->build_menu_open || app->show_work_panel || app->show_log || app->show_areas) {
         return INSPECT_NONE; /* A main menu or window takes its place. */
     }
     if (app->selected_station != WORKSTATION_NONE) {
@@ -294,6 +295,43 @@ void inspector_change_weapon_action(App *app, int slot)
         game_wield(&app->game, id, choices[picked]);
     }
     render_tool_icon(app->renderer, icon, RENDER_ICON_CHANGE_WEAPON);
+}
+
+/* Tells the list of areas apart (ui_popup_list()). */
+#define AREA_POPUP_ID 0xA4EA00
+
+void inspector_area_action(App *app, int slot)
+{
+    const AllowedAreas *areas = &app->game.areas;
+    const Colonist *first = game_colonist_const(&app->game, app->selected[0]);
+    if (first == NULL) {
+        return;
+    }
+    char texts[ALLOWED_AREA_MAX][UI_POPUP_OPTION_SIZE];
+    const char *options[ALLOWED_AREA_MAX];
+    for (int i = 0; i < areas->count; i++) {
+        areas_window_area_name(app, i, texts[i], sizeof(texts[i]));
+        options[i] = texts[i];
+    }
+    char name[UI_POPUP_OPTION_SIZE], title[UI_POPUP_OPTION_SIZE * 2];
+    areas_window_area_name(app, first->area, name, sizeof(name));
+    TR_FORMAT(title, sizeof(title), tr("inspector.area"), name);
+    const char *lines[2] = {title, tr("inspector.area.description")};
+    SDL_FRect button, icon;
+    bool open = ui_popup_open(&app->ui, AREA_POPUP_ID);
+    int clicked = action_click(app, slot, open, &button, &icon, lines, open ? 0 : 2);
+    if (ui_hovered(&app->ui, button) || open) {
+        app->area_preview = (AreaPreview){.kind = AREA_PREVIEW_ALLOWED, .stockpile = first->area};
+    }
+    /* Upward: the button is at the bottom of the screen. */
+    int picked = ui_popup_list(&app->ui, AREA_POPUP_ID, button, clicked == SDL_BUTTON_LEFT, true,
+                               options, areas->count, first->area);
+    if (picked >= 0 && picked < areas->count) {
+        for (int i = 0; i < app->selected_count; i++) {
+            game_set_colonist_area(&app->game, app->selected[i], picked);
+        }
+    }
+    render_tool_icon(app->renderer, icon, RENDER_ICON_ALLOWED_AREA);
 }
 
 /* Tells the list of species apart (ui_popup_list()). */

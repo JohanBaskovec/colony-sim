@@ -375,11 +375,6 @@ typedef struct Items {
      * and the data passed to it. */
     ItemDropFilter drop_filter;
     const void *drop_data;
-    /* While on (items_forbid_drops_beyond()), what is dropped farther than the radius from a
-     * point lands forbidden. Set by the game around what falls by itself; not saved. */
-    bool forbid_far_drops;
-    int forbid_x, forbid_y;
-    long forbid_radius_sq;
     /* The tick items are stamped with (items_set_now(): the game's clock; not in
      * the state hash). */
     uint32_t now;
@@ -664,11 +659,6 @@ int items_drop_load(Items *items, const struct Map *map, int x, int y, int z, It
  * any tile otherwise: storage that would get mixed is kept clear (the game
  * sets haul_drop_filter()). NULL: any tile. */
 void items_set_drop_filter(Items *items, ItemDropFilter filter, const void *data);
-
-/* From now on what is dropped on a tile farther than `radius` tiles (straight line) from
- * (x, y) lands forbidden, nobody fetching it (the game does so around what falls from the
- * trees, so that settlers do not cross the map for a branch). A radius of 0 or less ends it. */
-void items_forbid_drops_beyond(Items *items, int x, int y, int radius);
 
 /* `count` items of a load are used up (eaten, burnt, built in): gone. */
 void items_use_up(Items *items, ItemStack *load, int count);

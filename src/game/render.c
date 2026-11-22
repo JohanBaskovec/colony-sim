@@ -141,6 +141,8 @@ static const SDL_Color DESIGNATION_COLORS[DESIGNATION_COUNT] = {
 static const SDL_Color ROOF_SUPPORT_COLOR = {120, 220, 140, 60};
 static const SDL_Color STOCKPILE_COLOR = {90, 170, 230, 255};
 static const SDL_Color STOCKPILE_REMOVE_COLOR = {230, 70, 60, 255};
+/* Allowed areas (core/allowed_area.h): a pale green, apart from the zones' colors. */
+static const SDL_Color ALLOWED_AREA_COLOR = {150, 230, 120, 255};
 static const SDL_Color GATHER_ZONE_COLOR = {225, 170, 90, 255};
 static const SDL_Color UPROOT_ZONE_COLOR = {200, 110, 170, 255};
 static const SDL_Color WOOD_COLOR = {150, 98, 52, 255};
@@ -2149,6 +2151,50 @@ static void render_zone_area(SDL_Renderer *renderer, const Camera *camera, int x
     outline(renderer, area, 2.0f, color);
 }
 
+void render_allowed_area(SDL_Renderer *renderer, const Game *game, const Camera *camera, int index)
+{
+    const Map *map = &game->map;
+    if (!allowed_areas_valid(&game->areas, index)) {
+        return;
+    }
+    const int z = camera->level;
+    SDL_Color tint = ALLOWED_AREA_COLOR;
+    tint.a = 34;
+    TileRect visible = camera_visible_tiles(camera, map->width, map->height);
+    /* One row of what the area holds at a time, and the rows around it for the edges. */
+    for (int y = visible.y0; y < visible.y1; y++) {
+        for (int x = visible.x0; x < visible.x1; x++) {
+            if (!game_area_holds_seen(game, index, x, y, z)) {
+                continue;
+            }
+            SDL_FRect tile = tile_rect(camera, x, y);
+            fill(renderer, tint, &tile);
+            float t = SDL_max(2.0f, floorf(tile.w * 0.06f));
+            const bool open[4] = {
+                x == 0 || !game_area_holds_seen(game, index, x - 1, y, z),
+                x == map->width - 1 || !game_area_holds_seen(game, index, x + 1, y, z),
+                y == 0 || !game_area_holds_seen(game, index, x, y - 1, z),
+                y == map->height - 1 || !game_area_holds_seen(game, index, x, y + 1, z)};
+            const SDL_FRect edges[4] = {{tile.x, tile.y, t, tile.h},
+                                        {tile.x + tile.w - t, tile.y, t, tile.h},
+                                        {tile.x, tile.y, tile.w, t},
+                                        {tile.x, tile.y + tile.h - t, tile.w, t}};
+            for (int i = 0; i < 4; i++) {
+                if (open[i]) {
+                    fill(renderer, ALLOWED_AREA_COLOR, &edges[i]);
+                }
+            }
+        }
+    }
+}
+
+void render_allowed_area_rect(SDL_Renderer *renderer, const Camera *camera, int x0, int y0, int x1,
+                              int y1, bool remove)
+{
+    render_zone_area(renderer, camera, x0, y0, x1, y1,
+                     remove ? STOCKPILE_REMOVE_COLOR : ALLOWED_AREA_COLOR);
+}
+
 static SDL_Color stockpile_zone_color(const void *zones, int index)
 {
     (void)zones;
@@ -3090,6 +3136,18 @@ void render_tool_icon(SDL_Renderer *renderer, SDL_FRect rect, RenderIcon icon)
         batch_ring(renderer, color, cx, cy, radius * 0.86f, radius);
         batch_disc(renderer, color, cx, cy - radius * 0.46f, radius * 0.13f);
         batch_bar(renderer, color, cx, cy - radius * 0.14f, cx, cy + radius * 0.5f, radius * 0.12f);
+        batch_flush(renderer);
+        break;
+    }
+    case RENDER_ICON_ALLOWED_AREA: { /* The zone's square, two footprints walking in it. */
+        zone_icon(renderer, rect, ALLOWED_AREA_COLOR);
+        SDL_Color foot = {236, 230, 210, 255};
+        for (int i = 0; i < 2; i++) {
+            float fx = rect.x + w * (i == 0 ? 0.38f : 0.6f);
+            float fy = rect.y + h * (i == 0 ? 0.62f : 0.4f);
+            batch_disc(renderer, foot, fx, fy, w * 0.09f);             /* The sole... */
+            batch_disc(renderer, foot, fx, fy - h * 0.13f, w * 0.06f); /* ...and the toes. */
+        }
         batch_flush(renderer);
         break;
     }

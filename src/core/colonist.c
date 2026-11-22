@@ -1376,14 +1376,40 @@ void colonist_abandon_task(Colonist *colonist, const ColonistContext *context)
     set_idle(colonist, context, 0);
 }
 
+/* ---- Allowed area (core/allowed_area.h) ----------------------------------- */
+
+/* Searches free of the settler's allowed area until area_restore(): what the
+ * player orders, fights and flights go anywhere. Returns what to restore. */
+static uint16_t area_lift(const ColonistContext *context)
+{
+    uint16_t bit = context->pathfinder->area_bit;
+    context->pathfinder->area_bit = 0;
+    return bit;
+}
+
+static void area_restore(const ColonistContext *context, uint16_t bit)
+{
+    context->pathfinder->area_bit = bit;
+}
+
+/* Whether its allowed area holds the tile (always without areas). */
+static bool area_holds(const Colonist *colonist, const ColonistContext *context, TilePos tile)
+{
+    return context->areas == NULL ||
+           allowed_areas_holds(context->areas, colonist->area, tile.x, tile.y, tile.z);
+}
+
 /* Starts walking to `goal` for a player's order (at the middle of a tile). */
 static bool start_move(Colonist *colonist, const ColonistContext *context, TilePos goal)
 {
     Path path = {0};
     TilePos here = current_tile(colonist);
     if (here.x != goal.x || here.y != goal.y || here.z != goal.z) {
-        if (!pathfinder_find(context->pathfinder, context->plan_map, here, goal,
-                             COLONIST_MOVE_MAX_COST, &path)) {
+        uint16_t area = area_lift(context); /* The player's order goes anywhere. */
+        bool found = pathfinder_find(context->pathfinder, context->plan_map, here, goal,
+                                     COLONIST_MOVE_MAX_COST, &path);
+        area_restore(context, area);
+        if (!found) {
             path_free(&path);
             return false;
         }
@@ -2579,8 +2605,13 @@ static bool try_forced_haul_job(Colonist *colonist, const ColonistContext *conte
 
 static bool try_haul_job(Colonist *colonist, const ColonistContext *context)
 {
-    if (context->item_moves->count > 0 && try_forced_haul_job(colonist, context)) {
-        return true;
+    if (context->item_moves->count > 0) {
+        uint16_t area = area_lift(context); /* The player's order goes anywhere. */
+        bool found = try_forced_haul_job(colonist, context);
+        area_restore(context, area);
+        if (found) {
+            return true;
+        }
     }
     HaulWorld world = haul_world(context);
     world.region = current_region(colonist, context);
@@ -2851,8 +2882,11 @@ static bool start_delivery(Colonist *colonist, const ColonistContext *context)
     reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE, context->worker_id);
     colonist->haul_delivering = true;
     colonist->path_index = 0;
-    return pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist),
-                           colonist->haul_destination, PATH_NO_COST_LIMIT, &colonist->path);
+    uint16_t area = colonist->haul_forced ? area_lift(context) : context->pathfinder->area_bit;
+    bool found = pathfinder_find(context->pathfinder, context->plan_map, current_tile(colonist),
+                                 colonist->haul_destination, PATH_NO_COST_LIMIT, &colonist->path);
+    area_restore(context, area);
+    return found;
 }
 
 /* With room left in hand, heads for another matching stack nearby that the
@@ -5600,8 +5634,34 @@ static CompanySeek seek_company(Colonist *colonist, const ColonistContext *conte
     return SEEK_NONE;
 }
 
+/* Search filter: any tile one may stand on (the allowed area does the rest). */
+static bool is_standing_spot(const Map *map, int x, int y, int z, void *userdata)
+{
+    (void)userdata;
+    return map_is_passable(map, x, y, z);
+}
+
+/* Out of its allowed area with nothing to do: it walks back into it. */
+static bool return_to_area(Colonist *colonist, const ColonistContext *context)
+{
+    TilePos here = current_tile(colonist), found;
+    if (area_holds(colonist, context, here) || context->pathfinder->area_bit == 0) {
+        return false;
+    }
+    if (!pathfinder_find_nearest(context->pathfinder, context->plan_map, here, is_standing_spot,
+                                 NULL, COLONIST_AREA_RETURN_MAX_COST, &colonist->path, &found)) {
+        return false;
+    }
+    begin_task(colonist, context, TASK_WANDER);
+    colonist->target = found;
+    return true;
+}
+
 static void start_wandering(Colonist *colonist, const ColonistContext *context)
 {
+    if (return_to_area(colonist, context)) {
+        return;
+    }
     switch (seek_company(colonist, context)) {
     case SEEK_WALKING: return;
     case SEEK_STAYING: set_idle(colonist, context, random_idle_ticks(context->rng)); return;
@@ -6552,7 +6612,9 @@ static void tick_turn(Colonist *colonist, const ColonistContext *context)
             colonist->enemy = hostile_in_reach(colonist, context); /* On its guard. */
         }
         if (!combatant_is_none(colonist->enemy)) {
+            uint16_t area = area_lift(context); /* A fight or a flight goes anywhere. */
             engage(colonist, context);
+            area_restore(context, area);
         }
         if (colonist->task != TASK_FIGHT && colonist->task != TASK_FLEE) {
             decide(colonist, context);
@@ -6741,10 +6803,29 @@ static void settle(Colonist *colonist, const ColonistContext *context)
     make_way(colonist, context);
 }
 
+/* Its searches and walks keep to its allowed area, unless it is mobilized
+ * (it only follows orders then). */
+static void enter_area(const Colonist *colonist, const ColonistContext *context)
+{
+    const AllowedAreas *areas = context->areas;
+    if (areas != NULL && !colonist->drafted && allowed_areas_valid(areas, colonist->area)) {
+        context->pathfinder->area_masks = areas->masks;
+        context->pathfinder->area_bit = allowed_area_bit(colonist->area);
+    }
+}
+
+static void leave_area(const ColonistContext *context)
+{
+    context->pathfinder->area_masks = NULL;
+    context->pathfinder->area_bit = 0;
+}
+
 void colonist_tick(Colonist *colonist, const ColonistContext *context)
 {
+    enter_area(colonist, context);
     if (context->occupancy == NULL) {
         tick_turn(colonist, context);
+        leave_area(context);
         return;
     }
     /* Its searches skip the tiles others hold. */
@@ -6752,9 +6833,52 @@ void colonist_tick(Colonist *colonist, const ColonistContext *context)
     context->pathfinder->stop_filter = occupancy_stop_filter;
     context->pathfinder->stop_userdata = &stopper;
     tick_turn(colonist, context);
+    leave_area(context); /* Making way goes anywhere. */
     settle(colonist, context);
     context->pathfinder->stop_filter = NULL;
     context->pathfinder->stop_userdata = NULL;
+}
+
+/* Tasks the allowed area does not bind (the player's orders, fights) or that
+ * go nowhere (idle, asleep, down). */
+static bool task_free_of_area(const Colonist *colonist)
+{
+    switch (colonist->task) {
+    case TASK_IDLE:
+    case TASK_SLEEP:
+    case TASK_MOVE:
+    case TASK_FIGHT:
+    case TASK_FLEE:
+    case TASK_DOWN: return true;
+    case TASK_HAUL: return colonist->haul_forced;
+    default: return false;
+    }
+}
+
+void colonist_area_changed(Colonist *colonist, const ColonistContext *context)
+{
+    for (int kind = 0; kind < SEARCH_COUNT; kind++) {
+        colonist->search_cooldown[kind] = 0;
+        colonist->search_failures[kind] = 0;
+        colonist->search_quiet[kind] = 0;
+    }
+    if (colonist->drafted || task_free_of_area(colonist) || colonist_is_down(colonist)) {
+        return;
+    }
+    bool moving = colonist_is_moving(colonist);
+    TilePos stop = moving ? colonist->path.steps[colonist->path.count - 1] : current_tile(colonist);
+    if (area_holds(colonist, context, stop)) {
+        return;
+    }
+    /* Between two tiles, it ends the step it is taking. */
+    bool stepping = moving && colonist->move_progress > 0.0f;
+    TilePos next = stepping ? colonist->path.steps[colonist->path_index] : stop;
+    colonist_abandon_task(colonist, context);
+    if (stepping) {
+        colonist->path.steps[0] = next;
+        colonist->path.count = 1;
+        colonist->path_index = 0;
+    }
 }
 
 void colonist_serialize(Serializer *s, Colonist *colonist)
@@ -6866,6 +6990,7 @@ void colonist_serialize(Serializer *s, Colonist *colonist)
     ser_int(s, &c->attack_cooldown);
     ser_bool(s, &c->drafted);
     ser_u8_below(s, &c->draft_end, DRAFT_END_COUNT);
+    ser_u8_below(s, &c->area, ALLOWED_AREA_MAX);
     combatant_serialize(s, &c->attack_target);
     appearance_serialize(s, &c->appearance);
 }

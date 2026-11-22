@@ -16,10 +16,14 @@ typedef enum AlertType {
     ALERT_IN_DANGER, /* Settlers whose consciousness is low (docs/HEALTH.md §11). */
     ALERT_STARVING,  /* Settlers whose food need is critical. */
     ALERT_THIRSTY,   /* ... water. */
-    ALERT_EXHAUSTED, /* ... rest. */
-    ALERT_NO_FOOD,   /* The colony's food will not last a day. */
-    ALERT_BREAKDOWN, /* Settlers breaking down (core/mood.h). */
-    ALERT_NO_BED,    /* Settlers sleeping on the ground. */
+    /* Hungry settlers whose last search for food found none they may reach (in their
+     * allowed area, core/allowed_area.h). */
+    ALERT_FOOD_OUT_OF_REACH,
+    ALERT_WATER_OUT_OF_REACH, /* ... thirsty, for water. */
+    ALERT_EXHAUSTED,          /* ... rest. */
+    ALERT_NO_FOOD,            /* The colony's food will not last a day. */
+    ALERT_BREAKDOWN,          /* Settlers breaking down (core/mood.h). */
+    ALERT_NO_BED,             /* Settlers sleeping on the ground. */
     ALERT_TYPE_COUNT
 } AlertType;
 

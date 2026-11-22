@@ -61,6 +61,12 @@ static void summary_rows(UiLayout *layout, void *userdata)
     if (stockpile->forbidden) {
         ui_layout_label(layout, tr("stockpile.left_alone"), 0.0f, true);
     }
+    long outside = game_stockpile_tiles_out_of_areas(&rows->app->game, rows->index);
+    if (outside > 0) { /* Nobody goes there of their own accord. */
+        tr_integer(number, sizeof(number), outside);
+        TR_FORMAT(text, sizeof(text), tr_plural("zone.out_of_areas", outside), number);
+        ui_layout_label(layout, text, 0.0f, false);
+    }
 }
 
 /* How far the zone takes items from: a slider over the radii offered,

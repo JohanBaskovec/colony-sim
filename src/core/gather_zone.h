@@ -354,6 +354,12 @@ int gather_zone_extend_view(GatherZones *zones, const Map *map, int index, int x
 int gather_zone_shrink_view(GatherZones *zones, const Map *map, int index, int x0, int y0, int x1,
                             int y1, int z);
 
+/* As stockpiles_count_view_box(): the tiles a drag over the levels z0 to z1 would meet, free ones a
+ * zone may cover and those each zone holds. Changes nothing. */
+void gather_zones_count_view_box(const GatherZones *zones, const Map *map, int x0, int y0, int x1,
+                                 int y1, int z0, int z1, const uint8_t *const *blocked,
+                                 long *free_tiles, long held[GATHER_ZONE_MAX]);
+
 void gather_zone_delete(GatherZones *zones, int index);
 
 /* NULL when the index is out of range or the slot is unused. */

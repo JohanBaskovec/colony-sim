@@ -72,6 +72,10 @@ void inspector_move_action(App *app, int slot);
  * keep it, locked. */
 void inspector_carry_action(App *app, int slot);
 
+/* The allowed area of the selected settlers (core/allowed_area.h): a list of the areas, the
+ * one picked given to all of them; pointing at it shows the area of the first one. */
+void inspector_area_action(App *app, int slot);
+
 /* Mobilize, or Demobilize when every selected settler is mobilized (lit
  * then): app_toggle_draft(). */
 void inspector_draft_action(App *app, int slot);

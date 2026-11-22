@@ -1,6 +1,6 @@
 /*
  * The bottom bar (docs/UI.md): full-width, text buttons of the same width
- * from the left (Build, Work, Log; Schedule, Assign... will come before the
+ * from the left (Build, Work, Allowed area, Log; Schedule... will come before the
  * log), Menu at the right end. A button stays lit while its menu or window is open; its tooltip
  * gives its name, a description and its shortcut. Build and the main
  * windows are exclusive: opening one closes the others.

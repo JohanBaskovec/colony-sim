@@ -83,6 +83,13 @@ typedef struct Pathfinder {
      * (core/occupancy.h). Set it around a being's turn, and clear it after. */
     TilePredicate stop_filter;
     void *stop_userdata;
+    /* Where the one searching may go of its own accord (core/allowed_area.h),
+     * while `area_bit` is not 0: searches for the nearest tile accept only the
+     * tiles whose mask (one per tile) has the bit, and a search toward a goal
+     * without it fails. Paths may still cross tiles without it. Set it around
+     * a settler's turn, and clear it after. */
+    const uint16_t *area_masks;
+    uint16_t area_bit;
     PathNode *nodes; /* One per tile. */
     uint32_t stamp;  /* Incremented per search instead of clearing the nodes. */
     PathHeapItem *heap;
