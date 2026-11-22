@@ -343,6 +343,9 @@ typedef struct ItemDef {
     /* Shrinks as it dries: woven green, what is made of it works loose
      * (recipe_quality_cap_of(), docs/CONTAINERS.md §4.3). */
     bool shrinks_green;
+    /* A container: the litres it holds, carried in a hand (core/carry.h,
+     * docs/CONTAINERS.md §7); 0 for other items. */
+    float container_litres;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every

@@ -354,6 +354,45 @@ static void test_strength(void)
     CHECK(arrangement.hold == CARRY_HOLD_DRAGGED);
 }
 
+/* A container held in a hand (docs/CONTAINERS.md §7.2): a place of its own for small items,
+ * its room its litres, within what its hand bears; the hand holds nothing else. Long or heavy
+ * items do not go in, nor another container. */
+static void test_containers(void)
+{
+    CarryBody body = standard_body();
+    CHECK(carry_is_container(ITEM_CATTAIL_BASKET) && carry_is_container(ITEM_BARK_TRAY));
+    CHECK(!carry_is_container(ITEM_FLAKE));
+    CHECK(carry_container_takes(ITEM_BLACKBERRIES) && carry_container_takes(ITEM_HAZELNUTS));
+    CHECK(carry_container_takes(ITEM_TWIGS) && carry_container_takes(ITEM_NETTLE_CORD));
+    CHECK(carry_container_takes(ITEM_NETTLE_FIBRE) && carry_container_takes(ITEM_COBBLE));
+    CHECK(!carry_container_takes(ITEM_BRANCHES));     /* Long. */
+    CHECK(!carry_container_takes(ITEM_STONE_BLOCK));  /* Heavy. */
+    CHECK(!carry_container_takes(ITEM_BARK_TRAY));    /* A container. */
+    CHECK(!carry_container_takes(ITEM_HARE_CARCASS)); /* Long and limp. */
+    CHECK(carry_place_takes(CARRY_IN_CONTAINER, ITEM_BLACKBERRIES));
+    CHECK(!carry_place_usable(&body, CARRY_IN_CONTAINER)); /* Not a place of the body. */
+
+    /* Blackberries: two in cupped hands, the basket's ten litres (20 bulk) beside it. */
+    CHECK_EQ_INT(capacity(ITEM_BLACKBERRIES), 2);
+    ItemType basket[1] = {ITEM_CATTAIL_BASKET};
+    CarryArrangement arrangement;
+    CHECK_EQ_INT(carry_arrange(&body, basket, 1, ITEM_BLACKBERRIES, 100, &arrangement), 20);
+    CHECK_EQ_INT(load_in(&arrangement, CARRY_IN_CONTAINER), 20);
+    CHECK_EQ_INT(kept_in(&arrangement, CARRY_RIGHT_HAND, ITEM_CATTAIL_BASKET), 1);
+    CHECK_EQ_INT(load_in(&arrangement, CARRY_RIGHT_HAND), 0); /* The basket's hand: nothing else. */
+    ItemType tray[1] = {ITEM_BARK_TRAY};
+    CHECK_EQ_INT(carry_capacity(&body, tray, 1, ITEM_BLACKBERRIES), 4); /* Two litres. */
+    /* A heavy basket is held in both arms, against the chest: cobbles fill its room (20 bulk:
+     * 13 of them), within what both hands bear; hurt arms bear less of them. */
+    CHECK_EQ_INT(carry_arrange(&body, basket, 1, ITEM_COBBLE, 100, &arrangement), 13);
+    CHECK_EQ_INT(kept_in(&arrangement, CARRY_BOTH_HANDS, ITEM_CATTAIL_BASKET), 1);
+    CarryBody hurt = {.weight = 40.0f, .arm = {0.4f, 0.4f}};
+    int weak = carry_capacity(&hurt, basket, 1, ITEM_COBBLE);
+    CHECK(weak > 0 && weak < 13);
+    /* Long things: the basket only takes a hand. */
+    CHECK(carry_capacity(&body, basket, 1, ITEM_BRANCHES) <= capacity(ITEM_BRANCHES));
+}
+
 int main(void)
 {
     RUN_TEST(test_the_table_of_capacities);
@@ -365,5 +404,6 @@ int main(void)
     RUN_TEST(test_gripped_with_both_hands);
     RUN_TEST(test_working_hands);
     RUN_TEST(test_strength);
+    RUN_TEST(test_containers);
     return test_summary();
 }

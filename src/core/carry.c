@@ -48,6 +48,7 @@ bool carry_place_usable(const CarryBody *body, CarryPlace place)
     case CARRY_BOTH_HANDS: return arm(body, CARRY_RIGHT) > 0.0f && arm(body, CARRY_LEFT) > 0.0f;
     case CARRY_SHOULDERS:
     case CARRY_SLUNG: return body->weight > 0.0f;
+    case CARRY_IN_CONTAINER: /* Not a place of the body: filled apart. */
     case CARRY_PLACE_COUNT: break;
     }
     return false;
@@ -68,6 +69,7 @@ float carry_place_weight_limit(const CarryBody *body, CarryPlace place)
     case CARRY_UNDER_LEFT_ARM: return CARRY_UNDER_WEIGHT * body->weight * left;
     case CARRY_SHOULDERS: return CARRY_SHOULDERS_WEIGHT * body->weight;
     case CARRY_SLUNG: return CARRY_SLUNG_WEIGHT * body->weight;
+    case CARRY_IN_CONTAINER:
     case CARRY_PLACE_COUNT: break;
     }
     return 0.0f;
@@ -127,13 +129,31 @@ static float item_share(CarryPlace place, ItemType type)
         }
         return -1.0f;
     case CARRY_SLUNG: return def->strap ? 1.0f / (float)CARRY_SLUNG_COUNT : -1.0f;
+    case CARRY_IN_CONTAINER:
     case CARRY_PLACE_COUNT: break;
     }
     return -1.0f;
 }
 
+bool carry_is_container(ItemType type)
+{
+    const ItemDef *def = item_def(type);
+    return def != NULL && def->container_litres > 0.0f;
+}
+
+bool carry_container_takes(ItemType type)
+{
+    const ItemDef *def = item_def(type);
+    return def != NULL && type != ITEM_NONE && def->form != ITEM_FORM_NONE &&
+           def->length_cm < ITEM_LONG_CM && def->weight <= CARRY_CONTAINER_ITEM_KG &&
+           !carry_is_container(type);
+}
+
 bool carry_place_takes(CarryPlace place, ItemType type)
 {
+    if (place == CARRY_IN_CONTAINER) {
+        return carry_container_takes(type);
+    }
     return (unsigned)place < CARRY_PLACE_COUNT && item_share(place, type) > 0.0f;
 }
 
@@ -324,11 +344,37 @@ static bool place_kept(Search *search, int index, ItemType type)
     return false;
 }
 
-/* The order the load fills its places in. */
+/* The order the load fills its places in (a container last, apart). */
 static const CarryPlace LOAD_ORDER[CARRY_PLACE_COUNT] = {
     CARRY_SHOULDERS,  CARRY_BOTH_HANDS, CARRY_UNDER_RIGHT_ARM, CARRY_UNDER_LEFT_ARM,
-    CARRY_RIGHT_HAND, CARRY_LEFT_HAND,  CARRY_SLUNG,
+    CARRY_RIGHT_HAND, CARRY_LEFT_HAND,  CARRY_SLUNG,           CARRY_IN_CONTAINER,
 };
+
+/* How many more items of `type` the containers kept in a hand take (their
+ * room, and the weight their hands bear beside them), at most `left`. */
+static int container_room(const Search *search, const ItemType *kept, int kept_count, ItemType type,
+                          int left)
+{
+    if (!carry_container_takes(type) || left <= 0) {
+        return 0;
+    }
+    float room = 0.0f, weight = 0.0f;
+    for (int i = 0; i < kept_count; i++) {
+        const ItemDef *def = item_def(kept[i]);
+        int place = search->kept_place[i];
+        if (def->container_litres <= 0.0f ||
+            (place != CARRY_RIGHT_HAND && place != CARRY_LEFT_HAND && place != CARRY_BOTH_HANDS)) {
+            continue;
+        }
+        room += def->container_litres * CARRY_CONTAINER_BULK_PER_LITRE;
+        weight += carry_place_weight_limit(search->body, (CarryPlace)place) - def->weight;
+    }
+    const ItemDef *def = item_def(type);
+    int by_room = (int)floorf((room + ROOM_EPSILON) / def->bulk);
+    int by_weight = weight > 0.0f ? (int)floorf((weight + WEIGHT_EPSILON) / def->weight) : 0;
+    int count = by_room < by_weight ? by_room : by_weight;
+    return count < left ? count : left;
+}
 
 /* The most of the load the shoulders may take beside what is there, with
  * the hands the subset leaves free. */
@@ -458,6 +504,13 @@ static Candidate try_subset(Search *search, const ItemType *kept, int kept_count
                 candidate.places++;
                 left -= room;
             }
+        }
+        /* What is left goes in a container held in a hand. */
+        int contained = container_room(search, kept, kept_count, search->load, left);
+        if (contained > 0) {
+            per_place[CARRY_IN_CONTAINER] = contained;
+            candidate.load += contained;
+            left -= contained;
         }
     }
     /* Free hands once the load is in (the subset's hands left empty are free). */

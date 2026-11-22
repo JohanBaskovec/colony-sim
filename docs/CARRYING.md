@@ -329,8 +329,9 @@ their own, folded and unfolded the same way (§8).
 - **Containers** (baskets, bags, packs; designed in `docs/CONTAINERS.md`) take a place (a basket in a hand, a
   bag slung, a pack on a new **back** place) and are places themselves, with
   their own room and weight: **sub-places**. The hand holding a basket holds
-  nothing else, but the basket takes the berries. The Gear tab nests them
-  under their container.
+  nothing else, but the basket takes the berries. *(Done for what is held in a
+  hand, `CARRY_IN_CONTAINER`, docs/CONTAINERS.md §10 C4; the back place comes with
+  the pack basket, a slung net bag with C7.)*
 - **Clothes**: a belt (a hand axe at the waist), clothes as places of their
   own. Carrying on the head (a basket). A sledge to drag.
 - **Locks on a type** (always the best spear there is); handing items over

@@ -445,9 +445,30 @@ rods and the pack basket; then the net bag.
      the foot of a trunk gives lands on the first passable tile beside it.
      Softening dried bark: lying in water soaks it within the hour (§4.3 says half
      a game day: left for later). `SAVE_VERSION` 15.
-4. **C4 Carrying in containers**: sub-places, the back place, what fits,
+4. **C4 Carrying in containers** *(built, the back place left for C5)*: sub-places, the back place, what fits,
    taking one for a trip, wear and rot, contents dropped when broken; the
    Gear tab shows contents (`docs/CARRYING.md` §8).
+   - *As built*: `ItemDef.container_litres` (bark tray 2, cattail basket 10); a
+     container is a kept item like a tool, carried in a hand, or in both arms when
+     that carries more (a heavy basket against the chest, within what both hands
+     bear). `CARRY_IN_CONTAINER` is a place of its own, never one of the body:
+     once the body's places hold what they can, the rest of the load goes in the
+     containers kept in hand, up to their room (two bulk a litre) and the weight
+     their hands bear beside them (`carry_arrange()`); what fits
+     (`carry_container_takes()`): items shorter than 60 cm and up to 2 kg, no
+     container (berries, nuts, roots, mushrooms, twigs, fibre, cord, stones).
+     Blackberries: 2 a trip in cupped hands, 20 with a basket, 4 with a tray.
+   - A hauler starting a haul of such items more than a trip takes, carrying no
+     container, takes the nearest one lying within `COLONIST_TOOL_SWAP_MAX_COST`
+     first (`Colonist.haul_fetching`, the detour unreserved) when it carries twice
+     as much with it; it keeps it after, as a tool, until it is in the way
+     (`colonist_make_room()`). Gatherers drop what they gather where they stand:
+     the baskets serve the haulers.
+   - Wear: a container holding a load wears as a tool at work does
+     (`tool_wear_ticks()`); broken, the load that no longer fits in hand is put
+     down where the hauler stands. Rot of wet baskets is the rot every item has.
+   - The Gear tab shows *In the container* as a place; the item window, *Holds*.
+     The tray and the basket stay in the Tools category. `SAVE_VERSION` 16.
 5. **C5 Rods, sewn box, pack basket**: hazel rods (a stock, green or dry,
    soaking in shallow water), the flint borer, the sewn bark box, the frame
    basket, the pack basket on the back.

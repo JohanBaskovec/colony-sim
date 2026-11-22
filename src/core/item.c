@@ -258,7 +258,7 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                            WATER(0.75f, 0.85f, 1.0f, 48.0f, 0.2f)},
     [ITEM_NETTLE_FIBRE] = {DEF("nettle_fibre", N_("item.nettle_fibre"), ITEM_CATEGORY_RESOURCES,
                                0.02f, 0.5f, 0.0f, 20, true, true),
-                           .length_cm = 60, .form = ITEM_FORM_LIMP,
+                           .length_cm = 40, .form = ITEM_FORM_LIMP, /* A handful folded. */
                            WATER(0.12f, 0.8f, 1.0f, 24.0f, 0.25f)},
     [ITEM_NETTLE_CORD] = {DEF("nettle_cord", N_("item.nettle_cord"), ITEM_CATEGORY_RESOURCES, 0.03f,
                               0.4f, 0.0f, 40, true, true),
@@ -274,13 +274,13 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
      * until then, as the bark tray). */
     [ITEM_CATTAIL_BASKET] = {DEF("cattail_basket", N_("item.cattail_basket"), ITEM_CATEGORY_TOOLS,
                                  0.4f, 25.0f, 0.0f, 60, true, true),
-                             .length_cm = 35, .form = ITEM_FORM_RIGID,
+                             .length_cm = 35, .form = ITEM_FORM_RIGID, .container_litres = 10.0f,
                              WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     /* Holds about 2 litres; a container to carry in from step C4 of
      * docs/CONTAINERS.md (a tool until then). */
     [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,
                             0.0f, 25, true, true),
-                        .length_cm = 30, .form = ITEM_FORM_RIGID,
+                        .length_cm = 30, .form = ITEM_FORM_RIGID, .container_litres = 2.0f,
                         WATER(0.15f, 0.5f, 1.0f, 36.0f, 0.25f)},
     [ITEM_SETTLER_BODY] = {DEF("settler_body", N_("item.settler_body"), ITEM_CATEGORY_BODIES, 65.0f,
                                1000.0f, 0.0f, 100, false, true),

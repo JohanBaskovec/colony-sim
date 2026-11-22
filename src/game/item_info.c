@@ -126,6 +126,11 @@ void item_info_traits(UiLayout *layout, ItemStack one, bool hit_points)
         SDL_strlcpy(text, tr("item.info.size_loose"), sizeof(text));
     }
     item_info_row(layout, "item.info.size", text, false);
+    if (def->container_litres > 0.0f) {
+        item_info_quantity_text(text, sizeof(text), def->container_litres, "unit.litres");
+        const char *tips[1] = {tr("item.info.holds.description")};
+        item_info_row_tip(layout, "item.info.holds", text, tips, 1);
+    }
     const char *form = item_form_name_key(def->form);
     if (form != NULL) {
         item_info_row(layout, "item.info.form", tr(form), false);

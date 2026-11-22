@@ -28,6 +28,10 @@ typedef enum CarryPlace {
     CARRY_UNDER_LEFT_ARM,
     CARRY_SHOULDERS,
     CARRY_SLUNG, /* Items with a strap. */
+    /* In a container carried in a hand (a basket, a tray: ItemDef.container_litres,
+     * docs/CONTAINERS.md §7.2): a place of its own, filled with what is left of
+     * the load once the body's places are; never a place of the body. */
+    CARRY_IN_CONTAINER,
     CARRY_PLACE_COUNT
 } CarryPlace;
 
@@ -82,6 +86,11 @@ typedef enum CarryHold {
 #define CARRY_HEAVY_LIMP 2.0f
 /* An arm below this efficiency holds nothing. */
 #define CARRY_ARM_MIN 0.2f
+/* What goes in a container (carry_container_takes()): items shorter than
+ * ITEM_LONG_CM and no heavier than this, a container's room being its litres
+ * in bulk (two a litre, ITEM_TILE_BULK). */
+#define CARRY_CONTAINER_ITEM_KG 2.0f
+#define CARRY_CONTAINER_BULK_PER_LITRE 2.0f
 
 /* Kept items an arrangement takes at most, and its entries. */
 #define CARRY_KEPT_MAX 16
@@ -121,6 +130,12 @@ float carry_place_weight_limit(const CarryBody *body, CarryPlace place);
 
 /* Whether a place takes items of a type at all (by its form and length). */
 bool carry_place_takes(CarryPlace place, ItemType type);
+
+/* Whether a type is a container (ItemDef.container_litres), and whether a
+ * container takes items of a type: small ones (berries, nuts, roots, twigs,
+ * cord, stones), not long nor heavy ones. */
+bool carry_is_container(ItemType type);
+bool carry_container_takes(ItemType type);
 
 /*
  * Arranges `kept` (kept_count items, at most CARRY_KEPT_MAX) and up to

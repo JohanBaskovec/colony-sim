@@ -428,6 +428,9 @@ typedef struct Colonist {
     /* TASK_HAUL: false while collecting stacks (`target`), true once heading
      * for `haul_destination`. */
     bool haul_delivering;
+    /* TASK_HAUL: on a detour to `fetch` for a container first (a basket for
+     * berries, docs/CONTAINERS.md §7.2), before the stacks. */
+    bool haul_fetching;
     /* TASK_HAUL: carrying out an item move ordered by the player (core/item_move.h)
      * rather than hauling to a stockpile: `target` is the source,
      * `haul_destination` the tile chosen. */

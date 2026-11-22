@@ -1244,6 +1244,99 @@ static void test_hauler_collects_several_stacks_per_trip(void)
     game_shutdown(&game);
 }
 
+/* The berries delivered first anywhere on the stockpile row y = 10 from x0 to x1 (0: none in
+ * `max_ticks`). */
+static int first_delivery_in(Game *game, int x0, int x1, int max_ticks)
+{
+    for (int i = 0; i < max_ticks; i++) {
+        game_tick(game);
+        int count = count_in(game, x0, 10, x1, 10, ITEM_BLACKBERRIES);
+        if (count > 0) {
+            return count;
+        }
+    }
+    return 0;
+}
+
+/* Small items worth more than a trip (docs/CONTAINERS.md §7.2): the hauler takes a basket lying
+ * close by first, and brings back ten times what cupped hands hold; it keeps the basket. */
+static void test_hauler_takes_a_basket_for_berries(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 14, 10, 0,
+              item_stack_make(ITEM_BLACKBERRIES, 30, TEST_QUALITY_FINE, 10));
+    items_add(&game.items, 10, 12, 0,
+              item_stack_make(ITEM_CATTAIL_BASKET, 1, TEST_QUALITY_FINE, 60));
+    stockpile_create(&game.stockpiles, &game.map, 20, 10, 25, 10, 0); /* The basket stored. */
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    REQUIRE(colonist_carry_capacity(colonist, ITEM_BLACKBERRIES) == 2); /* Cupped hands. */
+    CHECK_EQ_INT(first_delivery_in(&game, 21, 25, 4000), 20); /* The basket's ten litres. */
+    bool keeps = false;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        keeps |= colonist->tools[i].type == ITEM_CATTAIL_BASKET;
+    }
+    CHECK(keeps);
+    CHECK_EQ_INT(count_at(&game, 20, 10, ITEM_CATTAIL_BASKET), 0);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
+/* A basket wears while it holds a load (docs/CONTAINERS.md §7.3): worn out on the way, it breaks
+ * and what no longer fits in hand falls at the hauler's feet. */
+static void test_a_worn_basket_breaks_and_drops_its_load(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 14, 10, 0,
+              item_stack_make(ITEM_BLACKBERRIES, 30, TEST_QUALITY_FINE, 10));
+    stockpile_create(&game.stockpiles, &game.map, 40, 10, 40, 10, 0);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    REQUIRE(
+        colonist_add_tool(colonist, item_stack_make(ITEM_CATTAIL_BASKET, 1, TEST_QUALITY_FINE, 1)));
+    int slot = -1;
+    for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
+        slot = colonist->tools[i].type == ITEM_CATTAIL_BASKET ? i : slot;
+    }
+    REQUIRE(slot >= 0);
+    bool loaded = false, broke = false;
+    for (int i = 0; i < 4000 && !broke; i++) {
+        game_tick(&game);
+        if (!loaded && colonist->carried.count > 2) {
+            loaded = true; /* In the basket: its last hit point nearly gone. */
+            colonist->tool_wear[slot] = (uint16_t)(tool_wear_ticks(colonist->tools[slot]) - 3);
+        }
+        broke = loaded && colonist->tools[slot].count == 0;
+    }
+    REQUIRE(loaded);
+    CHECK(broke);
+    CHECK_EQ_INT(colonist->tools_broken, 1);
+    run_ticks(&game, 2);
+    /* The berries that were in it lie on the way, none in the stockpile yet. */
+    CHECK_EQ_INT(count_at(&game, 40, 10, ITEM_BLACKBERRIES), 0);
+    CHECK(count_in(&game, 10, 5, 39, 15, ITEM_BLACKBERRIES) > 2);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
+/* What one trip takes needs no basket: the hauler goes straight to it. */
+static void test_no_basket_for_one_trip(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 14, 10, 0, item_stack_make(ITEM_BLACKBERRIES, 2, TEST_QUALITY_FINE, 10));
+    items_add(&game.items, 10, 12, 0,
+              item_stack_make(ITEM_CATTAIL_BASKET, 1, TEST_QUALITY_FINE, 60));
+    stockpile_create(&game.stockpiles, &game.map, 20, 10, 25, 10, 0); /* The basket stored. */
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    CHECK_EQ_INT(first_delivery_in(&game, 21, 25, 4000), 2);
+    CHECK_EQ_INT(count_at(&game, 20, 10, ITEM_CATTAIL_BASKET), 1); /* Left where it was. */
+    game_shutdown(&game);
+}
+
 static void test_collecting_stops_at_carrying_capacity(void)
 {
     Game game;
@@ -1424,6 +1517,9 @@ int main(void)
     RUN_TEST(test_find_extra_source);
     RUN_TEST(test_any_job_possible_is_exact);
     RUN_TEST(test_hauler_collects_several_stacks_per_trip);
+    RUN_TEST(test_hauler_takes_a_basket_for_berries);
+    RUN_TEST(test_no_basket_for_one_trip);
+    RUN_TEST(test_a_worn_basket_breaks_and_drops_its_load);
     RUN_TEST(test_collecting_stops_at_carrying_capacity);
     RUN_TEST(test_far_or_vanished_stacks_are_not_waited_for);
     RUN_TEST(test_stockpiles_take_items_within_their_radius);
