@@ -819,6 +819,41 @@ static void test_a_tray_takes_bark_and_twigs_laid_by_the_station(void)
     game_shutdown(&game);
 }
 
+/* Nettle stems at their moisture (0 .. 1). */
+static ItemStack stems_at(float moisture)
+{
+    ItemStack stems = item_stack_make(ITEM_NETTLE_STEMS, 1, ITEM_QUALITY_STANDARD, 20);
+    item_stack_set_moisture(&stems, moisture);
+    return stems;
+}
+
+/* The nettle cord chain at a crafting spot: dry stems only, scraped with the scraper in hand
+ * (a cobble to break them on), then twisted into two hanks of cord. */
+static void test_nettle_stems_become_fibre_then_cord(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist_add_tool(colonist, item_stack_make(ITEM_WOODEN_SCRAPER, 1, ITEM_QUALITY_STANDARD, 40));
+    colonist_add_tool(colonist, item_stack_make(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD, 200));
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_NETTLE_FIBRE) >= 0);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_NETTLE_CORD) >= 0);
+    items_add(&game.items, 16, 10, 0, stems_at(item_fresh_moisture(ITEM_NETTLE_STEMS)));
+    run_ticks(&game, 3000);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_NETTLE_FIBRE], 0); /* Fresh stems wait to dry. */
+    items_add(&game.items, 18, 12, 0, stems_at(0.1f));
+    for (int i = 0; i < 20000 && game.items.totals[ITEM_NETTLE_CORD] < 2; i++) {
+        run_ticks(&game, 1);
+    }
+    CHECK_EQ_INT((int)game.items.totals[ITEM_NETTLE_CORD], 2);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_NETTLE_FIBRE], 0); /* Twisted up. */
+    CHECK_EQ_INT((int)game.items.totals[ITEM_NETTLE_STEMS], 1); /* The fresh bundle is left. */
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 /* Dry bark cracks when folded: the bill takes only a pliable sheet (fresh, or softened). */
 static void test_a_tray_wants_pliable_bark(void)
 {
@@ -1381,6 +1416,7 @@ int main(void)
     RUN_TEST(test_removing_a_station_drops_its_input);
     RUN_TEST(test_a_tray_takes_bark_and_twigs_laid_by_the_station);
     RUN_TEST(test_a_tray_wants_pliable_bark);
+    RUN_TEST(test_nettle_stems_become_fibre_then_cord);
     RUN_TEST(test_a_bill_without_pliable_bark_lets_the_next_one_go);
     RUN_TEST(test_haulers_leave_what_is_laid_for_a_craft);
     RUN_TEST(test_removing_a_station_drops_every_ingredient);

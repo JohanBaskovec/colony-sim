@@ -40,6 +40,8 @@ typedef enum RecipeType {
     RECIPE_WOODEN_SCRAPER,
     RECIPE_FLINT_BORER,
     RECIPE_BARK_TRAY,
+    RECIPE_NETTLE_FIBRE, /* Dry stems broken and scraped into fibre. */
+    RECIPE_NETTLE_CORD,  /* Fibre twisted into two hanks of cord. */
     RECIPE_COUNT
 } RecipeType;
 
@@ -78,7 +80,8 @@ typedef struct RecipeDef {
     /* Knowledge needed; KNOWLEDGE_NONE: anyone can make it. */
     KnowledgeType knowledge;
     float min_level;
-    ItemType product; /* Main product (what a bill counts in storage). */
+    ItemType product;  /* Main product (what a bill counts in storage). */
+    int product_count; /* Of the main product a craft makes (0: one). */
     /* Dirt left by each craft (chips, shavings) on the station's tile, half
      * as much around it (see dirt_spread()). */
     int dirt;

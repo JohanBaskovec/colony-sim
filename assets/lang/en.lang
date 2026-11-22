@@ -942,6 +942,8 @@ recipe.roast_carrots = Roast wild carrots
 recipe.wooden_scraper = Wooden scraper
 recipe.flint_borer = Flint borer
 recipe.bark_tray = Folded bark tray
+recipe.nettle_fibre = Scrape nettle fibre
+recipe.nettle_cord = Twist nettle cord
 # {0} = ingredient name(s), {1} = how many
 recipe.ingredient = {0} ×{1}
 # {0} = ingredient with its count, {1} = lowest quality grade accepted

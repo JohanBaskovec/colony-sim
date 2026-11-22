@@ -219,6 +219,36 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                           .product = ITEM_BARK_TRAY,
                           .dirt = 2,
                           .tool_use = TOOL_USE_CUTTING},
+    /* The dry stems broken on a log with a cobble, then their fibre scraped
+     * clean of bark and pith with a dull wooden edge (docs/CONTAINERS.md §4.1). */
+    [RECIPE_NETTLE_FIBRE] = {.id = "nettle_fibre",
+                             .name_key = N_("recipe.nettle_fibre"),
+                             .stations = CRAFTING_SPOT,
+                             .ingredients = {{{ITEM_NETTLE_STEMS, ITEM_NONE}, 1, ITEM_WANT_DRY}},
+                             .input_min_quality = ITEM_QUALITY_WORST,
+                             .tools = {{ITEM_WOODEN_SCRAPER, ITEM_FLAKE}, HAMMER},
+                             .tool_shapes = true,
+                             .work = 2500.0f, /* An hour a bundle. */
+                             .knowledge = KNOWLEDGE_CORDAGE,
+                             .min_level = 50.0f,
+                             .product = ITEM_NETTLE_FIBRE,
+                             .dirt = 4, /* Shives and dust. */
+                             .tool_use = TOOL_USE_SCRAPING},
+    /* Two-ply cord twisted by reverse wrapping, with bare hands: a handful of
+     * fibre makes two hanks of 5 m, 0.75 h each. */
+    [RECIPE_NETTLE_CORD] = {.id = "nettle_cord",
+                            .name_key = N_("recipe.nettle_cord"),
+                            .stations = CRAFTING_SPOT,
+                            .ingredients = {{{ITEM_NETTLE_FIBRE, ITEM_NONE}, 1, ITEM_WANT_ANY}},
+                            .input_min_quality = ITEM_QUALITY_WORST,
+                            .tools = {{ITEM_NONE}},
+                            .work = 3750.0f,
+                            .knowledge = KNOWLEDGE_CORDAGE,
+                            .min_level = 50.0f,
+                            .product = ITEM_NETTLE_CORD,
+                            .product_count = 2,
+                            .dirt = 0,
+                            .tool_use = TOOL_USE_NONE},
 };
 
 #undef CRAFTING_SPOT
@@ -317,6 +347,8 @@ bool recipe_doable_at(RecipeType recipe, double level)
 /* A tool that shapes the material counts for this share of the average
  * quality that caps the products (docs/CONTAINERS.md §6). */
 #define SHAPING_TOOL_SHARE 0.25
+/* A flake scrapes fibre too sharply: it cuts some of it (docs/CONTAINERS.md §5). */
+#define FLAKE_SCRAPING_CAP_MALUS 10
 
 static bool knaps_a_cobble(const RecipeDef *def, ItemStack input)
 {
@@ -355,8 +387,11 @@ ItemQuality recipe_quality_cap_of(RecipeType recipe, const ItemStack inputs[RECI
     if (tool_counts && count > 0) {
         base = (1.0 - SHAPING_TOOL_SHARE) * base + SHAPING_TOOL_SHARE * (double)tool.quality;
     }
-    int cap = (int)floor(base + 0.5);
-    return clampi(cap + ITEM_QUALITY_CAP_BONUS, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
+    int cap = (int)floor(base + 0.5) + ITEM_QUALITY_CAP_BONUS;
+    if (def->tool_use == TOOL_USE_SCRAPING && tool.count > 0 && tool.type == ITEM_FLAKE) {
+        cap -= FLAKE_SCRAPING_CAP_MALUS;
+    }
+    return clampi(cap, ITEM_QUALITY_WORST, ITEM_QUALITY_BEST);
 }
 
 ItemQuality recipe_quality_cap(RecipeType recipe, ItemStack input)
@@ -441,7 +476,10 @@ static int craft_products(RecipeType recipe, const RecipeDef *def, ItemStack inp
         }
         return 1;
     }
-    default: out[0] = product(def->product, 1, level, rng, cap); return 1;
+    default:
+        out[0] =
+            product(def->product, def->product_count > 0 ? def->product_count : 1, level, rng, cap);
+        return 1;
     }
 }
 

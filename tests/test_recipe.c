@@ -140,6 +140,40 @@ static void test_several_ingredients(void)
     CHECK_EQ_INT(out[0].count, 1);
 }
 
+/* The nettle cord chain (docs/CONTAINERS.md §4.1): dry stems scraped into fibre, a wooden
+ * scraper shaping it (a flake scrapes too sharply: a lower cap), fibre twisted into two hanks. */
+static void test_nettle_cord_chain(void)
+{
+    const RecipeIngredient *stems = recipe_ingredient(RECIPE_NETTLE_FIBRE, 0);
+    REQUIRE(stems != NULL);
+    CHECK_EQ_INT(stems->types[0], ITEM_NETTLE_STEMS);
+    CHECK_EQ_INT(stems->moisture, ITEM_WANT_DRY);
+    const RecipeDef *fibre = recipe_def(RECIPE_NETTLE_FIBRE);
+    CHECK(
+        item_types_equal(recipe_tool_types(fibre, 0), ITEM_TYPES(ITEM_WOODEN_SCRAPER, ITEM_FLAKE)));
+    CHECK(item_types_equal(recipe_tool_types(fibre, 1), item_types_of(ITEM_COBBLE)));
+    CHECK_EQ_INT(fibre->tool_use, TOOL_USE_SCRAPING);
+    CHECK_EQ_INT(fibre->knowledge, KNOWLEDGE_CORDAGE);
+
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_NETTLE_STEMS, 1, 40, 0)};
+    ItemStack scraper = item_stack_make(ITEM_WOODEN_SCRAPER, 1, 80, 0);
+    ItemStack flake = item_stack_make(ITEM_FLAKE, 1, 80, 0);
+    int with_scraper = (40 * 3 + 80) / 4 + ITEM_QUALITY_CAP_BONUS;
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_NETTLE_FIBRE, inputs, scraper), with_scraper);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_NETTLE_FIBRE, inputs, flake), with_scraper - 10);
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_NETTLE_FIBRE, inputs, scraper, 75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_NETTLE_FIBRE);
+    CHECK_EQ_INT(out[0].count, 1);
+
+    ItemStack handful[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_NETTLE_FIBRE, 1, 60, 0)};
+    REQUIRE(recipe_craft_with(RECIPE_NETTLE_CORD, handful, (ItemStack){.type = ITEM_NONE}, 75.0,
+                              NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_NETTLE_CORD);
+    CHECK_EQ_INT(out[0].count, 2); /* Two hanks from a handful. */
+    CHECK(out[0].quality <= 60 + ITEM_QUALITY_CAP_BONUS);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -241,6 +275,7 @@ int main(void)
     RUN_TEST(test_quality_cap_from_materials);
     RUN_TEST(test_products);
     RUN_TEST(test_several_ingredients);
+    RUN_TEST(test_nettle_cord_chain);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();
