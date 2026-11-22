@@ -101,6 +101,10 @@ typedef enum ItemType {
     ITEM_NETTLE_CORD,    /* A hank of two-ply cord, about 5 m. */
     ITEM_CATTAIL_LEAVES, /* A bundle of long leaves, to weave green or dried. */
     ITEM_CATTAIL_BASKET, /* Plaited of cattail leaves, about 10 litres. */
+    ITEM_HAZEL_RODS,     /* A bundle of about 20 one-year shoots, to weave green or soaked. */
+    ITEM_BARK_BOX,       /* Birch bark sewn round a rod rim, with a lid: about 3 litres. */
+    ITEM_FRAME_BASKET,   /* Rods woven on stakes: about 20 litres, carried in a hand. */
+    ITEM_PACK_BASKET,    /* Rods woven tall, with straps: about 40 litres, on the back. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,
@@ -346,6 +350,8 @@ typedef struct ItemDef {
     /* A container: the litres it holds, carried in a hand (core/carry.h,
      * docs/CONTAINERS.md §7); 0 for other items. */
     float container_litres;
+    /* Carried on the back by its straps (the pack basket, CARRY_BACK). */
+    bool on_back;
 } ItemDef;
 
 /* Rot runs at ×1 at this temperature in the open, twice as fast every

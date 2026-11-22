@@ -323,10 +323,12 @@ static void test_definitions_are_complete(void)
         }
         CHECK(foods <= 1); /* One food: plant_food_slot(). */
         CHECK((plant_food_slot((PlantType)p) >= 0) == (foods == 1));
-        /* Trees shed their fruit (core/crown.h): they bear nothing but bark, all year. */
+        /* Trees shed their fruit (core/crown.h): they bear nothing but bark and rods, all
+         * year. */
         for (int slot = 0; slot < PLANT_PRODUCTS_MAX && plant_is_tree((uint8_t)p); slot++) {
             const PlantProduct *product = plant_product((PlantType)p, slot);
-            CHECK(product == NULL || (product->all_year && !item_is_food(product->item)));
+            CHECK(product == NULL ||
+                  (plant_product_all_year((PlantType)p, slot) && !item_is_food(product->item)));
         }
         /* A plant that is taken whole is gone, or grows again from nothing. */
         CHECK(def->harvest == PLANT_HARVEST_KEEPS || products > 0);

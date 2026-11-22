@@ -278,6 +278,28 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
                              WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     /* Holds about 2 litres; a container to carry in from step C4 of
      * docs/CONTAINERS.md (a tool until then). */
+    /* Cut at the stool, woven green within days, or dried and soaked again
+     * (docs/CONTAINERS.md §4.3). */
+    [ITEM_HAZEL_RODS] = {DEF("hazel_rods", N_("item.hazel_rods"), ITEM_CATEGORY_RESOURCES, 1.5f,
+                             8.0f, 0.0f, 20, true, true),
+                         .length_cm = 180, .form = ITEM_FORM_BUNDLE,
+                         WATER(0.5f, 0.65f, 1.0f, 120.0f, 0.25f)},
+    /* Two sheets of bark sewn with cord round a rim of rods, a lid on it (as
+     * the one found with the Iceman): closed, it holds about 3 litres. */
+    [ITEM_BARK_BOX] = {DEF("bark_box", N_("item.bark_box"), ITEM_CATEGORY_TOOLS, 0.2f, 7.0f, 0.0f,
+                           40, true, true),
+                       .length_cm = 20, .form = ITEM_FORM_RIGID, .container_litres = 3.0f,
+                       WATER(0.15f, 0.5f, 1.0f, 36.0f, 0.25f)},
+    /* Stakes and weavers of rods: about 20 litres, open, carried in a hand. */
+    [ITEM_FRAME_BASKET] = {DEF("frame_basket", N_("item.frame_basket"), ITEM_CATEGORY_TOOLS, 1.0f,
+                               45.0f, 0.0f, 80, true, true),
+                           .length_cm = 45, .form = ITEM_FORM_RIGID, .container_litres = 20.0f,
+                           WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
+    /* Tall, with two cord straps: about 40 litres on the back. */
+    [ITEM_PACK_BASKET] = {DEF("pack_basket", N_("item.pack_basket"), ITEM_CATEGORY_TOOLS, 2.0f,
+                              90.0f, 0.0f, 120, true, true),
+                          .length_cm = 60, .form = ITEM_FORM_RIGID, .container_litres = 40.0f,
+                          .on_back = true, WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,
                             0.0f, 25, true, true),
                         .length_cm = 30, .form = ITEM_FORM_RIGID, .container_litres = 2.0f,

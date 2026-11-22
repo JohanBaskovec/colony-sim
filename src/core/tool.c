@@ -46,6 +46,12 @@ static const ToolUseDef TOOL_USE_DEFS[TOOL_USE_COUNT] = {
                           N_("tool_use.peeling"),
                           0.3f,
                           {[ITEM_CHOPPER] = 0.6f, [ITEM_FLAKE] = 1.0f, [ITEM_HAND_AXE] = 0.8f}},
+    /* A blow low on the shoot with a heavy edge; a flake saws through, slowly. */
+    [TOOL_USE_CUTTING_RODS] =
+        {"cutting_rods",
+         N_("tool_use.cutting_rods"),
+         0.0f,
+         {[ITEM_CHOPPER] = 0.9f, [ITEM_FLAKE] = 0.6f, [ITEM_HAND_AXE] = 1.0f}},
 };
 
 /* Speed factor of a tool of the worst and of the best quality, linear in

@@ -393,6 +393,38 @@ static void test_containers(void)
     CHECK(carry_capacity(&body, basket, 1, ITEM_BRANCHES) <= capacity(ITEM_BRANCHES));
 }
 
+/* A pack basket rides on the back (docs/CONTAINERS.md §7.2): forty litres of small things,
+ * the hands left free (berries cupped beside it, a basket in a hand); nothing on the shoulders
+ * beside it. */
+static void test_the_back(void)
+{
+    CarryBody body = standard_body();
+    CHECK(carry_place_usable(&body, CARRY_BACK));
+    CHECK(carry_place_takes(CARRY_BACK, ITEM_PACK_BASKET));
+    CHECK(!carry_place_takes(CARRY_BACK, ITEM_FRAME_BASKET) &&
+          !carry_place_takes(CARRY_BACK, ITEM_WOOD));
+    CHECK(carry_is_container(ITEM_FRAME_BASKET) && carry_is_container(ITEM_BARK_BOX));
+    CHECK(carry_container_takes(ITEM_HAZELNUTS) && !carry_container_takes(ITEM_HAZEL_RODS));
+
+    ItemType pack[1] = {ITEM_PACK_BASKET};
+    CarryArrangement arrangement;
+    int berries = carry_arrange(&body, pack, 1, ITEM_BLACKBERRIES, 500, &arrangement);
+    CHECK_EQ_INT(kept_in(&arrangement, CARRY_BACK, ITEM_PACK_BASKET), 1);
+    CHECK_EQ_INT(load_in(&arrangement, CARRY_IN_CONTAINER), 80); /* Forty litres. */
+    CHECK_EQ_INT(load_in(&arrangement, CARRY_BOTH_HANDS), 2);    /* The hands still cup two. */
+    CHECK_EQ_INT(berries, 82);
+    ItemType both[2] = {ITEM_PACK_BASKET, ITEM_FRAME_BASKET};
+    CHECK_EQ_INT(carry_capacity(&body, both, 2, ITEM_BLACKBERRIES), 80 + 40);
+    ItemType box[1] = {ITEM_BARK_BOX};
+    CHECK_EQ_INT(carry_capacity(&body, box, 1, ITEM_BLACKBERRIES), 6 + 0); /* Three litres. */
+
+    /* A log goes on the shoulders: the pack basket moves off the back for it. */
+    int logs = carry_arrange(&body, pack, 1, ITEM_WOOD, 10, &arrangement);
+    CHECK(logs > 0);
+    CHECK(kept_in(&arrangement, CARRY_BACK, ITEM_PACK_BASKET) == 0 ||
+          load_in(&arrangement, CARRY_SHOULDERS) == 0);
+}
+
 int main(void)
 {
     RUN_TEST(test_the_table_of_capacities);
@@ -405,5 +437,6 @@ int main(void)
     RUN_TEST(test_working_hands);
     RUN_TEST(test_strength);
     RUN_TEST(test_containers);
+    RUN_TEST(test_the_back);
     return test_summary();
 }

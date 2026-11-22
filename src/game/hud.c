@@ -1274,6 +1274,7 @@ static const char *const CARRY_PLACE_KEYS[CARRY_PLACE_COUNT] = {
     [CARRY_UNDER_LEFT_ARM] = N_("carry.place.under_left_arm"),
     [CARRY_SHOULDERS] = N_("carry.place.shoulders"),
     [CARRY_SLUNG] = N_("carry.place.slung"),
+    [CARRY_BACK] = N_("carry.place.back"),
     [CARRY_IN_CONTAINER] = N_("carry.place.in_container"),
 };
 
@@ -1484,7 +1485,7 @@ static void apply_gear_action(App *app, EntityId id, const Colonist *colonist, G
 static const char *empty_place_state(const CarryArrangement *arrangement, const CarryBody *body,
                                      CarryPlace place)
 {
-    if (place == CARRY_SLUNG || place == CARRY_IN_CONTAINER ||
+    if (place == CARRY_SLUNG || place == CARRY_BACK || place == CARRY_IN_CONTAINER ||
         (place == CARRY_BOTH_HANDS && arrangement->hold != CARRY_HOLD_SHOULDERS)) {
         return NULL; /* Not shown empty. */
     }

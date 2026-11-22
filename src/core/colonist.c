@@ -821,7 +821,8 @@ static int draw_ticks(const Colonist *colonist, int slot)
         case CARRY_RIGHT_HAND:
         case CARRY_LEFT_HAND:
         case CARRY_BOTH_HANDS: return 0;
-        case CARRY_SLUNG: return COLONIST_DRAW_SLUNG_TICKS;
+        case CARRY_SLUNG:
+        case CARRY_BACK: return COLONIST_DRAW_SLUNG_TICKS;
         default: return COLONIST_DRAW_TICKS; /* Under an arm, on the shoulders, set aside. */
         }
     }
@@ -4442,9 +4443,11 @@ static bool clear_plant_first(Colonist *colonist, const ColonistContext *context
 
 /*
  * Speed factor of one tick of a craft: the recipe's tool of the first set
- * (core/tool.h). Every tool of the recipe wears. 0 when one of them is not
- * carried (it broke); with the cheat GameDebug.no_tools, a missing tool is
- * no matter and the first one's speed is a standard tool's.
+ * (core/tool.h); a recipe without a kind of work (a flake that only trims a
+ * plaited basket) goes at the pace of the hands. Every tool of the recipe
+ * wears. 0 when one of them is not carried (it broke); with the cheat
+ * GameDebug.no_tools, a missing tool is no matter and the first one's speed
+ * is a standard tool's.
  */
 static float craft_tool_factor(Colonist *colonist, const ColonistContext *context,
                                const RecipeDef *recipe)
@@ -4453,9 +4456,10 @@ static float craft_tool_factor(Colonist *colonist, const ColonistContext *contex
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
         used[slot] = -1;
         if (item_types_any(recipe_tool_types(recipe, slot))) {
-            used[slot] = slot == 0 ? working_tool(colonist, recipe->tool_use,
-                                                  recipe_tool_types(recipe, slot), true)
-                                   : colonist_tool_index(colonist, recipe_tool_types(recipe, slot));
+            used[slot] = slot == 0 && recipe->tool_use != TOOL_USE_NONE
+                             ? working_tool(colonist, recipe->tool_use,
+                                            recipe_tool_types(recipe, slot), true)
+                             : colonist_tool_index(colonist, recipe_tool_types(recipe, slot));
             if (used[slot] < 0 && !context->no_tools) {
                 return 0.0f;
             }

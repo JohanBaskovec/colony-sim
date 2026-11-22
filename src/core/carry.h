@@ -1,7 +1,8 @@
 /*
  * Carrying by hand (docs/CARRYING.md): the places of a body where things are
  * carried (a hand, both hands, under an arm, the shoulders, slung), what each
- * place takes by an item's form, length, room and weight, and the
+ * place takes by an item's form, length, room and weight, the containers
+ * kept there (baskets in a hand, a pack basket on the back), and the
  * arrangement of what a settler carries among them.
  *
  * Pure: an arrangement follows from what is carried (the kept items and a
@@ -28,7 +29,10 @@ typedef enum CarryPlace {
     CARRY_UNDER_LEFT_ARM,
     CARRY_SHOULDERS,
     CARRY_SLUNG, /* Items with a strap. */
-    /* In a container carried in a hand (a basket, a tray: ItemDef.container_litres,
+    /* On the back by its straps: a pack basket (ItemDef.on_back), nothing beside
+     * it on the shoulders. */
+    CARRY_BACK,
+    /* In a container carried in a hand or on the back (a basket, a tray: ItemDef.container_litres,
      * docs/CONTAINERS.md §7.2): a place of its own, filled with what is left of
      * the load once the body's places are; never a place of the body. */
     CARRY_IN_CONTAINER,
@@ -77,6 +81,7 @@ typedef enum CarryHold {
 #define CARRY_SHOULDERS_RIGID_KG 10.0f /* A rigid item this heavy goes on the shoulders. */
 #define CARRY_SLUNG_COUNT 2
 #define CARRY_SLUNG_WEIGHT 0.25f
+#define CARRY_BACK_WEIGHT 1.0f
 /* A load on the shoulders over this share, or long rigid items there, need
  * a hand steadying it; a limp one over CARRY_HELD_WEIGHT, both hands. */
 #define CARRY_STEADY_WEIGHT 0.25f

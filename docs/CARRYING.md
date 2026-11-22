@@ -308,7 +308,8 @@ The Gear tab of a settler shows what it carries as a **tree**, like the
 gathering zone window. At the top: the strength, the weight carried out of W
 and the walking speed it leaves. Then a branch per place, in body order:
 right hand, left hand (or **both hands** when one load takes them), under
-the right arm, under the left arm, shoulders, slung. A branch holding items
+the right arm, under the left arm, shoulders, slung, on the back, in the
+container. A branch holding items
 can be folded and unfolded (unfolded by default; the choice is kept while
 the game runs, for every settler) and shows the weight it holds; under it, a
 row per item, the load's as the kept ones (three branches: three rows): its
@@ -329,9 +330,11 @@ their own, folded and unfolded the same way (§8).
 - **Containers** (baskets, bags, packs; designed in `docs/CONTAINERS.md`) take a place (a basket in a hand, a
   bag slung, a pack on a new **back** place) and are places themselves, with
   their own room and weight: **sub-places**. The hand holding a basket holds
-  nothing else, but the basket takes the berries. *(Done for what is held in a
-  hand, `CARRY_IN_CONTAINER`, docs/CONTAINERS.md §10 C4; the back place comes with
-  the pack basket, a slung net bag with C7.)*
+  nothing else, but the basket takes the berries. *(Done: `CARRY_IN_CONTAINER`
+  for what is held in a hand, docs/CONTAINERS.md §10 C4, and the **back**
+  (`CARRY_BACK`, the pack basket, C5: nothing on the shoulders beside it); a
+  slung net bag comes with C7. The Gear tab shows the container's load as a
+  place, *In the container*, not yet nested under its container.)*
 - **Clothes**: a belt (a hand axe at the waist), clothes as places of their
   own. Carrying on the head (a basket). A sledge to drag.
 - **Locks on a type** (always the best spear there is); handing items over

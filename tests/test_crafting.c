@@ -819,6 +819,35 @@ static void test_a_tray_takes_bark_and_twigs_laid_by_the_station(void)
     game_shutdown(&game);
 }
 
+/* A flake that only trims (the plaited basket, the frame basket: no kind of work of its own)
+ * is carried, not used for speed: the weaving goes on at the pace of the hands. Fresh rods for
+ * a frame basket, at a crafting spot. */
+static void test_a_basket_is_woven_with_a_trimming_flake(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    Colonist *colonist = spawn_worker(&game, 10, 10);
+    REQUIRE(colonist != NULL);
+    colonist_set_knowledge_level(colonist, KNOWLEDGE_BASKETRY, 75.0);
+    colonist_add_tool(colonist, item_stack_make(ITEM_FLAKE, 1, ITEM_QUALITY_STANDARD, 15));
+    int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
+    REQUIRE(workstation_add_bill(&game.workstations, index, RECIPE_FRAME_BASKET) >= 0);
+    ItemStack rods = item_stack_make(ITEM_HAZEL_RODS, 3, ITEM_QUALITY_STANDARD, 20);
+    item_stack_set_fresh(&rods);
+    items_add(&game.items, 18, 10, 0, rods);
+    const Workstation *station = workstation_get_const(&game.workstations, index);
+    float progress = 0.0f;
+    for (int i = 0; i < 40000 && game.items.totals[ITEM_FRAME_BASKET] == 0; i++) {
+        run_ticks(&game, 1);
+        progress = station->work_progress > progress ? station->work_progress : progress;
+    }
+    CHECK(progress > 0.0f);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_FRAME_BASKET], 1);
+    CHECK_EQ_INT((int)game.items.totals[ITEM_HAZEL_RODS], 0);
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 /* Nettle stems at their moisture (0 .. 1). */
 static ItemStack stems_at(float moisture)
 {
@@ -1415,6 +1444,7 @@ int main(void)
     RUN_TEST(test_bills_choose_the_wood);
     RUN_TEST(test_removing_a_station_drops_its_input);
     RUN_TEST(test_a_tray_takes_bark_and_twigs_laid_by_the_station);
+    RUN_TEST(test_a_basket_is_woven_with_a_trimming_flake);
     RUN_TEST(test_a_tray_wants_pliable_bark);
     RUN_TEST(test_nettle_stems_become_fibre_then_cord);
     RUN_TEST(test_a_bill_without_pliable_bark_lets_the_next_one_go);

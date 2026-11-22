@@ -1283,6 +1283,45 @@ static void test_hauler_takes_a_basket_for_berries(void)
     game_shutdown(&game);
 }
 
+/* A pack basket rides on the back (docs/CONTAINERS.md §7.2): the hauler takes the nearest
+ * container, the pack basket, and brings back its forty litres and what cupped hands hold
+ * beside it. */
+static void test_hauler_takes_the_pack_basket(void)
+{
+    Game game;
+    REQUIRE(init_flat_game(&game));
+    items_add(&game.items, 14, 10, 0,
+              item_stack_make(ITEM_BLACKBERRIES, 200, TEST_QUALITY_FINE, 10));
+    items_add(&game.items, 6, 14, 0,
+              item_stack_make(ITEM_CATTAIL_BASKET, 1, TEST_QUALITY_FINE, 60));
+    items_add(&game.items, 10, 12, 0, item_stack_make(ITEM_PACK_BASKET, 1, TEST_QUALITY_FINE, 120));
+    stockpile_create(&game.stockpiles, &game.map, 20, 10, 25, 10, 0);
+    Colonist *colonist = spawn_hauler(&game, 9, 10);
+    REQUIRE(colonist != NULL);
+    int most = 0;
+    bool on_back = false;
+    for (int i = 0; i < 4000 && count_in(&game, 20, 10, 25, 10, ITEM_BLACKBERRIES) == 0; i++) {
+        game_tick(&game);
+        if (colonist->carried.type == ITEM_BLACKBERRIES && colonist->carried.count > most) {
+            most = colonist->carried.count;
+            CarryArrangement arrangement;
+            int slots[CARRY_KEPT_MAX];
+            colonist_carry_arrangement(colonist, &arrangement, slots);
+            on_back = false;
+            for (int e = 0; e < arrangement.entry_count; e++) {
+                on_back |= arrangement.entries[e].kept &&
+                           arrangement.entries[e].type == ITEM_PACK_BASKET &&
+                           arrangement.entries[e].place == CARRY_BACK;
+            }
+        }
+    }
+    CHECK_EQ_INT(most, 80 + 2);
+    CHECK(on_back);
+    CHECK_EQ_INT(count_at(&game, 6, 14, ITEM_CATTAIL_BASKET), 1); /* Left where it was. */
+    CHECK_EQ_INT(game_check_items(&game).problems, 0);
+    game_shutdown(&game);
+}
+
 /* A basket wears while it holds a load (docs/CONTAINERS.md §7.3): worn out on the way, it breaks
  * and what no longer fits in hand falls at the hauler's feet. */
 static void test_a_worn_basket_breaks_and_drops_its_load(void)
@@ -1518,6 +1557,7 @@ int main(void)
     RUN_TEST(test_any_job_possible_is_exact);
     RUN_TEST(test_hauler_collects_several_stacks_per_trip);
     RUN_TEST(test_hauler_takes_a_basket_for_berries);
+    RUN_TEST(test_hauler_takes_the_pack_basket);
     RUN_TEST(test_no_basket_for_one_trip);
     RUN_TEST(test_a_worn_basket_breaks_and_drops_its_load);
     RUN_TEST(test_collecting_stops_at_carrying_capacity);

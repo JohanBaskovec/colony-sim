@@ -43,6 +43,9 @@ typedef enum RecipeType {
     RECIPE_NETTLE_FIBRE,   /* Dry stems broken and scraped into fibre. */
     RECIPE_NETTLE_CORD,    /* Fibre twisted into two hanks of cord. */
     RECIPE_CATTAIL_BASKET, /* Leaves plaited into a basket. */
+    RECIPE_BARK_BOX,       /* Bark sewn round a rim of rods, with a lid. */
+    RECIPE_FRAME_BASKET,   /* Rods woven on stakes. */
+    RECIPE_PACK_BASKET,    /* Rods woven into a tall basket with cord straps. */
     RECIPE_COUNT
 } RecipeType;
 

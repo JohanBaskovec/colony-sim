@@ -47,7 +47,8 @@ bool carry_place_usable(const CarryBody *body, CarryPlace place)
     case CARRY_UNDER_LEFT_ARM: return arm(body, CARRY_LEFT) > 0.0f;
     case CARRY_BOTH_HANDS: return arm(body, CARRY_RIGHT) > 0.0f && arm(body, CARRY_LEFT) > 0.0f;
     case CARRY_SHOULDERS:
-    case CARRY_SLUNG: return body->weight > 0.0f;
+    case CARRY_SLUNG:
+    case CARRY_BACK: return body->weight > 0.0f;
     case CARRY_IN_CONTAINER: /* Not a place of the body: filled apart. */
     case CARRY_PLACE_COUNT: break;
     }
@@ -69,6 +70,7 @@ float carry_place_weight_limit(const CarryBody *body, CarryPlace place)
     case CARRY_UNDER_LEFT_ARM: return CARRY_UNDER_WEIGHT * body->weight * left;
     case CARRY_SHOULDERS: return CARRY_SHOULDERS_WEIGHT * body->weight;
     case CARRY_SLUNG: return CARRY_SLUNG_WEIGHT * body->weight;
+    case CARRY_BACK: return CARRY_BACK_WEIGHT * body->weight;
     case CARRY_IN_CONTAINER:
     case CARRY_PLACE_COUNT: break;
     }
@@ -129,6 +131,7 @@ static float item_share(CarryPlace place, ItemType type)
         }
         return -1.0f;
     case CARRY_SLUNG: return def->strap ? 1.0f / (float)CARRY_SLUNG_COUNT : -1.0f;
+    case CARRY_BACK: return def->on_back ? 1.0f : -1.0f;
     case CARRY_IN_CONTAINER:
     case CARRY_PLACE_COUNT: break;
     }
@@ -248,9 +251,13 @@ static int shoulders_need(const Search *search, float weight, bool long_rigid, b
 
 /* Whether the places as they are break no rule between places: both hands
  * holding a thing leave the hands empty, an armful the places under the
- * arms; the shoulders' load has the hands it needs. */
+ * arms; the shoulders' load has the hands it needs; a pack on the back
+ * leaves the shoulders empty. */
 static bool rules_hold(const Search *search)
 {
+    if (busy(search, CARRY_BACK) && busy(search, CARRY_SHOULDERS)) {
+        return false;
+    }
     if (busy(search, CARRY_BOTH_HANDS)) {
         if (busy(search, CARRY_RIGHT_HAND) || busy(search, CARRY_LEFT_HAND)) {
             return false;
@@ -292,6 +299,9 @@ static int kept_order(const CarryBody *body, ItemType type, bool in_hand, bool g
         order[count++] = right_first ? CARRY_LEFT_HAND : CARRY_RIGHT_HAND;
         order[count++] = CARRY_BOTH_HANDS;
         return count;
+    }
+    if (def->on_back) {
+        order[count++] = CARRY_BACK;
     }
     if (def->strap) {
         order[count++] = CARRY_SLUNG;
@@ -346,12 +356,14 @@ static bool place_kept(Search *search, int index, ItemType type)
 
 /* The order the load fills its places in (a container last, apart). */
 static const CarryPlace LOAD_ORDER[CARRY_PLACE_COUNT] = {
-    CARRY_SHOULDERS,  CARRY_BOTH_HANDS, CARRY_UNDER_RIGHT_ARM, CARRY_UNDER_LEFT_ARM,
-    CARRY_RIGHT_HAND, CARRY_LEFT_HAND,  CARRY_SLUNG,           CARRY_IN_CONTAINER,
+    CARRY_SHOULDERS,      CARRY_BOTH_HANDS, CARRY_UNDER_RIGHT_ARM,
+    CARRY_UNDER_LEFT_ARM, CARRY_RIGHT_HAND, CARRY_LEFT_HAND,
+    CARRY_SLUNG,          CARRY_BACK,       CARRY_IN_CONTAINER,
 };
 
-/* How many more items of `type` the containers kept in a hand take (their
- * room, and the weight their hands bear beside them), at most `left`. */
+/* How many more items of `type` the containers kept in a hand or on the back
+ * take (their room, and the weight their places bear beside them), at most
+ * `left`. */
 static int container_room(const Search *search, const ItemType *kept, int kept_count, ItemType type,
                           int left)
 {
@@ -363,7 +375,8 @@ static int container_room(const Search *search, const ItemType *kept, int kept_c
         const ItemDef *def = item_def(kept[i]);
         int place = search->kept_place[i];
         if (def->container_litres <= 0.0f ||
-            (place != CARRY_RIGHT_HAND && place != CARRY_LEFT_HAND && place != CARRY_BOTH_HANDS)) {
+            (place != CARRY_RIGHT_HAND && place != CARRY_LEFT_HAND && place != CARRY_BOTH_HANDS &&
+             place != CARRY_BACK)) {
             continue;
         }
         room += def->container_litres * CARRY_CONTAINER_BULK_PER_LITRE;

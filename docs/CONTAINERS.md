@@ -469,9 +469,41 @@ rods and the pack basket; then the net bag.
      down where the hauler stands. Rot of wet baskets is the rot every item has.
    - The Gear tab shows *In the container* as a place; the item window, *Holds*.
      The tray and the basket stay in the Tools category. `SAVE_VERSION` 16.
-5. **C5 Rods, sewn box, pack basket**: hazel rods (a stock, green or dry,
+5. **C5 Rods, sewn box, pack basket** *(built)*: hazel rods (a stock, green or dry,
    soaking in shallow water), the flint borer, the sewn bark box, the frame
    basket, the pack basket on the back.
+   - *As built*: the hazel's product, *Hazel rods* (a bundle of about 20, 1.5 kg,
+     180 cm): 3 bundles on a grown stool (from growth 0.3), the three back in about
+     990 hours awake (330 a bundle: within a year). Its season is the plant's own
+     bareness (`PlantProduct.leafless`: half bare or more by the climate it lives
+     in, `plant_bare_target()`), not the warmth; out of it the rods are cut green
+     (`PlantProduct.off_season`, `PLANT_OFF_SEASON_GREEN`): as quickly, every
+     bundle, `PLANT_GREEN_QUALITY` (15) off. `PlantProduct.all_year` became
+     `off_season` (gone, harder as the birch bark, green). `GATHER_JOB_CUT_RODS`
+     (750 ticks a bundle) under Craft materials, `TOOL_USE_CUTTING_RODS` (hand
+     axe 1, chopper 0.9, flake 0.6, not by hand). Rods dry in about five days
+     (`dry_hours` 120); dried, they are soaked again lying in water (within the
+     hour, as the bark: half a game day left for later).
+   - Recipes (Basketry): the **sewn bark box** (2 sheets of pliable bark, a hank of
+     nettle cord, a bundle of pliable rods; the borer, or a flake's corner, shapes
+     it, a flake trims; 11,250 ticks, level 65; 3 L, closed, 0.2 kg), the **frame
+     basket** (3 bundles of pliable rods; a flake or a hand axe; 20,000 ticks,
+     level 60; 20 L, 1 kg), the **pack basket** (6 bundles of rods, 2 hanks of
+     cord; 35,000 ticks, level 70; 40 L, 2 kg, `ItemDef.on_back`). Lime bast as
+     the box's lacing, willow rods: C6. The box's keeping of food (×0.7 rot) and
+     its embers wait for storage (§11).
+   - The **back** (`CARRY_BACK`, `docs/CARRYING.md`): takes one item carried on
+     the back (the pack basket), bears the whole weight carried, and leaves the
+     shoulders empty; a pack basket kept goes there first, and its forty litres
+     join the containers' room (`CARRY_IN_CONTAINER`): 80 blackberries a trip and
+     two cupped beside it, more with a basket in a hand too. Haulers take the
+     nearest container lying close by (not the roomiest).
+   - *Found on the way*: a recipe whose tool has no kind of work of its own (the
+     flake that only trims the cattail basket and the frame basket) never got
+     past its first tick: the crafter found no tool *better than its hands* and
+     went idle (`craft_tool_factor()`); and scenario 6 laid its bark at the
+     reference moisture (dry): the trays waited for rain. Both fixed; scenario 6
+     makes the three new containers. `SAVE_VERSION` 17.
 6. **C6 Willow and lime**: the two species (shapes, sprites, world
    generation), willow rods, young lime poles, lime bark retted in water,
    lime bast (lacing, cord).

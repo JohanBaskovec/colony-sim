@@ -209,6 +209,44 @@ static void test_cattail_basket(void)
     CHECK_EQ_INT(out[0].count, 1);
 }
 
+/* The sewn bark box, the frame basket and the pack basket (docs/CONTAINERS.md §7.1): pliable
+ * bark and rods, cord; the box's holes pierced with the borer, which shapes it. */
+static void test_rod_and_bark_containers(void)
+{
+    const RecipeDef *box = recipe_def(RECIPE_BARK_BOX);
+    CHECK_EQ_INT(recipe_ingredient_count(RECIPE_BARK_BOX), 3);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 0)->count, 2);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 0)->moisture, ITEM_WANT_WET);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 1)->types[0], ITEM_NETTLE_CORD);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 2)->types[0], ITEM_HAZEL_RODS);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_BARK_BOX, 2)->moisture, ITEM_WANT_WET);
+    CHECK(box->tool_shapes && box->tool_use == TOOL_USE_PIERCING);
+    CHECK(item_types_has(recipe_tool_types(box, 0), ITEM_FLINT_BORER));
+    CHECK_EQ_INT(box->knowledge, KNOWLEDGE_BASKETRY);
+    CHECK(box->min_level == 65.0f);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_FRAME_BASKET, 0)->count, 3);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_FRAME_BASKET, 0)->moisture, ITEM_WANT_WET);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_PACK_BASKET, 0)->count, 6);
+    CHECK_EQ_INT(recipe_ingredient(RECIPE_PACK_BASKET, 1)->count, 2);
+    CHECK(recipe_def(RECIPE_PACK_BASKET)->min_level == 70.0f);
+    CHECK(item_def(ITEM_PACK_BASKET)->on_back && !item_def(ITEM_FRAME_BASKET)->on_back);
+
+    ItemStack inputs[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_BIRCH_BARK, 2, 60, 0),
+                                               item_stack_make(ITEM_NETTLE_CORD, 1, 60, 0),
+                                               item_stack_make(ITEM_HAZEL_RODS, 1, 60, 0)};
+    ItemStack borer = item_stack_make(ITEM_FLINT_BORER, 1, 60, 0);
+    CHECK_EQ_INT(recipe_quality_cap_of(RECIPE_BARK_BOX, inputs, borer), 60 + 20);
+    ItemStack out[RECIPE_PRODUCT_MAX];
+    REQUIRE(recipe_craft_with(RECIPE_BARK_BOX, inputs, borer, 75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_BARK_BOX);
+    ItemStack rods[RECIPE_INGREDIENT_MAX] = {item_stack_make(ITEM_HAZEL_RODS, 6, 50, 0),
+                                             item_stack_make(ITEM_NETTLE_CORD, 2, 50, 0)};
+    REQUIRE(recipe_craft_with(RECIPE_PACK_BASKET, rods, item_stack_make(ITEM_HAND_AXE, 1, 50, 0),
+                              75.0, NULL, out) == 1);
+    CHECK_EQ_INT(out[0].type, ITEM_PACK_BASKET);
+    CHECK(out[0].quality <= 50 + 20);
+}
+
 static void test_products(void)
 {
     ItemStack out[RECIPE_PRODUCT_MAX];
@@ -312,6 +350,7 @@ int main(void)
     RUN_TEST(test_several_ingredients);
     RUN_TEST(test_nettle_cord_chain);
     RUN_TEST(test_cattail_basket);
+    RUN_TEST(test_rod_and_bark_containers);
     RUN_TEST(test_hand_axe_failures);
     RUN_TEST(test_average_product);
     return test_summary();

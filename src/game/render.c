@@ -186,6 +186,7 @@ static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
 static const SDL_Color HARDENED_SPEAR_COLOR = {128, 88, 52, 255};
 static const SDL_Color BIRCH_BARK_COLOR = {232, 226, 212, 255}; /* Its white outer side. */
 static const SDL_Color BIRCH_BARK_INNER_COLOR = {196, 132, 84, 255};
+static const SDL_Color HAZEL_ROD_COLOR = {128, 92, 60, 255};      /* Its glossy brown bark. */
 static const SDL_Color NETTLE_STEM_COLOR = {118, 132, 70, 255};   /* Stems drying, grey green. */
 static const SDL_Color NETTLE_FIBRE_COLOR = {214, 206, 170, 255}; /* Pale, silky. */
 static const SDL_Color NETTLE_CORD_COLOR = {176, 158, 112, 255};
@@ -1727,6 +1728,23 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         }
         break;
     }
+    case ITEM_HAZEL_RODS: {
+        /* Long straight rods lying across the tile, thinning to their tips, tied twice. */
+        float rod = SDL_max(1.0f, floorf(h * 0.06f));
+        for (int i = 0; i < 5; i++) {
+            float y = tile->y + floorf(h * (0.38f + 0.06f * (float)i));
+            batch_bar(renderer, shade(HAZEL_ROD_COLOR, (i % 2) * 16 - 8),
+                      tile->x + floorf(w * 0.06f), y, tile->x + floorf(w * 0.94f),
+                      y + (float)(i % 3) - 1.0f, i == 2 ? rod * 1.5f : rod);
+        }
+        for (int i = 0; i < 2; i++) {
+            SDL_FRect tie = {tile->x + floorf(w * (0.28f + 0.4f * (float)i)),
+                             tile->y + floorf(h * 0.34f), SDL_max(1.0f, floorf(w * 0.05f)),
+                             floorf(h * 0.36f)};
+            batch_quad(renderer, TWIG_COLOR, &tie);
+        }
+        break;
+    }
     case ITEM_CATTAIL_BASKET: {
         /* A round-bellied basket, the plaiting drawn as light and dark bands. */
         SDL_FRect body = {tile->x + floorf(w * 0.24f), tile->y + floorf(h * 0.36f),
@@ -1736,6 +1754,53 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
         for (int i = 1; i < 5; i += 2) {
             SDL_FRect stripe = {body.x + 1.0f, body.y + band * (float)i, body.w - 2.0f, band};
             batch_quad(renderer, shade(CATTAIL_BASKET_COLOR, -24), &stripe);
+        }
+        break;
+    }
+    case ITEM_BARK_BOX: {
+        /* A small round white box sewn up its side, its lid rimmed with a rod. */
+        SDL_FRect body = {tile->x + floorf(w * 0.32f), tile->y + floorf(h * 0.4f),
+                          floorf(w * 0.36f), floorf(h * 0.36f)};
+        fill_outlined(renderer, body, BIRCH_BARK_COLOR);
+        SDL_FRect lid = {body.x - 1.0f, body.y - SDL_max(1.0f, floorf(h * 0.06f)), body.w + 2.0f,
+                         SDL_max(2.0f, floorf(h * 0.08f))};
+        fill_outlined(renderer, lid, shade(HAZEL_ROD_COLOR, 10));
+        float seam = SDL_max(1.0f, floorf(w * 0.03f));
+        for (int i = 0; i < 3; i++) {
+            SDL_FRect stitch = {body.x + floorf(body.w * 0.7f),
+                                body.y + floorf(body.h * (0.2f + 0.25f * (float)i)), seam * 2.0f,
+                                seam};
+            batch_quad(renderer, NETTLE_CORD_COLOR, &stitch);
+        }
+        break;
+    }
+    case ITEM_FRAME_BASKET:
+    case ITEM_PACK_BASKET: {
+        /* Brown rods woven round upright stakes: a wide basket, or a tall one with
+         * two straps of cord. */
+        bool pack = type == ITEM_PACK_BASKET;
+        SDL_FRect body = pack
+                             ? (SDL_FRect){tile->x + floorf(w * 0.28f), tile->y + floorf(h * 0.22f),
+                                           floorf(w * 0.44f), floorf(h * 0.6f)}
+                             : (SDL_FRect){tile->x + floorf(w * 0.18f), tile->y + floorf(h * 0.4f),
+                                           floorf(w * 0.64f), floorf(h * 0.38f)};
+        fill_outlined(renderer, body, HAZEL_ROD_COLOR);
+        float band = SDL_max(1.0f, floorf(body.h / 7.0f));
+        for (int i = 1; i < 7; i += 2) {
+            SDL_FRect weave = {body.x + 1.0f, body.y + band * (float)i, body.w - 2.0f, band};
+            batch_quad(renderer, shade(HAZEL_ROD_COLOR, 28), &weave);
+        }
+        float stake = SDL_max(1.0f, floorf(w * 0.03f));
+        for (int i = 1; i < 4; i++) {
+            float x = body.x + floorf(body.w * 0.25f * (float)i);
+            batch_bar(renderer, shade(HAZEL_ROD_COLOR, -30), x, body.y, x, body.y + body.h, stake);
+        }
+        if (pack) {
+            for (int i = 0; i < 2; i++) {
+                float x = body.x + floorf(body.w * (0.3f + 0.4f * (float)i));
+                batch_bar(renderer, NETTLE_CORD_COLOR, x, body.y - stake * 2.0f, x,
+                          body.y + body.h * 0.6f, stake * 1.5f);
+            }
         }
         break;
     }

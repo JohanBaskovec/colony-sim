@@ -274,8 +274,8 @@ static void setup_basketry(Game *game, const Colonist *first)
     for (uint32_t slot = 0; slot < game_colonist_slot_count(game); slot++) {
         Colonist *colonist = game_colonist(game, game_colonist_id_at(game, slot));
         for (size_t k = 0; colonist != NULL && k < sizeof(NEEDED) / sizeof(NEEDED[0]); k++) {
-            if (colonist_knowledge_level(colonist, NEEDED[k]) < 65.0) {
-                colonist_set_knowledge_level(colonist, NEEDED[k], 65.0);
+            if (colonist_knowledge_level(colonist, NEEDED[k]) < 70.0) {
+                colonist_set_knowledge_level(colonist, NEEDED[k], 70.0);
             }
         }
     }
@@ -286,15 +286,33 @@ static void setup_basketry(Game *game, const Colonist *first)
     }
     int trays = workstation_add_bill(stations, spot, RECIPE_BARK_TRAY);
     workstation_set_bill_mode(stations, spot, trays, BILL_DO_TIMES);
-    workstation_set_bill_target(stations, spot, trays, BILL_TARGET_MAX);
-    static const RecipeType FEW[] = {RECIPE_WOODEN_SCRAPER, RECIPE_FLINT_BORER};
+    workstation_set_bill_target(stations, spot, trays, 4); /* Bark left for the boxes. */
+    static const RecipeType FEW[] = {RECIPE_WOODEN_SCRAPER, RECIPE_FLINT_BORER, RECIPE_BARK_BOX,
+                                     RECIPE_FRAME_BASKET, RECIPE_PACK_BASKET};
+    static const int TIMES[] = {3, 3, 2, 2, 1};
     for (size_t i = 0; i < sizeof(FEW) / sizeof(FEW[0]); i++) {
         int bill = workstation_add_bill(stations, spot, FEW[i]);
         workstation_set_bill_mode(stations, spot, bill, BILL_DO_TIMES);
-        workstation_set_bill_target(stations, spot, bill, 3);
+        workstation_set_bill_target(stations, spot, bill, TIMES[i]);
     }
-    /* Heaps around: bark (every fourth heap dried out), twigs, and what the tools need. */
-    for (int i = 0; i < 16; i++) {
+    /* Heaps around: bark (every fourth heap dried out), twigs, what the tools need, and
+     * fresh rods and cord for the boxes and baskets of rods. */
+    for (int i = 0; i < 24; i++) {
+        if (i >= 16) {
+            int hx, hy;
+            if (free_tile(game, x + (i % 4) * 5 - 8, y + 12 + (i / 4 - 4) * 5, z, 6, false, &hx,
+                          &hy)) {
+                ItemStack stack = i % 2 == 0 ? item_stack_make(ITEM_HAZEL_RODS, 10, 50 + i, 0)
+                                             : item_stack_make(ITEM_NETTLE_CORD, 3, 50 + i, 0);
+                item_stack_set_fresh(&stack); /* Rods just cut: pliable. */
+                items_add(&game->items, hx, hy, z, stack);
+                /* Edges for the long weaving: the flakes wear out on the trays. */
+                items_add(&game->items, hx, hy, z,
+                          i % 2 == 0 ? item_stack_make(ITEM_HAND_AXE, 1, 60, 120)
+                                     : item_stack_make(ITEM_FLAKE, 3, 60, 15));
+            }
+            continue;
+        }
         int hx, hy;
         if (!free_tile(game, x + (i % 4) * 5 - 8, y + (i / 4) * 5 - 8, z, 6, false, &hx, &hy)) {
             continue;
@@ -304,6 +322,8 @@ static void setup_basketry(Game *game, const Colonist *first)
             ItemStack bark = item_stack_make(ITEM_BIRCH_BARK, 3 + i % 3, 40 + (i * 7) % 40, 0);
             if (i % 8 == 4) {
                 item_stack_set_moisture(&bark, 0.1f);
+            } else {
+                item_stack_set_fresh(&bark); /* Just peeled: pliable. */
             }
             items_add(&game->items, hx, hy, z, bark);
             break;

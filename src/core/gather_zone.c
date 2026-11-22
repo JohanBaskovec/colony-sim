@@ -19,6 +19,7 @@
 #define CUT_GRASS_ARMFUL_WORK 50.0f
 #define CUT_STEMS_WORK 250.0f   /* A bundle of stems or leaves: 0.1 h (docs/CONTAINERS.md §4). */
 #define PEEL_WORK 500.0f        /* A sheet of bark: 0.2 h (docs/CONTAINERS.md §4.3). */
+#define CUT_RODS_WORK 750.0f    /* A bundle of rods: 0.3 h (docs/CONTAINERS.md §4.3). */
 #define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
 
 #define ONE(type)                                                                                  \
@@ -86,6 +87,8 @@ static const GatherResourceDef RESOURCE_DEFS[GATHER_RESOURCE_COUNT] = {
                                true, MATERIALS},
     [GATHER_BIRCH_BARK] = {"birch_bark", N_("gather_zone.resource.birch_bark"), ITEM_BIRCH_BARK,
                            ONE(ITEM_BIRCH_BARK), GATHER_JOB_PEEL, false, MATERIALS},
+    [GATHER_HAZEL_RODS] = {"hazel_rods", N_("gather_zone.resource.hazel_rods"), ITEM_HAZEL_RODS,
+                           ONE(ITEM_HAZEL_RODS), GATHER_JOB_CUT_RODS, true, MATERIALS},
 };
 
 #undef WOOD
@@ -113,7 +116,7 @@ static const GatherGroupDef GROUP_DEFS[GATHER_GROUP_COUNT] = {
                              false},
     [GATHER_GROUP_MATERIALS] = {"materials", N_("gather_zone.group.materials"),
                                 MEMBER(GATHER_NETTLE_STEMS) | MEMBER(GATHER_CATTAIL_LEAVES) |
-                                    MEMBER(GATHER_BIRCH_BARK),
+                                    MEMBER(GATHER_BIRCH_BARK) | MEMBER(GATHER_HAZEL_RODS),
                                 false},
 };
 
@@ -150,6 +153,8 @@ static const GatherJobDef JOB_DEFS[GATHER_JOB_COUNT] = {
                               TOOL_USE_CUTTING, true},
     [GATHER_JOB_PEEL] = {"peel", N_("colonist.task.peel"), GATHERING, RESOURCE(GATHER_BIRCH_BARK),
                          TOOL_USE_PEELING, true},
+    [GATHER_JOB_CUT_RODS] = {"cut_rods", N_("colonist.task.cut_rods"), GATHERING,
+                             RESOURCE(GATHER_HAZEL_RODS), TOOL_USE_CUTTING_RODS, true},
     [GATHER_JOB_PICK] = {"pick", N_("colonist.task.pick"), GATHERING,
                          RESOURCE(GATHER_HAZELNUTS) | RESOURCE(GATHER_CHESTNUTS) |
                              RESOURCE(GATHER_APPLES) | RESOURCE(GATHER_PEARS),
@@ -1147,7 +1152,8 @@ static bool takes_product(GatherJob job)
 {
     return job == GATHER_JOB_HARVEST || job == GATHER_JOB_HARVEST_CAREFULLY ||
            job == GATHER_JOB_DIG || job == GATHER_JOB_DIG_CAREFULLY ||
-           job == GATHER_JOB_CUT_GRASS || job == GATHER_JOB_CUT_STEMS || job == GATHER_JOB_PEEL;
+           job == GATHER_JOB_CUT_GRASS || job == GATHER_JOB_CUT_STEMS || job == GATHER_JOB_PEEL ||
+           job == GATHER_JOB_CUT_RODS;
 }
 
 /* The slot of the product of a plant that a job takes (-1: none). */
@@ -1484,9 +1490,12 @@ float gather_job_work_needed(const Map *map, int x, int y, int z, GatherJob job)
     case GATHER_JOB_PEEL: {
         int slot = product_slot_for(plant, job);
         float harder =
-            slot >= 0 && plant_product_out_of_season(plant, slot) ? PLANT_OUT_OF_SEASON_WORK : 1.0f;
+            slot >= 0 && plant_product_out_of_season(plant, slot) == PLANT_OFF_SEASON_HARDER
+                ? PLANT_OUT_OF_SEASON_WORK
+                : 1.0f;
         return PEEL_WORK * harder * (float)(items > 1 ? items : 1);
     }
+    case GATHER_JOB_CUT_RODS: return CUT_RODS_WORK * (float)(items > 1 ? items : 1);
     case GATHER_JOB_PICK: {
         int fruit = crown_fruit(map, x, y, z, JOB_DEFS[GATHER_JOB_PICK].resources);
         return HARVEST_WORK * (float)(fruit > 1 ? fruit : 1);
@@ -1512,11 +1521,13 @@ static ItemType complete(Map *map, int x, int y, int z, GatherJob job, int *coun
         if (slot >= 0) {
             item = plant_stock_item((PlantType)plant->type, slot);
             *quality_factor = plant_product_quality_factor(plant, slot); /* Before it is cut. */
-            bool harder = plant_product_out_of_season(plant, slot);
+            PlantOffSeason off_season = plant_product_out_of_season(plant, slot);
             *count = plant_take_stock(plant, slot, INT16_MAX);
-            if (harder) { /* Out of its season: half of it, and worse. */
+            if (off_season == PLANT_OFF_SEASON_HARDER) { /* Half of it, and worse. */
                 *count = (*count + 1) / 2;
                 *quality_malus = PLANT_OUT_OF_SEASON_QUALITY;
+            } else if (off_season == PLANT_OFF_SEASON_GREEN) {
+                *quality_malus = PLANT_GREEN_QUALITY;
             }
             plant_product_harvested(map, x, y, z, slot);
         }

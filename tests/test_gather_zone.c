@@ -5,6 +5,7 @@
 #include "core/gather_zone.h"
 #include "core/i18n.h"
 #include "core/knowledge.h"
+#include "core/tool.h"
 #include "core/util.h"
 
 #include "test_framework.h"
@@ -1594,6 +1595,62 @@ static void test_birch_bark_is_peeled_once(void)
     free_world(&map, &zones, &items);
 }
 
+/* Hazel rods are cut at the stool (docs/CONTAINERS.md §3.1): best leafless, in winter; cut green
+ * in leaf they are as quick to take but weaker; the stool sends up new rods within a year. */
+static void test_hazel_rods_are_cut_at_the_stool(void)
+{
+    Map map;
+    GatherZones zones;
+    Items items;
+    REQUIRE(init_world(&map, &zones, &items));
+    Plant *summer = put_plant(&map, 2, 2, PLANT_HAZEL, 1.0f);
+    Plant *winter = put_plant(&map, 6, 2, PLANT_HAZEL, 1.0f);
+    REQUIRE(!plant_product_in_season(summer, 0)); /* August: in leaf. */
+    CHECK_EQ_INT(plant_product_out_of_season(summer, 0), PLANT_OFF_SEASON_GREEN);
+    winter->climate = (int16_t)(0.0f * PLANT_CLIMATE_SCALE); /* A winter's cold: bare. */
+    REQUIRE(plant_product_in_season(winter, 0));
+    CHECK_EQ_INT(plant_product_out_of_season(winter, 0), PLANT_OFF_SEASON_GONE);
+    CHECK(plant_product_all_year(PLANT_HAZEL, 0));
+    int rods = plant_stock_available(summer, 0);
+    CHECK_EQ_INT(rods, 3);
+    CHECK_EQ_INT(plant_stock_available(winter, 0), rods);
+    int index = gather_zone_create(&zones, &map, 2, 2, 6, 2, 0);
+    order(&zones, &items, index, GATHER_HAZEL_RODS, GATHER_FOREVER);
+    CHECK_EQ_INT(gather_tile_job(&zones, &map, 2, 2, 0, ~(GatherJobMask)0), GATHER_JOB_CUT_RODS);
+    CHECK_EQ_INT(gather_job_def(GATHER_JOB_CUT_RODS)->tool_use, TOOL_USE_CUTTING_RODS);
+    CHECK(tool_type_factor(TOOL_USE_CUTTING_RODS, ITEM_NONE) == 0.0f); /* Not by hand. */
+
+    /* Leafless: a bundle 0.3 h, the gatherer's quality. */
+    float work = gather_job_work_needed(&map, 6, 2, 0, GATHER_JOB_CUT_RODS);
+    CHECK_NEAR(work, 750.0 * rods, 1e-3);
+    REQUIRE(
+        gather_zone_add_work(&zones, &map, &items, 6, 2, 0, GATHER_JOB_CUT_RODS, work, 75.0, NULL));
+    ItemStack cut = items_get(&items, 6, 2, 0);
+    CHECK_EQ_INT(cut.type, ITEM_HAZEL_RODS);
+    CHECK_EQ_INT(cut.count, rods);
+    int quality = knowledge_product(ITEM_HAZEL_RODS, rods, 75.0, NULL).quality;
+    CHECK_EQ_INT(cut.quality, quality);
+    CHECK(!item_moisture_dry(cut.type, item_stack_moisture(cut))); /* Fresh: pliable. */
+    CHECK_EQ_INT(winter->type, PLANT_HAZEL);                       /* The stool lives on. */
+    CHECK_NEAR(winter->growth, 1.0, 1e-6);
+    CHECK(!plant_peeled(winter)); /* Rods are not bark. */
+
+    /* In leaf: as quick, every rod, but green: weaker. */
+    CHECK_NEAR(gather_job_work_needed(&map, 2, 2, 0, GATHER_JOB_CUT_RODS), work, 1e-3);
+    REQUIRE(
+        gather_zone_add_work(&zones, &map, &items, 2, 2, 0, GATHER_JOB_CUT_RODS, work, 75.0, NULL));
+    ItemStack green = items_get(&items, 2, 2, 0);
+    CHECK_EQ_INT(green.count, rods);
+    CHECK_EQ_INT(green.quality, quality - PLANT_GREEN_QUALITY);
+
+    /* New rods within a year of growth: the three in 990 hours awake. */
+    plant_regrow_stocks(summer, 329);
+    CHECK_EQ_INT(plant_stock_available(summer, 0), 0);
+    plant_regrow_stocks(summer, 661);
+    CHECK_EQ_INT(plant_stock_available(summer, 0), 3);
+    free_world(&map, &zones, &items);
+}
+
 int main(void)
 {
     RUN_TEST(test_single_plant_harvest_and_uproot);
@@ -1632,5 +1689,6 @@ int main(void)
     RUN_TEST(test_nettle_stems_are_cut_whole);
     RUN_TEST(test_cattail_leaves_are_cut);
     RUN_TEST(test_birch_bark_is_peeled_once);
+    RUN_TEST(test_hazel_rods_are_cut_at_the_stool);
     return test_summary();
 }
