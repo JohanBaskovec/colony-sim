@@ -26,8 +26,14 @@
 #define CRAFTING_SPOT WORKSTATION_BIT(WORKSTATION_CRAFTING_SPOT)
 #define OPEN_HEARTH WORKSTATION_BIT(WORKSTATION_OPEN_HEARTH)
 /* Knapping is done with a plain cobble as a hammer. */
-#define HAMMER ITEM_TYPE_BIT(ITEM_COBBLE)
-#define CUTTING_TOOL (ITEM_TYPE_BIT(ITEM_FLAKE) | ITEM_TYPE_BIT(ITEM_HAND_AXE))
+#define HAMMER                                                                                     \
+    {                                                                                              \
+        ITEM_COBBLE                                                                                \
+    }
+#define CUTTING_TOOL                                                                               \
+    {                                                                                              \
+        ITEM_FLAKE, ITEM_HAND_AXE                                                                  \
+    }
 
 static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
     [RECIPE_CHOPPER] = {.id = "chopper",
@@ -35,7 +41,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                         .stations = CRAFTING_SPOT,
                         .ingredients = {{{ITEM_COBBLE, ITEM_FLINT}, 1, ITEM_WANT_ANY}},
                         .input_min_quality = ITEM_QUALITY_WORST,
-                        .tools = {HAMMER, 0},
+                        .tools = {HAMMER},
                         .work = 250.0f,
                         .knowledge = KNOWLEDGE_STONE_KNAPPING,
                         .min_level = 50.0f,
@@ -47,7 +53,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                        .stations = CRAFTING_SPOT,
                        .ingredients = {{{ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_WANT_ANY}},
                        .input_min_quality = ITEM_QUALITY_WORST,
-                       .tools = {HAMMER, 0},
+                       .tools = {HAMMER},
                        .work = 375.0f,
                        .knowledge = KNOWLEDGE_STONE_KNAPPING,
                        .min_level = 55.0f,
@@ -59,7 +65,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                          .stations = CRAFTING_SPOT,
                          .ingredients = {{{ITEM_FLINT, ITEM_COBBLE}, 1, ITEM_WANT_ANY}},
                          .input_min_quality = ITEM_QUALITY_WORST,
-                         .tools = {HAMMER, 0},
+                         .tools = {HAMMER},
                          .work = 2500.0f,
                          .knowledge = KNOWLEDGE_STONE_KNAPPING,
                          .min_level = 70.0f,
@@ -72,7 +78,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                .stations = CRAFTING_SPOT,
                                .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_WANT_ANY}},
                                .input_min_quality = ITEM_QUALITY_STANDARD,
-                               .tools = {CUTTING_TOOL, 0},
+                               .tools = {CUTTING_TOOL},
                                .work = 3750.0f,
                                .knowledge = KNOWLEDGE_SPEAR_MAKING,
                                .min_level = 50.0f,
@@ -84,7 +90,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                 .stations = CRAFTING_SPOT,
                                 .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 2, ITEM_WANT_ANY}},
                                 .input_min_quality = ITEM_QUALITY_STANDARD,
-                                .tools = {ITEM_TYPE_BIT(ITEM_HAND_AXE), ITEM_TYPE_BIT(ITEM_FLAKE)},
+                                .tools = {{ITEM_HAND_AXE}, {ITEM_FLAKE}},
                                 .work = 6250.0f,
                                 .knowledge = KNOWLEDGE_SPEAR_MAKING,
                                 .min_level = 60.0f,
@@ -98,7 +104,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
          .stations = OPEN_HEARTH,
          .ingredients = {{{ITEM_THROWING_SPEAR, ITEM_NONE}, 1, ITEM_WANT_ANY}},
          .input_min_quality = ITEM_QUALITY_WORST,
-         .tools = {0, 0},
+         .tools = {{ITEM_NONE}},
          .work = 750.0f,
          .knowledge = KNOWLEDGE_FIRE,
          .min_level = 55.0f,
@@ -111,7 +117,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
          .stations = OPEN_HEARTH,
          .ingredients = {{{ITEM_THRUSTING_SPEAR, ITEM_NONE}, 1, ITEM_WANT_ANY}},
          .input_min_quality = ITEM_QUALITY_WORST,
-         .tools = {0, 0},
+         .tools = {{ITEM_NONE}},
          .work = 750.0f,
          .knowledge = KNOWLEDGE_FIRE,
          .min_level = 55.0f,
@@ -124,7 +130,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                               .stations = CRAFTING_SPOT,
                               .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_WANT_ANY}},
                               .input_min_quality = ITEM_QUALITY_WORST,
-                              .tools = {CUTTING_TOOL, 0},
+                              .tools = {CUTTING_TOOL},
                               .work = 375.0f,
                               .knowledge = KNOWLEDGE_GATHERING,
                               .min_level = 50.0f,
@@ -137,7 +143,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
          .stations = OPEN_HEARTH,
          .ingredients = {{{ITEM_DIGGING_STICK, ITEM_NONE}, 1, ITEM_WANT_ANY}},
          .input_min_quality = ITEM_QUALITY_WORST,
-         .tools = {0, 0},
+         .tools = {{ITEM_NONE}},
          .work = 750.0f,
          .knowledge = KNOWLEDGE_FIRE,
          .min_level = 55.0f,
@@ -151,7 +157,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
          .stations = OPEN_HEARTH,
          .ingredients = {{{ITEM_CATTAIL_RHIZOMES, ITEM_NONE}, 4, ITEM_WANT_ANY}},
          .input_min_quality = ITEM_QUALITY_WORST,
-         .tools = {0, 0},
+         .tools = {{ITEM_NONE}},
          .work = 250.0f,
          .knowledge = KNOWLEDGE_FIRE,
          .min_level = 50.0f,
@@ -163,7 +169,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                               .stations = OPEN_HEARTH,
                               .ingredients = {{{ITEM_WILD_CARROTS, ITEM_NONE}, 4, ITEM_WANT_ANY}},
                               .input_min_quality = ITEM_QUALITY_WORST,
-                              .tools = {0, 0},
+                              .tools = {{ITEM_NONE}},
                               .work = 250.0f,
                               .knowledge = KNOWLEDGE_FIRE,
                               .min_level = 50.0f,
@@ -176,7 +182,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                                .stations = CRAFTING_SPOT,
                                .ingredients = {{{ITEM_BRANCHES, ITEM_NONE}, 1, ITEM_WANT_ANY}},
                                .input_min_quality = ITEM_QUALITY_WORST,
-                               .tools = {CUTTING_TOOL, 0},
+                               .tools = {CUTTING_TOOL},
                                .tool_shapes = true,
                                .work = 750.0f,
                                .knowledge = KNOWLEDGE_CORDAGE,
@@ -190,7 +196,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                             .stations = CRAFTING_SPOT,
                             .ingredients = {{{ITEM_FLAKE, ITEM_NONE}, 1, ITEM_WANT_ANY}},
                             .input_min_quality = ITEM_QUALITY_WORST,
-                            .tools = {HAMMER, 0},
+                            .tools = {HAMMER},
                             .work = 500.0f,
                             .knowledge = KNOWLEDGE_STONE_KNAPPING,
                             .min_level = 60.0f,
@@ -205,7 +211,7 @@ static const RecipeDef RECIPE_DEFS[RECIPE_COUNT] = {
                           .ingredients = {{{ITEM_BIRCH_BARK, ITEM_NONE}, 1, ITEM_WANT_WET},
                                           {{ITEM_TWIGS, ITEM_NONE}, 2, ITEM_WANT_ANY}},
                           .input_min_quality = ITEM_QUALITY_WORST,
-                          .tools = {ITEM_TYPE_BIT(ITEM_FLAKE), 0},
+                          .tools = {{ITEM_FLAKE}},
                           .tool_shapes = true,
                           .work = 1250.0f,
                           .knowledge = KNOWLEDGE_BASKETRY,
@@ -246,10 +252,10 @@ int recipe_ingredient_count(RecipeType recipe)
 ItemTypeMask recipe_ingredient_types(RecipeType recipe, int index)
 {
     const RecipeIngredient *ingredient = recipe_ingredient(recipe, index);
-    ItemTypeMask mask = 0;
+    ItemTypeMask mask = item_types_none();
     for (int i = 0; ingredient != NULL && i < RECIPE_INPUT_ALTERNATIVES; i++) {
         if (ingredient->types[i] != ITEM_NONE) {
-            mask |= ITEM_TYPE_BIT(ingredient->types[i]);
+            item_types_add(&mask, ingredient->types[i]);
         }
     }
     return mask;
@@ -257,11 +263,19 @@ ItemTypeMask recipe_ingredient_types(RecipeType recipe, int index)
 
 ItemTypeMask recipe_inputs(RecipeType recipe)
 {
-    ItemTypeMask mask = 0;
+    ItemTypeMask mask = item_types_none();
     for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
-        mask |= recipe_ingredient_types(recipe, i);
+        mask = item_types_union(mask, recipe_ingredient_types(recipe, i));
     }
     return mask;
+}
+
+ItemTypeMask recipe_tool_types(const RecipeDef *def, int slot)
+{
+    if (def == NULL || slot < 0 || slot >= RECIPE_TOOL_MAX) {
+        return item_types_none();
+    }
+    return item_types_list(def->tools[slot], RECIPE_TOOL_ALTERNATIVES);
 }
 
 int recipe_ingredient_of(RecipeType recipe, ItemType type)
@@ -270,7 +284,7 @@ int recipe_ingredient_of(RecipeType recipe, ItemType type)
         return -1;
     }
     for (int i = 0; i < RECIPE_INGREDIENT_MAX; i++) {
-        if (recipe_ingredient_types(recipe, i) & ITEM_TYPE_BIT(type)) {
+        if (item_types_has(recipe_ingredient_types(recipe, i), type)) {
             return i;
         }
     }
@@ -281,7 +295,7 @@ bool recipe_accepts_ingredient(RecipeType recipe, int index, ItemStack stack)
 {
     const RecipeDef *def = recipe_def(recipe);
     return def != NULL && stack.type != ITEM_NONE &&
-           (recipe_ingredient_types(recipe, index) & ITEM_TYPE_BIT(stack.type)) &&
+           item_types_has(recipe_ingredient_types(recipe, index), (ItemType)stack.type) &&
            stack.quality >= def->input_min_quality;
 }
 

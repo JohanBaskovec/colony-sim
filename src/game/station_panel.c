@@ -88,7 +88,7 @@ static void either_names(char *out, size_t size, ItemTypeMask types)
     const char *names[3] = {NULL, NULL, NULL};
     int count = 0;
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && count < 3; type++) {
-        if (types & ITEM_TYPE_BIT(type)) {
+        if (item_types_has(types, type)) {
             names[count++] = tr(item_def((ItemType)type)->name_key);
         }
     }
@@ -122,7 +122,7 @@ static void one_ingredient_text(char *out, size_t size, RecipeType recipe, int i
     int input_count = 0;
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
         ItemType type = wanted->types[i];
-        if (type != ITEM_NONE && (allowed & ITEM_TYPE_BIT(type))) {
+        if (type != ITEM_NONE && (item_types_has(allowed, type))) {
             inputs[input_count++] = tr(item_def(type)->name_key);
         }
     }
@@ -162,8 +162,8 @@ static int tool_texts(RecipeType recipe, char texts[RECIPE_TOOL_MAX][TEXT_SIZE])
     const RecipeDef *def = recipe_def(recipe);
     int count = 0;
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
-        if (def->tools[slot] != 0) {
-            either_names(texts[count++], TEXT_SIZE, def->tools[slot]);
+        if (item_types_any(recipe_tool_types(def, slot))) {
+            either_names(texts[count++], TEXT_SIZE, recipe_tool_types(def, slot));
         }
     }
     return count;
@@ -330,7 +330,7 @@ static void bill_inputs_row(UiLayout *layout, const Bill *bill, int index, Actio
         ItemType type = boxes[i];
         const char *name = tr(item_def(type)->name_key);
         float box_width = ui_checkbox_width(layout->ui, name);
-        bool allowed = (bill->inputs & ITEM_TYPE_BIT(type)) != 0;
+        bool allowed = (item_types_has(bill->inputs, type)) != 0;
         if (layout->draw && ui_checkbox(layout->ui, x, layout->y, box_width,
                                         allowed ? UI_CHECKED : UI_UNCHECKED, name)) {
             *action = (Action){.type = ACTION_TOGGLE_INPUT, .bill = index, .value = (int)type};
@@ -398,8 +398,8 @@ static bool recipe_lacks_tools(const Game *game, RecipeType recipe, char *names,
     char lacking[RECIPE_TOOL_MAX][TEXT_SIZE];
     int count = 0;
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
-        ItemTypeMask types = def->tools[slot];
-        if (types != 0 && (missing & types) == types) {
+        ItemTypeMask types = recipe_tool_types(def, slot);
+        if (item_types_any(types) && item_types_equal(item_types_common(missing, types), types)) {
             either_names(lacking[count++], TEXT_SIZE, types);
         }
     }
@@ -779,7 +779,7 @@ static void hearth_fuel_row(UiLayout *layout, const Workstation *station, Action
     const char *label = tr("station.hearth.fuel_types");
     float width = ui_text_width(ui, label);
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
-        if (HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type)) {
+        if (item_types_has(hearth_fuel_types(), type)) {
             width += GAP + ui_checkbox_width(ui, tr(item_def((ItemType)type)->name_key));
         }
     }
@@ -790,12 +790,12 @@ static void hearth_fuel_row(UiLayout *layout, const Workstation *station, Action
     }
     x += ui_text_width(ui, label) + GAP;
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
-        if (!(HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type))) {
+        if (!(item_types_has(hearth_fuel_types(), type))) {
             continue;
         }
         const char *name = tr(item_def((ItemType)type)->name_key);
         float box_width = ui_checkbox_width(ui, name);
-        bool allowed = (station->fuel_types & ITEM_TYPE_BIT(type)) != 0;
+        bool allowed = (item_types_has(station->fuel_types, type)) != 0;
         if (layout->draw &&
             ui_checkbox(ui, x, layout->y, box_width, allowed ? UI_CHECKED : UI_UNCHECKED, name)) {
             *action = (Action){.type = ACTION_TOGGLE_FUEL, .value = type};
@@ -1565,7 +1565,7 @@ static void edit_draft(App *app, const Action *action)
     switch (action->type) {
     case ACTION_TOGGLE_INPUT:
         bill_set_input(draft, (ItemType)action->value,
-                       !(draft->inputs & ITEM_TYPE_BIT(action->value)));
+                       !(item_types_has(draft->inputs, action->value)));
         break;
     case ACTION_SET_WORKER:
         bill_set_worker(draft, (BillWorker)action->value,
@@ -1644,7 +1644,7 @@ static void apply(App *app, int index, const Action *action)
     case ACTION_TOGGLE_INPUT:
         if (bill != NULL) {
             workstation_set_bill_input(workstations, index, action->bill, (ItemType)action->value,
-                                       !(bill->inputs & ITEM_TYPE_BIT(action->value)));
+                                       !(item_types_has(bill->inputs, action->value)));
         }
         break;
     case ACTION_SET_WORKER:
@@ -1729,7 +1729,7 @@ static void apply(App *app, int index, const Action *action)
         break;
     case ACTION_TOGGLE_FUEL:
         hearth_set_fuel_type(workstations, index, (ItemType)action->value,
-                             !(station->fuel_types & ITEM_TYPE_BIT(action->value)));
+                             !(item_types_has(station->fuel_types, action->value)));
         break;
     case ACTION_TOGGLE_TEACH:
         game_set_teach(&app->game, (KnowledgeType)action->value, !app->game.teach[action->value]);

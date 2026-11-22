@@ -45,6 +45,8 @@ typedef enum RecipeType {
 
 #define RECIPE_INPUT_ALTERNATIVES 2
 #define RECIPE_INGREDIENT_MAX 3
+/* Types a tool set may hold. */
+#define RECIPE_TOOL_ALTERNATIVES 2
 #define RECIPE_TOOL_MAX 2
 /* Most stacks one craft gives (a hand axe and its flakes). */
 #define RECIPE_PRODUCT_MAX 2
@@ -65,8 +67,9 @@ typedef struct RecipeDef {
      * the hardened spear's quality, the roasted roots' keeping). */
     RecipeIngredient ingredients[RECIPE_INGREDIENT_MAX];
     ItemQuality input_min_quality;
-    /* Tools: one item of each non-empty set must be carried. */
-    ItemTypeMask tools[RECIPE_TOOL_MAX];
+    /* Tools: one item of each non-empty set must be carried (each set a list
+     * of types, ITEM_NONE where it ends; recipe_tool_types()). */
+    ItemType tools[RECIPE_TOOL_MAX][RECIPE_TOOL_ALTERNATIVES];
     /* The tool of the first set shapes the material (a scraper the fibre, a
      * borer the bark): its quality counts in the cap of the products' quality
      * (recipe_quality_cap_of()). */
@@ -86,6 +89,9 @@ typedef struct RecipeDef {
 
 /* NULL when out of range. */
 const RecipeDef *recipe_def(RecipeType recipe);
+
+/* The types of tool set `slot` (none for an empty set, or out of range). */
+ItemTypeMask recipe_tool_types(const RecipeDef *def, int slot);
 
 /* Every input type a recipe accepts, all its ingredients together. */
 ItemTypeMask recipe_inputs(RecipeType recipe);

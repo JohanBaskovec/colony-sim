@@ -34,10 +34,8 @@ static bool init_flat_game(Game *game)
         map->terrain[i] = TERRAIN_SOIL;
         map->water[i] = 0;
         map->rock[i] = ROCK_NONE;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE) | ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i,
-                            ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) |
-                                ITEM_TYPE_BIT(ITEM_HAZELNUTS));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_COBBLE, ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS));
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map_topology_changed(map);

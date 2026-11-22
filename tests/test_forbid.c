@@ -36,9 +36,9 @@ static bool init_flat_game(Game *game)
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->water[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -541,8 +541,8 @@ static void test_forbidden_stockpile(void)
     int near = game_add_stockpile_rect(&game, 20, 10, 20, 10, 0, STOCKPILE_NONE);
     int far = game_add_stockpile_rect(&game, 30, 10, 30, 10, 0, STOCKPILE_NONE);
     REQUIRE(near != STOCKPILE_NONE && far != STOCKPILE_NONE);
-    stockpile_set_allowed(&game.stockpiles, far, ITEM_TYPE_BIT(ITEM_BRANCHES));
-    stockpile_set_allowed(&game.stockpiles, near, ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
+    stockpile_set_allowed(&game.stockpiles, far, item_types_of(ITEM_BRANCHES));
+    stockpile_set_allowed(&game.stockpiles, near, item_types_of(ITEM_BLACKBERRIES));
     CHECK(game_can_forbid(&game, 20, 10, 0, FORBID_STOCKPILE));
     CHECK(!game_can_forbid(&game, 21, 10, 0, FORBID_STOCKPILE));
     CHECK(!game_forbidden(&game, 20, 10, 0, FORBID_STOCKPILE));
@@ -559,7 +559,7 @@ static void test_forbidden_stockpile(void)
     CHECK(game_set_forbidden(&game, 30, 10, 0, FORBID_STOCKPILE, true));
     int better = game_add_stockpile_rect(&game, 25, 10, 25, 10, 0, STOCKPILE_NONE);
     REQUIRE(better != STOCKPILE_NONE);
-    stockpile_set_allowed(&game.stockpiles, better, ITEM_TYPE_BIT(ITEM_BRANCHES));
+    stockpile_set_allowed(&game.stockpiles, better, item_types_of(ITEM_BRANCHES));
     stockpile_set_priority(&game.stockpiles, better, STOCKPILE_PRIORITY_HIGHEST);
     long stored[ITEM_TYPE_COUNT] = {0};
     stockpiles_count_stored(&game.stockpiles, &game.items, stored);

@@ -143,7 +143,7 @@ int crowns_count(const Crowns *crowns, int x, int y, int z, ItemTypeMask types)
     int count = 0;
     for (uint32_t slot = crowns->heads[index_of(crowns, x, y, z)]; slot != 0;
          slot = crowns->pool[slot - 1].next) {
-        count += (types & ITEM_TYPE_BIT(crowns->pool[slot - 1].type)) != 0;
+        count += (item_types_has(types, crowns->pool[slot - 1].type)) != 0;
     }
     return count;
 }
@@ -198,7 +198,7 @@ int crowns_take(Crowns *crowns, int x, int y, int z, ItemTypeMask types, CrownIt
     uint32_t previous = 0, slot = crowns->heads[index];
     while (slot != 0 && taken < max) {
         uint32_t next = crowns->pool[slot - 1].next;
-        if (types & ITEM_TYPE_BIT(crowns->pool[slot - 1].type)) {
+        if (item_types_has(types, crowns->pool[slot - 1].type)) {
             out[taken++] = crowns->pool[slot - 1];
             remove_slot(crowns, index, previous, slot);
         } else {

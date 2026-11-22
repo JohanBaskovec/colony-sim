@@ -120,15 +120,143 @@ typedef enum ItemCategory {
 /* Wood species (core/wood.h): a bit per tree species, 0 for none. */
 typedef uint16_t WoodMask;
 
-/* Bit mask with one bit per ItemType. */
-typedef uint64_t ItemTypeMask;
-_Static_assert(ITEM_TYPE_COUNT <= 64, "item types must fit in an ItemTypeMask");
+/* Words of 64 bits in an ItemTypeMask: as many as the item types take, however many. */
+#define ITEM_TYPE_WORDS (((size_t)ITEM_TYPE_COUNT + 63) / 64)
 
-#define ITEM_TYPE_BIT(type) ((ItemTypeMask)1u << (unsigned)(type))
+/* A set of item types, a bit per ItemType, of any number of types. Built and
+ * read with the item_types_*() functions below (no bit operators: a set may
+ * take several words); passed by value like a number. */
+typedef struct ItemTypeMask {
+    uint64_t words[ITEM_TYPE_WORDS];
+} ItemTypeMask;
+
+static inline ItemTypeMask item_types_none(void)
+{
+    ItemTypeMask none = {{0}};
+    return none;
+}
+
+/* The set of one type (none for a type out of range, ITEM_NONE included). */
+static inline ItemTypeMask item_types_of(ItemType type)
+{
+    ItemTypeMask mask = {{0}};
+    if (type > ITEM_NONE && (unsigned)type < ITEM_TYPE_COUNT) {
+        mask.words[(unsigned)type / 64] = UINT64_C(1) << ((unsigned)type % 64);
+    }
+    return mask;
+}
+
+static inline bool item_types_has(ItemTypeMask mask, ItemType type)
+{
+    return (unsigned)type < ITEM_TYPE_COUNT &&
+           (mask.words[(unsigned)type / 64] >> ((unsigned)type % 64) & 1u) != 0;
+}
+
+static inline void item_types_add(ItemTypeMask *mask, ItemType type)
+{
+    if (type > ITEM_NONE && (unsigned)type < ITEM_TYPE_COUNT) {
+        mask->words[(unsigned)type / 64] |= UINT64_C(1) << ((unsigned)type % 64);
+    }
+}
+
+static inline void item_types_remove(ItemTypeMask *mask, ItemType type)
+{
+    if ((unsigned)type < ITEM_TYPE_COUNT) {
+        mask->words[(unsigned)type / 64] &= ~(UINT64_C(1) << ((unsigned)type % 64));
+    }
+}
+
+/* The set and one more type. */
+static inline ItemTypeMask item_types_with(ItemTypeMask mask, ItemType type)
+{
+    item_types_add(&mask, type);
+    return mask;
+}
+
+static inline ItemTypeMask item_types_union(ItemTypeMask a, ItemTypeMask b)
+{
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        a.words[w] |= b.words[w];
+    }
+    return a;
+}
+
+/* The types in both. */
+static inline ItemTypeMask item_types_common(ItemTypeMask a, ItemTypeMask b)
+{
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        a.words[w] &= b.words[w];
+    }
+    return a;
+}
+
+/* The types of `a` not in `b`. */
+static inline ItemTypeMask item_types_minus(ItemTypeMask a, ItemTypeMask b)
+{
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        a.words[w] &= ~b.words[w];
+    }
+    return a;
+}
+
+static inline bool item_types_any(ItemTypeMask mask)
+{
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        if (mask.words[w] != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Whether the two share a type. */
+static inline bool item_types_meet(ItemTypeMask a, ItemTypeMask b)
+{
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        if ((a.words[w] & b.words[w]) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static inline bool item_types_equal(ItemTypeMask a, ItemTypeMask b)
+{
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        if (a.words[w] != b.words[w]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Types in the set. */
+static inline int item_types_count(ItemTypeMask mask)
+{
+    int count = 0;
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        count += __builtin_popcountll(mask.words[w]);
+    }
+    return count;
+}
+
+/* The set of a list of `count` types. */
+ItemTypeMask item_types_list(const ItemType *types, int count);
+
+/* The set of the types named, in a function: ITEM_TYPES(ITEM_FLINT, ITEM_COBBLE). */
+#define ITEM_TYPES(...)                                                                            \
+    item_types_list((const ItemType[]){__VA_ARGS__},                                               \
+                    (int)(sizeof((const ItemType[]){__VA_ARGS__}) / sizeof(ItemType)))
 
 /* What takes a spark when dry (item_moisture_dry()): grass, bracken and moss. */
-#define ITEM_TINDER_TYPES                                                                          \
-    (ITEM_TYPE_BIT(ITEM_GRASS) | ITEM_TYPE_BIT(ITEM_BRACKEN) | ITEM_TYPE_BIT(ITEM_MOSS))
+ItemTypeMask item_types_tinder(void);
+
+/* Writes or reads a set (core/serialize.h); types beyond the last are dropped. */
+void item_types_serialize(Serializer *s, ItemTypeMask *mask);
+
+/* Adds to a hash the words of a set past the first, those not empty (a hash
+ * of the first word alone is what it was when a set took one word). */
+uint64_t item_types_hash_more(ItemTypeMask mask, uint64_t hash);
 
 /*
  * Bulk is how much room an item takes, packing gaps included, in units of

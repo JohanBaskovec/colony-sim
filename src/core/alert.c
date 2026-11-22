@@ -18,10 +18,10 @@ static void count_for(Alert *alert, EntityId id)
 /* Whether the food in store lasts less than ALERT_FOOD_DAYS. */
 static bool food_runs_short(const Game *game)
 {
-    ItemTypeMask food = 0;
+    ItemTypeMask food = item_types_none();
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
         if (item_is_food((ItemType)type)) {
-            food |= ITEM_TYPE_BIT(type);
+            item_types_add(&food, type);
         }
     }
     return gather_food_days(food, game->stock, game_daily_food(game)) < ALERT_FOOD_DAYS;

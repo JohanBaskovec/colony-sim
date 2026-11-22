@@ -68,7 +68,7 @@ static void test_definitions(void)
         REQUIRE(def != NULL);
         CHECK(def->id != NULL);
         CHECK(i18n_is_valid_key(def->name_key));
-        CHECK(def->counted & ITEM_TYPE_BIT(def->item));
+        CHECK(item_types_has(gather_resource_counted(def), def->item));
         /* Each resource comes from the job that says it gives it. */
         CHECK(gather_job_def(def->job)->resources & GATHER_RESOURCE_BIT(r));
         seen |= GATHER_RESOURCE_BIT(r);
@@ -667,12 +667,12 @@ static void test_days_of_food(void)
     long three_days = (long)(3.5f * daily / berry);
     totals[ITEM_BLACKBERRIES] = three_days;
     totals[ITEM_TWIGS] = 1000; /* Not food. */
-    CHECK_EQ_INT((int)gather_food_days(ITEM_TYPE_BIT(ITEM_BLACKBERRIES), totals, daily), 3);
+    CHECK_EQ_INT((int)gather_food_days(item_types_of(ITEM_BLACKBERRIES), totals, daily), 3);
     CHECK_EQ_INT((int)gather_resource_food_days(GATHER_BLACKBERRIES, totals, daily), 3);
     CHECK_EQ_INT((int)gather_resource_food_days(GATHER_GRASS, totals, daily), 0);
     CHECK_EQ_INT((int)gather_group_food_days(GATHER_GROUP_FOOD, totals, daily), 3);
     CHECK_EQ_INT((int)gather_group_food_days(GATHER_GROUP_WOOD, totals, daily), 0);
-    CHECK_EQ_INT((int)gather_food_days(ITEM_TYPE_BIT(ITEM_BLACKBERRIES), totals, 0.0f), 0);
+    CHECK_EQ_INT((int)gather_food_days(item_types_of(ITEM_BLACKBERRIES), totals, 0.0f), 0);
     /* Cooked food counts for the group, not for a resource. */
     totals[ITEM_ROASTED_CARROTS] = (long)(2.0f * daily / roasted) + 1;
     CHECK_EQ_INT((int)gather_group_food_days(GATHER_GROUP_FOOD, totals, daily), 5);
@@ -1195,7 +1195,7 @@ static void test_grass_is_a_plant_with_a_stock(void)
     CHECK(gather_zone_add_work(&zones, &map, &items, 1, 1, 0, GATHER_JOB_CUT_GRASS, 1e6f, 60.0,
                                NULL));
     CHECK_EQ_INT((int)items.totals[ITEM_GRASS], armfuls->capacity);
-    ItemStack cut = items_get_of(&items, 1, 1, 0, ITEM_TYPE_BIT(ITEM_GRASS));
+    ItemStack cut = items_get_of(&items, 1, 1, 0, item_types_of(ITEM_GRASS));
     CHECK_NEAR(item_stack_moisture(cut), item_fresh_moisture(ITEM_GRASS), 1e-3); /* Fresh. */
     CHECK_EQ_INT(tall->type, PLANT_GRASS);
     CHECK_NEAR(tall->growth, 0.0f, 1e-6);
@@ -1424,8 +1424,8 @@ static void test_picking_in_the_crowns(void)
     CHECK_NEAR(gather_job_work_needed(&map, 5, 5, 1, GATHER_JOB_PICK),
                3.0f * gather_job_work_needed(&map, 6, 5, 1, GATHER_JOB_PICK) / 2.0f, 1e-3);
     CHECK(gather_zone_add_work(&zones, &map, &items, 5, 5, 1, GATHER_JOB_PICK, 1e6f, 60.0, NULL));
-    CHECK_EQ_INT(crowns_count(&crowns, 5, 5, 1, ITEM_TYPE_BIT(ITEM_APPLES)), 0);
-    CHECK_EQ_INT(crowns_count(&crowns, 5, 5, 1, ITEM_TYPE_BIT(ITEM_BRANCHES)), 1); /* Left. */
+    CHECK_EQ_INT(crowns_count(&crowns, 5, 5, 1, item_types_of(ITEM_APPLES)), 0);
+    CHECK_EQ_INT(crowns_count(&crowns, 5, 5, 1, item_types_of(ITEM_BRANCHES)), 1); /* Left. */
     ItemStack below = items_get(&items, 5, 5, 0);
     CHECK_EQ_INT(below.type, ITEM_APPLES);
     CHECK_EQ_INT(below.count, 3);

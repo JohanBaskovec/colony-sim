@@ -31,9 +31,9 @@ static bool init_flat_game(Game *game)
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->water[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -167,7 +167,7 @@ static void test_bill_free_input(void)
     CHECK(inputs[0].quality >= ITEM_QUALITY_STANDARD);
     CHECK(recipe_accepts_input(RECIPE_HAND_AXE, inputs[0]));
     CHECK_EQ_INT(inputs[1].count, 0); /* A single ingredient. */
-    bill.inputs = 0;                  /* Every input refused. */
+    bill.inputs = item_types_none();  /* Every input refused. */
     CHECK(!bill_free_inputs(&bill, inputs));
     /* Several ingredients: a stack of each. */
     Bill tray = {.recipe = RECIPE_BARK_TRAY, .inputs = recipe_inputs(RECIPE_BARK_TRAY)};
@@ -176,7 +176,7 @@ static void test_bill_free_input(void)
     CHECK_EQ_INT(inputs[0].count, 1);
     CHECK_EQ_INT(inputs[1].type, ITEM_TWIGS);
     CHECK_EQ_INT(inputs[1].count, 2);
-    tray.inputs = ITEM_TYPE_BIT(ITEM_BIRCH_BARK); /* No twigs allowed. */
+    tray.inputs = item_types_of(ITEM_BIRCH_BARK); /* No twigs allowed. */
     CHECK(!bill_free_inputs(&tray, inputs));
 }
 
@@ -281,18 +281,18 @@ static void test_no_tools(void)
         workstations_place(&game.workstations, &game.map, WORKSTATION_CRAFTING_SPOT, 14, 10, 0);
     workstation_add_bill(&game.workstations, index, RECIPE_HAND_AXE);
     items_add(&game.items, 16, 10, 0, item_stack_pristine(ITEM_FLINT, 3));
-    CHECK(game_recipe_missing_tools(&game, RECIPE_HAND_AXE) != 0);
+    CHECK(item_types_any(game_recipe_missing_tools(&game, RECIPE_HAND_AXE)));
     run_ticks(&game, 300);
     CHECK(knapper->task != TASK_CRAFT);
 
     game_set_no_tools(&game, true);
-    CHECK_EQ_INT((int)game_recipe_missing_tools(&game, RECIPE_HAND_AXE), 0);
+    CHECK(!item_types_any(game_recipe_missing_tools(&game, RECIPE_HAND_AXE)));
     for (int i = 0; i < 20 && game.items.totals[ITEM_HAND_AXE] == 0; i++) {
         run_ticks(&game, 300);
     }
     CHECK(game.items.totals[ITEM_HAND_AXE] > 0);
     CHECK(game.items.totals[ITEM_FLINT] < 3); /* Made of the flint lying there. */
-    CHECK_EQ_INT(colonist_tool_index(knapper, ITEM_TYPE_BIT(ITEM_COBBLE)), -1);
+    CHECK_EQ_INT(colonist_tool_index(knapper, item_types_of(ITEM_COBBLE)), -1);
     game_shutdown(&game);
 }
 

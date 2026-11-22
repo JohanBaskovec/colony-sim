@@ -91,8 +91,8 @@ static void test_hanging_and_taking(void)
     CHECK_EQ_INT(crowns.count, 4);
     CHECK_EQ_INT(crowns.totals[ITEM_APPLES], 2);
     CHECK(crowns_hash(&crowns, 7) != empty);
-    CHECK_EQ_INT(crowns_count(&crowns, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES)), 2);
-    CHECK_EQ_INT(crowns_count(&crowns, 4, 4, 2, ~(ItemTypeMask)0), 3);
+    CHECK_EQ_INT(crowns_count(&crowns, 4, 4, 2, item_types_of(ITEM_APPLES)), 2);
+    CHECK_EQ_INT(crowns_count(&crowns, 4, 4, 2, item_types_all()), 3);
     CrownItem list[8];
     REQUIRE(crowns_list(&crowns, 4, 4, 2, list, 8) == 3);
     CHECK_EQ_INT(list[0].quality, 30); /* Newest first. */
@@ -110,13 +110,13 @@ static void test_hanging_and_taking(void)
 
     uint32_t revision = crowns.revision;
     CrownItem taken[4];
-    CHECK_EQ_INT(crowns_take(&crowns, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES), taken, 4), 2);
+    CHECK_EQ_INT(crowns_take(&crowns, 4, 4, 2, item_types_of(ITEM_APPLES), taken, 4), 2);
     CHECK(crowns.revision != revision);
     CHECK_EQ_INT(taken[0].quality, 30);
     CHECK_EQ_INT(taken[1].quality, 70);
-    CHECK_EQ_INT(crowns_count(&crowns, 4, 4, 2, ~(ItemTypeMask)0), 1);
+    CHECK_EQ_INT(crowns_count(&crowns, 4, 4, 2, item_types_all()), 1);
     CHECK_EQ_INT(crowns.totals[ITEM_APPLES], 0);
-    CHECK_EQ_INT(crowns_take(&crowns, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES), taken, 4), 0);
+    CHECK_EQ_INT(crowns_take(&crowns, 4, 4, 2, item_types_of(ITEM_APPLES), taken, 4), 0);
     /* Slots freed are used again. */
     uint32_t used = crowns.pool_used;
     REQUIRE(crowns_add(&crowns, &map, 4, 4, 2, hanging(ITEM_PEARS, 50, 5)));
@@ -137,10 +137,10 @@ static void test_falling(void)
     REQUIRE(crowns_add(&crowns, &map, 4, 4, 2, hanging(ITEM_PEARS, 20, 2)));
     CHECK_EQ_INT(crowns_drop_tile(&crowns, &map, &items, 4, 4, 2), 2);
     CHECK_EQ_INT(crowns.count, 0);
-    ItemStack apples = items_get_of(&items, 4, 4, 0, ITEM_TYPE_BIT(ITEM_APPLES));
+    ItemStack apples = items_get_of(&items, 4, 4, 0, item_types_of(ITEM_APPLES));
     CHECK_EQ_INT(apples.count, 1);
     CHECK_EQ_INT(apples.quality, 80);
-    CHECK_EQ_INT(items_get_of(&items, 4, 4, 0, ITEM_TYPE_BIT(ITEM_PEARS)).quality, 20);
+    CHECK_EQ_INT(items_get_of(&items, 4, 4, 0, item_types_of(ITEM_PEARS)).quality, 20);
     /* Over water: lost. */
     map.water[map_index(&map, 5, 4, 0)] = WATER_DEEP_MM;
     map.water[map_index(&map, 5, 3, 0)] = WATER_DEEP_MM;
@@ -195,8 +195,8 @@ static void test_an_hour(void)
                       .day_of_year = SEASON_DAY(SEASON_AUTUMN, 5),
                       .storm = true}; /* Twigs: a 20 % chance each. */
     int fell = crowns_hour(&crowns, &map, &items, 0, crowns.pool_used, &hour);
-    CHECK_EQ_INT(crowns_count(&crowns, 5, 4, 2, ~(ItemTypeMask)0), 0);
-    CHECK_EQ_INT(items_get_of(&items, 5, 4, 0, ITEM_TYPE_BIT(ITEM_APPLES)).count, 1);
+    CHECK_EQ_INT(crowns_count(&crowns, 5, 4, 2, item_types_all()), 0);
+    CHECK_EQ_INT(items_get_of(&items, 5, 4, 0, item_types_of(ITEM_APPLES)).count, 1);
     CHECK(fell > 1 && fell < 30);
     CHECK_EQ_INT(crowns.count, 41 - fell);
     CHECK_EQ_INT((int)(items.totals[ITEM_TWIGS]), fell - 1);
@@ -226,7 +226,7 @@ static void test_copying_a_tile(void)
     size_t dense = map_index(&map, 4, 4, 2), medium = map_index(&map, 5, 4, 2);
     REQUIRE(crowns_copy_tile(&picture, &crowns, dense));
     CHECK_EQ_INT(picture.count, 3);
-    CHECK_EQ_INT(crowns_count(&picture, 5, 4, 2, ITEM_TYPE_BIT(ITEM_PEARS)), 0); /* Not copied. */
+    CHECK_EQ_INT(crowns_count(&picture, 5, 4, 2, item_types_of(ITEM_PEARS)), 0); /* Not copied. */
     CrownItem real[4], copy[4];
     REQUIRE(crowns_list(&crowns, 4, 4, 2, real, 4) == 3);
     REQUIRE(crowns_list(&picture, 4, 4, 2, copy, 4) == 3);
@@ -240,12 +240,12 @@ static void test_copying_a_tile(void)
     CHECK_EQ_UINT(picture.revision, revision); /* Nothing changed. */
     /* Picked in the real crowns: the picture follows when copied again. */
     CrownItem taken[4];
-    CHECK_EQ_INT(crowns_take(&crowns, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES), taken, 4), 2);
-    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES)), 2);
+    CHECK_EQ_INT(crowns_take(&crowns, 4, 4, 2, item_types_of(ITEM_APPLES), taken, 4), 2);
+    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, item_types_of(ITEM_APPLES)), 2);
     REQUIRE(crowns_copy_tile(&picture, &crowns, dense));
     REQUIRE(crowns_copy_tile(&picture, &crowns, medium));
-    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, ITEM_TYPE_BIT(ITEM_APPLES)), 0);
-    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, ITEM_TYPE_BIT(ITEM_BRANCHES)), 1);
+    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, item_types_of(ITEM_APPLES)), 0);
+    CHECK_EQ_INT(crowns_count(&picture, 4, 4, 2, item_types_of(ITEM_BRANCHES)), 1);
     CHECK_EQ_INT(picture.totals[ITEM_PEARS], 1);
     CHECK(crowns_hash(&picture, 0) == crowns_hash(&crowns, 0));
     CHECK(crowns_check(&picture));

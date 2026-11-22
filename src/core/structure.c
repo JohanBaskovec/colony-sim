@@ -304,14 +304,15 @@ float structure_deconstruct_work(StructureType type)
 ItemTypeMask structure_material_types(StructureType type, ItemType material)
 {
     if (material == ITEM_NONE) {
-        return 0;
+        return item_types_none();
     }
-    ItemTypeMask types = ITEM_TYPE_BIT(material);
+    ItemTypeMask types = item_types_of(material);
     if (material == ITEM_GRASS) {
-        types |=
-            ITEM_TYPE_BIT(ITEM_BRACKEN) | ITEM_TYPE_BIT(ITEM_HEATHER) | ITEM_TYPE_BIT(ITEM_REEDS);
+        item_types_add(&types, ITEM_BRACKEN);
+        item_types_add(&types, ITEM_HEATHER);
+        item_types_add(&types, ITEM_REEDS);
         if (type == STRUCTURE_GRASS_BED) {
-            types |= ITEM_TYPE_BIT(ITEM_MOSS);
+            item_types_add(&types, ITEM_MOSS);
         }
     }
     return types;

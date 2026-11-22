@@ -22,24 +22,25 @@ static void test_definitions(void)
             CHECK(def->ingredients[i].count >= 1);
             /* No type is two ingredients at once. */
             for (int j = 0; j < i; j++) {
-                CHECK_EQ_UINT(recipe_ingredient_types((RecipeType)recipe, i) &
-                                  recipe_ingredient_types((RecipeType)recipe, j),
-                              0);
+                CHECK(!item_types_meet(recipe_ingredient_types((RecipeType)recipe, i),
+                                       recipe_ingredient_types((RecipeType)recipe, j)));
             }
         }
         CHECK(def->work > 0.0f);
         CHECK(def->min_level >= KNOWLEDGE_MASTERY_LEVEL);
         CHECK(def->product != ITEM_NONE);
-        CHECK(recipe_inputs((RecipeType)recipe) & ITEM_TYPE_BIT(def->ingredients[0].types[0]));
+        CHECK(item_types_has(recipe_inputs((RecipeType)recipe), def->ingredients[0].types[0]));
     }
     CHECK(recipe_def(RECIPE_COUNT) == NULL);
-    CHECK_EQ_UINT(recipe_inputs(RECIPE_COUNT), 0);
+    CHECK(item_types_equal(recipe_inputs(RECIPE_COUNT), item_types_none()));
     /* Flint is preferred for flakes, a cobble for a chopper. */
     CHECK_EQ_INT(recipe_def(RECIPE_FLAKES)->ingredients[0].types[0], ITEM_FLINT);
     CHECK_EQ_INT(recipe_def(RECIPE_CHOPPER)->ingredients[0].types[0], ITEM_COBBLE);
     /* The chain can always start: knapping takes a plain cobble as a hammer. */
-    CHECK_EQ_UINT(recipe_def(RECIPE_FLAKES)->tools[0], ITEM_TYPE_BIT(ITEM_COBBLE));
-    CHECK_EQ_UINT(recipe_def(RECIPE_CHOPPER)->tools[0], ITEM_TYPE_BIT(ITEM_COBBLE));
+    CHECK(item_types_equal(recipe_tool_types(recipe_def(RECIPE_FLAKES), 0),
+                           item_types_of(ITEM_COBBLE)));
+    CHECK(item_types_equal(recipe_tool_types(recipe_def(RECIPE_CHOPPER), 0),
+                           item_types_of(ITEM_COBBLE)));
 }
 
 static void test_inputs_and_levels(void)
@@ -107,8 +108,8 @@ static void test_several_ingredients(void)
     CHECK_EQ_INT(recipe_ingredient_of(RECIPE_BARK_TRAY, ITEM_BIRCH_BARK), 0);
     CHECK_EQ_INT(recipe_ingredient_of(RECIPE_BARK_TRAY, ITEM_TWIGS), 1);
     CHECK_EQ_INT(recipe_ingredient_of(RECIPE_BARK_TRAY, ITEM_FLINT), -1);
-    CHECK_EQ_UINT(recipe_inputs(RECIPE_BARK_TRAY),
-                  ITEM_TYPE_BIT(ITEM_BIRCH_BARK) | ITEM_TYPE_BIT(ITEM_TWIGS));
+    CHECK(
+        item_types_equal(recipe_inputs(RECIPE_BARK_TRAY), ITEM_TYPES(ITEM_BIRCH_BARK, ITEM_TWIGS)));
     ItemStack bark = item_stack_make(ITEM_BIRCH_BARK, 1, 40, 0);
     ItemStack twigs = item_stack_make(ITEM_TWIGS, 2, 60, 0);
     CHECK(recipe_accepts_ingredient(RECIPE_BARK_TRAY, 0, bark));

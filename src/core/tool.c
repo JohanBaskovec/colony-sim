@@ -92,7 +92,7 @@ int tool_best(const ItemStack *tools, int count, ToolUse use, ItemTypeMask allow
     float floor = must_beat_hands ? tool_type_factor(use, ITEM_NONE) : 0.0f;
     for (int i = 0; i < count; i++) {
         ItemStack tool = tools[i];
-        if (tool.count == 0 || !(allowed & ITEM_TYPE_BIT(tool.type))) {
+        if (tool.count == 0 || !(item_types_has(allowed, tool.type))) {
             continue;
         }
         float factor = tool_speed_factor(use, tool);

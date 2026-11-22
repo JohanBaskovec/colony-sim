@@ -62,7 +62,7 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
     bool any_reserved = world->reservations->count_by_kind[RESERVATION_STORAGE] > 0;
     for (int index = 0; index < STOCKPILE_MAX; index++) {
         const Stockpile *stockpile = stockpile_get(stockpiles, index);
-        if (stockpile == NULL || stockpile->allowed == 0 || stockpile->forbidden) {
+        if (stockpile == NULL || !item_types_any(stockpile->allowed) || stockpile->forbidden) {
             continue; /* Forbidden: nothing is brought there. */
         }
         bool *room = out->room[out->zone_count];
@@ -98,7 +98,7 @@ static void storage_levels(const HaulWorld *world, StorageLevels *out)
         }
         if (empty_tile) {
             for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-                if (stockpile->allowed & ITEM_TYPE_BIT(type)) {
+                if (item_types_has(stockpile->allowed, type)) {
                     room[type] = true;
                     any_room = true;
                 }

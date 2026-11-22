@@ -83,11 +83,11 @@ static void test_best_tool(void)
         {.type = ITEM_NONE},
         tool(ITEM_HAND_AXE, ITEM_QUALITY_STANDARD, 100),
     };
-    const ItemTypeMask any = ~(ItemTypeMask)0;
+    const ItemTypeMask any = item_types_all();
     /* Grass: hand axe ×0.9 beats a crude flake ×0.8; the cobble cannot cut. */
     CHECK_EQ_INT(tool_best(tools, 4, TOOL_USE_CUT_GRASS, any, true), 3);
     /* Only flakes allowed. */
-    CHECK_EQ_INT(tool_best(tools, 4, TOOL_USE_CUT_GRASS, ITEM_TYPE_BIT(ITEM_FLAKE), true), 1);
+    CHECK_EQ_INT(tool_best(tools, 4, TOOL_USE_CUT_GRASS, item_types_of(ITEM_FLAKE), true), 1);
     /* Building: a superb cobble (×0.9 × 1.2) beats the hand axe (×1.0). */
     CHECK_EQ_INT(tool_best(tools, 4, TOOL_USE_BUILDING, any, true), 0);
     /* Knapping: only the cobble. */

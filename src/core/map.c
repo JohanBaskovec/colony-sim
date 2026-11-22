@@ -2716,7 +2716,7 @@ static int remove_litter_items(Map *map, int x, int y, int z, ItemType type, int
 {
     int removed = 0;
     while (removed < count) {
-        int now = items_remove_of(map->litter, x, y, z, ITEM_TYPE_BIT(type), count - removed);
+        int now = items_remove_of(map->litter, x, y, z, item_types_of(type), count - removed);
         if (now <= 0) {
             break;
         }
@@ -3234,7 +3234,7 @@ void map_clear_litter_at(Map *map, size_t index, ItemTypeMask types)
     int x, y, z;
     index_coords(map, index, &x, &y, &z);
     for (size_t t = 0; t < sizeof(TYPES) / sizeof(TYPES[0]); t++) {
-        if ((types & ITEM_TYPE_BIT(TYPES[t])) == 0) {
+        if ((item_types_has(types, TYPES[t])) == 0) {
             continue;
         }
         if (TYPES[t] == ITEM_COBBLE || TYPES[t] == ITEM_FLINT) {
@@ -3255,8 +3255,8 @@ void map_set_stones_at(Map *map, size_t index, int cobbles, int flint)
 
 void map_clear_litter(Map *map)
 {
-    ItemTypeMask types = ITEM_TYPE_BIT(ITEM_COBBLE) | ITEM_TYPE_BIT(ITEM_FLINT) |
-                         ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS);
+    static const ItemType LITTER[] = {ITEM_COBBLE, ITEM_FLINT, ITEM_BRANCHES, ITEM_TWIGS};
+    ItemTypeMask types = item_types_list(LITTER, (int)COLONY_ARRAY_COUNT(LITTER));
     size_t count = map_tile_count(map);
     for (size_t i = 0; i < count; i++) {
         map_clear_litter_at(map, i, types);

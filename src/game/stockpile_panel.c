@@ -25,8 +25,9 @@ typedef struct StockpileRows {
 
 static UiCheck check_state(ItemTypeMask allowed, ItemTypeMask mask)
 {
-    ItemTypeMask on = allowed & mask;
-    return on == mask ? UI_CHECKED : (on != 0 ? UI_PARTIAL : UI_UNCHECKED);
+    ItemTypeMask on = item_types_common(allowed, mask);
+    return item_types_equal(on, mask) ? UI_CHECKED
+                                      : (item_types_any(on) ? UI_PARTIAL : UI_UNCHECKED);
 }
 
 /* Size and priority (1 is the highest), with − and + buttons. */
@@ -155,7 +156,7 @@ static void filter_rows(UiLayout *layout, StockpileRows *rows)
     ui_layout_measure(layout, ui_text_width(ui, label) + GAP + all_width + GAP + none_width);
     float right = layout->x + layout->width;
     if (ui_layout_button(layout, right - none_width, none)) {
-        rows->allowed = 0;
+        rows->allowed = item_types_none();
     }
     if (ui_layout_button(layout, right - none_width - GAP - all_width, all)) {
         rows->allowed = item_types_all();
@@ -177,7 +178,8 @@ static void filter_rows(UiLayout *layout, StockpileRows *rows)
         const char *name = tr(item_category_name_key((ItemCategory)category));
         ui_layout_measure(layout, ui_checkbox_width(ui, name));
         if (layout->draw && ui_checkbox(ui, layout->x, layout->y, layout->width, state, name)) {
-            rows->allowed = state == UI_CHECKED ? rows->allowed & ~mask : rows->allowed | mask;
+            rows->allowed = state == UI_CHECKED ? item_types_minus(rows->allowed, mask)
+                                                : item_types_union(rows->allowed, mask);
         }
         layout->y += layout->row;
         int shown = 0;
@@ -186,12 +188,17 @@ static void filter_rows(UiLayout *layout, StockpileRows *rows)
             if ((int)def->category != category) {
                 continue;
             }
-            ItemTypeMask bit = ITEM_TYPE_BIT(type);
+
             float cx = layout->x + ITEM_INDENT + (float)(shown % ITEM_COLUMNS) * column;
             if (layout->draw &&
                 ui_checkbox(ui, cx, layout->y, column - GAP,
-                            (allowed & bit) ? UI_CHECKED : UI_UNCHECKED, tr(def->name_key))) {
-                rows->allowed ^= bit;
+                            item_types_has(allowed, (ItemType)type) ? UI_CHECKED : UI_UNCHECKED,
+                            tr(def->name_key))) {
+                if (item_types_has(rows->allowed, (ItemType)type)) {
+                    item_types_remove(&rows->allowed, (ItemType)type);
+                } else {
+                    item_types_add(&rows->allowed, (ItemType)type);
+                }
             }
             if (++shown % ITEM_COLUMNS == 0) {
                 layout->y += layout->row;
@@ -240,7 +247,7 @@ void stockpile_panel_draw(App *app)
     if (toggle_forbidden) {
         stockpile_set_forbidden(stockpiles, index, !stockpile->forbidden);
     }
-    if (rows.allowed != stockpile->allowed) {
+    if (!item_types_equal(rows.allowed, stockpile->allowed)) {
         stockpile_set_allowed(stockpiles, index, rows.allowed);
     }
     if (deleted) {

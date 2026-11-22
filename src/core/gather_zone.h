@@ -128,11 +128,16 @@ typedef enum GatherGroup {
 
 #define GATHER_GROUP_NONE GATHER_GROUP_COUNT
 
+/* Item types counted as one gathering resource, at most. */
+#define GATHER_COUNTED_MAX 2
+
 typedef struct GatherResourceDef {
     const char *id; /* Stable identifier (saves), never shown. */
     const char *name_key;
-    ItemType item;        /* What gathering gives. */
-    ItemTypeMask counted; /* Items counted as this resource in the colony (grass: fresh or dry). */
+    ItemType item; /* What gathering gives. */
+    /* Items counted as this resource in the colony (grass: fresh or dry), ITEM_NONE where the
+     * list ends (gather_resource_counted()). */
+    ItemType counted[GATHER_COUNTED_MAX];
     GatherJob job;
     bool ripe_option;  /* Whether the order may wait for the full harvest. */
     GatherGroup group; /* GATHER_GROUP_NONE: on its own. */
@@ -162,6 +167,9 @@ typedef struct GatherJobDef {
 
 /* NULL when out of range. */
 const GatherResourceDef *gather_resource_def(GatherResource resource);
+
+/* The item types counted as a resource (none for NULL). */
+ItemTypeMask gather_resource_counted(const GatherResourceDef *def);
 const GatherJobDef *gather_job_def(GatherJob job);
 const GatherGroupDef *gather_group_def(GatherGroup group);
 

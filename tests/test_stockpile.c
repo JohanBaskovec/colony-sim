@@ -42,9 +42,10 @@ static void test_create_covers_valid_tiles_only(void)
     CHECK_EQ_INT(stockpile->cell_count, 5 * 6 - 1);
     CHECK_EQ_INT(stockpile->priority, STOCKPILE_PRIORITY_DEFAULT);
     /* Everything but bodies, unless the player allows them. */
-    CHECK_EQ_UINT(stockpile->allowed,
-                  item_types_all() & ~item_types_in_category(ITEM_CATEGORY_BODIES));
-    CHECK(!(stockpile->allowed & ITEM_TYPE_BIT(ITEM_SETTLER_BODY)));
+    CHECK(item_types_equal(
+        stockpile->allowed,
+        item_types_minus(item_types_all(), item_types_in_category(ITEM_CATEGORY_BODIES))));
+    CHECK(!(item_types_has(stockpile->allowed, ITEM_SETTLER_BODY)));
     CHECK_EQ_INT(stockpile_at(&s, 3, 3, 0), a);
     CHECK_EQ_INT(stockpile_at(&s, 0, 3, 0), STOCKPILE_NONE);
     CHECK_EQ_INT(stockpile_at(&s, 5, 5, 0), STOCKPILE_NONE);
@@ -190,8 +191,8 @@ static void test_filter_and_priority(void)
     stockpile_set_allowed(&s, a, item_types_in_category(ITEM_CATEGORY_FOOD));
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, 0, wood), 0);
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, 0, berries), STOCKPILE_PRIORITY_DEFAULT);
-    stockpile_set_allowed(&s, a, ~(ItemTypeMask)0); /* Unknown bits are dropped. */
-    CHECK_EQ_UINT(stockpile_get(&s, a)->allowed, item_types_all());
+    stockpile_set_allowed(&s, a, item_types_all()); /* Unknown bits are dropped. */
+    CHECK(item_types_equal(stockpile_get(&s, a)->allowed, item_types_all()));
 
     stockpile_set_priority(&s, a, 2);
     CHECK_EQ_INT(stockpile_storage_priority(&s, 2, 2, 0, item_stack_pristine(ITEM_STONE_BLOCK, 1)),
@@ -260,7 +261,7 @@ static void test_condition_ranges(void)
     CHECK_EQ_INT(pile->quality.max, TEST_QUALITY_FINE);
 
     /* The type filter still applies; empty stacks are never accepted. */
-    stockpile_set_allowed(&s, a, ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
+    stockpile_set_allowed(&s, a, item_types_of(ITEM_BLACKBERRIES));
     CHECK(!stockpile_accepts(pile, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_FINE, wood_hp)));
     CHECK(stockpile_accepts(pile, item_stack_make(ITEM_BLACKBERRIES, 1, TEST_QUALITY_FINE, 10)));
     CHECK(!stockpile_accepts(pile, (ItemStack){.type = ITEM_NONE}));
@@ -384,7 +385,7 @@ static void test_count_stored(void)
     REQUIRE(items_init(&items, 16, 16, 1));
     int pile = stockpile_create(&s, &map, 2, 2, 4, 4, 0);
     REQUIRE(pile != STOCKPILE_NONE);
-    stockpile_set_allowed(&s, pile, ITEM_TYPE_BIT(ITEM_WOOD) | ITEM_TYPE_BIT(ITEM_FLINT));
+    stockpile_set_allowed(&s, pile, ITEM_TYPES(ITEM_WOOD, ITEM_FLINT));
     stockpile_create(&s, &map, 10, 10, 10, 10, 0); /* Accepts everything. */
     items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WOOD, 3));
     items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_WOOD, 2));

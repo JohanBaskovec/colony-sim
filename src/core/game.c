@@ -4583,7 +4583,7 @@ BillEstimate game_bill_estimate(const Game *game, const Bill *bill)
     ItemType input = ITEM_NONE; /* The main ingredient's first type the bill allows. */
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES && input == ITEM_NONE; i++) {
         ItemType type = def->ingredients[0].types[i];
-        if (type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type))) {
+        if (type != ITEM_NONE && (item_types_has(bill->inputs, type))) {
             input = type;
         }
     }
@@ -4608,7 +4608,7 @@ static bool colonist_carries_tool(const Game *game, ItemTypeMask types)
 static bool items_lying(const Items *items, ItemTypeMask types, int count)
 {
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        if ((types & ITEM_TYPE_BIT(type)) && items->totals[type] >= count) {
+        if ((item_types_has(types, type)) && items->totals[type] >= count) {
             return true;
         }
     }
@@ -4618,12 +4618,12 @@ static bool items_lying(const Items *items, ItemTypeMask types, int count)
 ItemTypeMask game_recipe_missing_tools(const Game *game, RecipeType recipe)
 {
     const RecipeDef *def = recipe_def(recipe);
-    ItemTypeMask missing = 0;
+    ItemTypeMask missing = item_types_none();
     for (int slot = 0; def != NULL && !game->debug.no_tools && slot < RECIPE_TOOL_MAX; slot++) {
-        ItemTypeMask types = def->tools[slot];
-        if (types != 0 && !items_lying(&game->items, types, 1) &&
+        ItemTypeMask types = recipe_tool_types(def, slot);
+        if (item_types_any(types) && !items_lying(&game->items, types, 1) &&
             !colonist_carries_tool(game, types)) {
-            missing |= types;
+            missing = item_types_union(missing, types);
         }
     }
     return missing;
@@ -4642,8 +4642,9 @@ bool game_bill_has_input(const Game *game, const Bill *bill)
     /* Tools nobody carries yet will be taken from what lies around. */
     ItemTypeMask tools[RECIPE_TOOL_MAX] = {0};
     for (int slot = 0; !game->debug.no_tools && slot < RECIPE_TOOL_MAX; slot++) {
-        if (def->tools[slot] != 0 && !colonist_carries_tool(game, def->tools[slot])) {
-            tools[slot] = def->tools[slot];
+        if (item_types_any(recipe_tool_types(def, slot)) &&
+            !colonist_carries_tool(game, recipe_tool_types(def, slot))) {
+            tools[slot] = recipe_tool_types(def, slot);
         }
     }
     return bill_has_input(bill, game_view_items(game)->totals, tools);

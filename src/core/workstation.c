@@ -185,7 +185,7 @@ int workstations_place(Workstations *workstations, const Map *map, WorkstationTy
         defaults_standard(&station->defaults);
         if (WORKSTATION_DEFS[type].hearth) {
             station->keep_burning = true;
-            station->fuel_types = HEARTH_DEFAULT_FUEL_TYPES;
+            station->fuel_types = hearth_default_fuel_types();
         }
         workstations->at[index_of(workstations, x, y, z)] = (uint8_t)(index + 1);
         workstations->used_count++;
@@ -369,7 +369,7 @@ int workstation_add_bill_from(Workstations *workstations, int index, const Bill 
     bill_init(&bill, (RecipeType)draft->recipe);
     bill_set_mode(&bill, (BillMode)draft->mode);
     bill_set_target(&bill, draft->target);
-    bill.inputs = draft->inputs & recipe_inputs((RecipeType)draft->recipe);
+    bill.inputs = item_types_common(draft->inputs, recipe_inputs((RecipeType)draft->recipe));
     bill_set_worker(&bill, (BillWorker)draft->worker, draft->colonist);
     bill_set_max_level(&bill, draft->max_level);
     bill_set_min_level(&bill, draft->min_level);
@@ -428,13 +428,13 @@ bool bill_set_target(Bill *bill, int target)
 bool bill_set_input(Bill *bill, ItemType type, bool allowed)
 {
     if ((unsigned)type >= ITEM_TYPE_COUNT ||
-        !(recipe_inputs((RecipeType)bill->recipe) & ITEM_TYPE_BIT(type))) {
+        !item_types_has(recipe_inputs((RecipeType)bill->recipe), type)) {
         return false;
     }
     if (allowed) {
-        bill->inputs |= ITEM_TYPE_BIT(type);
+        item_types_add(&bill->inputs, type);
     } else {
-        bill->inputs &= ~ITEM_TYPE_BIT(type);
+        item_types_remove(&bill->inputs, type);
     }
     return true;
 }
@@ -595,7 +595,7 @@ bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
         return false;
     }
     RecipeType recipe = (RecipeType)bill->recipe;
-    ItemTypeMask inputs = bill->inputs & recipe_inputs(recipe);
+    ItemTypeMask inputs = item_types_common(bill->inputs, recipe_inputs(recipe));
     long left[ITEM_TYPE_COUNT];
     memcpy(left, totals, sizeof(left));
     /* Each tool still to fetch takes one item: of a type the bill does not
@@ -603,11 +603,11 @@ bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
         int best = ITEM_NONE;
         for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-            if (!(tools[slot] & ITEM_TYPE_BIT(type)) || left[type] <= 0) {
+            if (!(item_types_has(tools[slot], type)) || left[type] <= 0) {
                 continue;
             }
-            bool used = (inputs & ITEM_TYPE_BIT(type)) != 0;
-            bool best_used = best != ITEM_NONE && (inputs & ITEM_TYPE_BIT(best)) != 0;
+            bool used = (item_types_has(inputs, type)) != 0;
+            bool best_used = best != ITEM_NONE && (item_types_has(inputs, best)) != 0;
             if (best == ITEM_NONE || (best_used && !used) ||
                 (best_used == used && left[type] > left[best])) {
                 best = type;
@@ -620,10 +620,10 @@ bool bill_has_input(const Bill *bill, const long totals[ITEM_TYPE_COUNT],
     /* Each ingredient wants enough of one of its types (two kinds of one
      * recipe never share a type). */
     for (int i = 0; i < recipe_ingredient_count(recipe); i++) {
-        ItemTypeMask types = inputs & recipe_ingredient_types(recipe, i);
+        ItemTypeMask types = item_types_common(inputs, recipe_ingredient_types(recipe, i));
         bool enough = false;
         for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && !enough; type++) {
-            enough = (types & ITEM_TYPE_BIT(type)) && left[type] >= def->ingredients[i].count;
+            enough = (item_types_has(types, type)) && left[type] >= def->ingredients[i].count;
         }
         if (!enough) {
             return false;
@@ -660,7 +660,7 @@ bool workstation_gathers(const Workstation *station, ItemType type)
         const Bill *bill = &station->bills[i];
         RecipeType recipe = (RecipeType)bill->recipe;
         if (!bill->paused && recipe_ingredient_count(recipe) > 1 &&
-            recipe_ingredient_of(recipe, type) >= 0 && (bill->inputs & ITEM_TYPE_BIT(type))) {
+            recipe_ingredient_of(recipe, type) >= 0 && (item_types_has(bill->inputs, type))) {
             return true;
         }
     }
@@ -677,7 +677,7 @@ bool bill_free_inputs(const Bill *bill, ItemStack out[RECIPE_INGREDIENT_MAX])
         out[i] = item_stack_make(ITEM_NONE, 0, 0, 0);
         for (int alt = 0; i < count && alt < RECIPE_INPUT_ALTERNATIVES; alt++) {
             ItemType type = def->ingredients[i].types[alt];
-            if (type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type))) {
+            if (type != ITEM_NONE && (item_types_has(bill->inputs, type))) {
                 int quality = def->input_min_quality > ITEM_QUALITY_STANDARD
                                   ? (int)def->input_min_quality
                                   : (int)ITEM_QUALITY_STANDARD;
@@ -792,16 +792,23 @@ uint64_t workstations_hash(const Workstations *workstations, uint64_t hash)
         float fire[3] = {station->fuel, station->fuel_promised, station->soaked};
         hash = hash_fnv1a64(hash, fire, sizeof(fire));
         uint32_t fire_state[3] = {station->burning, station->keep_burning,
-                                  (uint32_t)station->fuel_types};
+                                  (uint32_t)station->fuel_types.words[0]};
         hash = hash_fnv1a64(hash, fire_state, sizeof(fire_state));
+        hash = item_types_hash_more(station->fuel_types, hash);
         hash = hash_fnv1a64(hash, &station->laid, sizeof(station->laid));
         for (int b = 0; b < station->bill_count; b++) {
             const Bill *bill = &station->bills[b];
-            uint32_t fields[9] = {
-                bill->recipe,           bill->mode,      bill->target,    bill->done,
-                (uint32_t)bill->inputs, bill->min_level, bill->max_level, bill->paused,
-                bill->input_radius};
+            uint32_t fields[9] = {bill->recipe,
+                                  bill->mode,
+                                  bill->target,
+                                  bill->done,
+                                  (uint32_t)bill->inputs.words[0],
+                                  bill->min_level,
+                                  bill->max_level,
+                                  bill->paused,
+                                  bill->input_radius};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
+            hash = item_types_hash_more(bill->inputs, hash);
             if (bill->min_quality != ITEM_QUALITY_WORST || bill->max_quality != ITEM_QUALITY_BEST) {
                 uint8_t range[2] = {bill->min_quality, bill->max_quality};
                 hash = hash_fnv1a64(hash, range, sizeof(range));
@@ -825,7 +832,7 @@ static void bill_serialize(Serializer *s, Bill *bill)
     ser_u8_below(s, &bill->mode, BILL_MODE_COUNT);
     ser_u16(s, &bill->target);
     ser_u16(s, &bill->done);
-    ser_u64(s, &bill->inputs);
+    item_types_serialize(s, &bill->inputs);
     ser_u8_below(s, &bill->worker, BILL_WORKER_COUNT);
     ser_u8(s, &bill->min_level);
     ser_u8(s, &bill->max_level);
@@ -862,7 +869,7 @@ void workstations_serialize(Serializer *s, Workstations *stations)
         ser_float(s, &station->fuel);
         ser_bool(s, &station->burning);
         ser_bool(s, &station->keep_burning);
-        ser_u64(s, &station->fuel_types);
+        item_types_serialize(s, &station->fuel_types);
         ser_float(s, &station->fuel_promised);
         ser_float(s, &station->soaked);
         ser_u8(s, &station->laid);

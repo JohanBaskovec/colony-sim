@@ -45,6 +45,10 @@ footer   u64 FNV-1a hash of everything before it
   must never crash the loading (see §6 for what is checked).
 - The first section after INFO (`GAME`) holds what the others need to be allocated: the
   map's size and levels, the seed, the game's flags.
+- A set of item types (`ItemTypeMask`: a stockpile's filter, a bill's inputs, a
+  hearth's fuels) is saved as its 64-bit words (`item_types_serialize()`), one word
+  while there are fewer than 64 types: past 64, a save takes one more word, and
+  `SAVE_VERSION` is raised with the new types.
 - No compression for now: a 256 × 256 map of 8 levels is a few megabytes.
   Run-length encoding of the layers may come if files prove large.
 

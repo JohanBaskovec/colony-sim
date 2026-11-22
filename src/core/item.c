@@ -301,21 +301,57 @@ const char *item_category_name_key(ItemCategory category)
     return (unsigned)category < ITEM_CATEGORY_COUNT ? CATEGORY_KEYS[category] : NULL;
 }
 
+ItemTypeMask item_types_list(const ItemType *types, int count)
+{
+    ItemTypeMask mask = item_types_none();
+    for (int i = 0; i < count; i++) {
+        item_types_add(&mask, types[i]);
+    }
+    return mask;
+}
+
+ItemTypeMask item_types_tinder(void)
+{
+    static const ItemType TINDER[] = {ITEM_GRASS, ITEM_BRACKEN, ITEM_MOSS};
+    return item_types_list(TINDER, (int)COLONY_ARRAY_COUNT(TINDER));
+}
+
+void item_types_serialize(Serializer *s, ItemTypeMask *mask)
+{
+    /* A word after another: one word is what a single u64 was. */
+    for (size_t w = 0; w < ITEM_TYPE_WORDS; w++) {
+        ser_u64(s, &mask->words[w]);
+    }
+    mask->words[ITEM_TYPE_WORDS - 1] &=
+        ITEM_TYPE_COUNT % 64 == 0 ? ~UINT64_C(0) : (UINT64_C(1) << (ITEM_TYPE_COUNT % 64)) - 1;
+}
+
+uint64_t item_types_hash_more(ItemTypeMask mask, uint64_t hash)
+{
+    for (size_t w = 1; w < ITEM_TYPE_WORDS; w++) {
+        if (mask.words[w] != 0) {
+            hash = hash_fnv1a64(hash, &w, sizeof(w));
+            hash = hash_fnv1a64(hash, &mask.words[w], sizeof(mask.words[w]));
+        }
+    }
+    return hash;
+}
+
 ItemTypeMask item_types_all(void)
 {
-    ItemTypeMask mask = 0;
+    ItemTypeMask mask = item_types_none();
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        mask |= ITEM_TYPE_BIT(type);
+        item_types_add(&mask, (ItemType)type);
     }
     return mask;
 }
 
 ItemTypeMask item_types_in_category(ItemCategory category)
 {
-    ItemTypeMask mask = 0;
+    ItemTypeMask mask = item_types_none();
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
         if (ITEM_DEFS[type].category == category) {
-            mask |= ITEM_TYPE_BIT(type);
+            item_types_add(&mask, (ItemType)type);
         }
     }
     return mask;
@@ -350,10 +386,10 @@ bool item_is_food(ItemType type)
 
 ItemTypeMask item_types_food(void)
 {
-    ItemTypeMask mask = 0;
+    ItemTypeMask mask = item_types_none();
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
         if (item_is_food((ItemType)type)) {
-            mask |= ITEM_TYPE_BIT(type);
+            item_types_add(&mask, type);
         }
     }
     return mask;
@@ -1029,7 +1065,7 @@ static ItemStack newest_of(const Items *items, size_t index, ItemTypeMask types,
     if (stack->type == ITEM_NONE) {
         return (ItemStack){.type = ITEM_NONE};
     }
-    if ((types & ITEM_TYPE_BIT(stack->type)) && !(allowed && stack->forbidden)) {
+    if ((item_types_has(types, stack->type)) && !(allowed && stack->forbidden)) {
         return *stack;
     }
     if (!items->mixed[index]) {
@@ -1037,7 +1073,7 @@ static ItemStack newest_of(const Items *items, size_t index, ItemTypeMask types,
     }
     for (const Item *item = slot_item(items, items->heads[index]); item != NULL;
          item = slot_item(items, item->next)) {
-        if ((types & ITEM_TYPE_BIT(item->type)) && !(allowed && item->forbidden)) {
+        if ((item_types_has(types, item->type)) && !(allowed && item->forbidden)) {
             return group_of(items, index, key_of(item));
         }
     }
@@ -1562,7 +1598,7 @@ int items_pick_up_of(Items *items, int x, int y, int z, ItemTypeMask types, int 
     }
     size_t index = index_of(items, x, y, z);
     ItemStack stack = !load_held(load)                      ? newest_of(items, index, types, true)
-                      : (types & ITEM_TYPE_BIT(load->type)) ? matching_group(items, index, *load)
+                      : (item_types_has(types, load->type)) ? matching_group(items, index, *load)
                                                             : (ItemStack){.type = ITEM_NONE};
     return pick_up_group(items, index, stack, count, load);
 }
@@ -1635,7 +1671,7 @@ static ItemStack newest_of_woods(const Items *items, size_t index, ItemTypeMask 
     }
     for (const Item *item = slot_item(items, items->heads[index]); item != NULL;
          item = slot_item(items, item->next)) {
-        if ((types & ITEM_TYPE_BIT(item->type)) && !item->forbidden &&
+        if ((item_types_has(types, item->type)) && !item->forbidden &&
             item_woods_allowed(item_as_stack(item), allowed)) {
             return group_of(items, index, key_of(item));
         }
@@ -1678,7 +1714,7 @@ int items_count_chosen(const Items *items, int x, int y, int z, ItemType type, I
         return 0;
     }
     size_t index = index_of(items, x, y, z);
-    ItemStack stack = newest_of_woods(items, index, ITEM_TYPE_BIT(type), choice.woods);
+    ItemStack stack = newest_of_woods(items, index, item_types_of(type), choice.woods);
     if (stack.type == ITEM_NONE) {
         return 0;
     }
@@ -1697,7 +1733,7 @@ float items_soonest_rot_hours(const Items *items, int x, int y, int z, ItemType 
         return -1.0f;
     }
     size_t index = index_of(items, x, y, z);
-    ItemStack stack = newest_of_woods(items, index, ITEM_TYPE_BIT(type), choice.woods);
+    ItemStack stack = newest_of_woods(items, index, item_types_of(type), choice.woods);
     if (stack.type == ITEM_NONE) {
         return -1.0f;
     }
@@ -1721,7 +1757,7 @@ ItemType items_soonest_rotting(const Items *items, int x, int y, int z, ItemType
         size_t index = index_of(items, x, y, z);
         for (const Item *item = items_first(items, index); item != NULL;
              item = items_next(items, item)) {
-            if (item->corpse != 0 || item->forbidden || !(types & ITEM_TYPE_BIT(item->type)) ||
+            if (item->corpse != 0 || item->forbidden || !(item_types_has(types, item->type)) ||
                 !item_rots((ItemType)item->type)) {
                 continue;
             }
@@ -1745,7 +1781,7 @@ ItemType items_chosen_type(const Items *items, int x, int y, int z, ItemTypeMask
         return ITEM_NONE;
     }
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
-        if ((types & ITEM_TYPE_BIT(type)) &&
+        if ((item_types_has(types, type)) &&
             items_count_chosen(items, x, y, z, (ItemType)type, choice) >= min_count) {
             return (ItemType)type;
         }
@@ -1757,12 +1793,12 @@ bool items_any_chosen(const Items *items, ItemTypeMask types, ItemChoice choice)
 {
     bool any = false;
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT && !any; type++) {
-        any = (types & ITEM_TYPE_BIT(type)) && items->totals[type] > 0;
+        any = (item_types_has(types, type)) && items->totals[type] > 0;
     }
     for (uint32_t slot = 0; any && slot < items->pool_used; slot++) {
         const Item *item = &items->pool[slot];
         if (item->type == ITEM_NONE || item->tile == ITEM_TILE_HELD || item->forbidden ||
-            !(types & ITEM_TYPE_BIT(item->type))) {
+            !(item_types_has(types, item->type))) {
             continue;
         }
         ItemStack key = key_of(item);
@@ -1778,7 +1814,7 @@ int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int c
 {
     if (choice.min_quality <= ITEM_QUALITY_WORST && choice.max_quality >= ITEM_QUALITY_BEST &&
         !choice.soonest_rot && choice.woods == 0 && choice.moisture == ITEM_WANT_ANY) {
-        return items_pick_up_of(items, x, y, z, ITEM_TYPE_BIT(type), count, load);
+        return items_pick_up_of(items, x, y, z, item_types_of(type), count, load);
     }
     if (!in_bounds(items, x, y, z) || count <= 0) {
         return 0;
@@ -1786,7 +1822,7 @@ int items_pick_up_chosen(Items *items, int x, int y, int z, ItemType type, int c
     size_t index = index_of(items, x, y, z);
     const ItemStack stack = load_held(load)
                                 ? matching_group(items, index, *load)
-                                : newest_of_woods(items, index, ITEM_TYPE_BIT(type), choice.woods);
+                                : newest_of_woods(items, index, item_types_of(type), choice.woods);
     if (stack.type != type || (load_held(load) && !item_stacks_match(*load, stack)) ||
         !item_woods_allowed(stack, choice.woods)) {
         return 0;

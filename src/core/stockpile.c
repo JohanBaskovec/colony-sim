@@ -157,14 +157,14 @@ static int create(Stockpiles *stockpiles, const Map *map, int x0, int y0, int x1
         return STOCKPILE_NONE;
     }
     Stockpile *stockpile = &stockpiles->list[index];
-    *stockpile =
-        (Stockpile){.used = true,
-                    .number = stockpiles->next_number,
-                    .allowed = item_types_all() & ~item_types_in_category(ITEM_CATEGORY_BODIES),
-                    .quality = {ITEM_QUALITY_WORST, ITEM_QUALITY_BEST},
-                    .hit_points = {0, 100},
-                    .priority = STOCKPILE_PRIORITY_DEFAULT,
-                    .radius = STOCKPILE_RADIUS_DEFAULT};
+    *stockpile = (Stockpile){
+        .used = true,
+        .number = stockpiles->next_number,
+        .allowed = item_types_minus(item_types_all(), item_types_in_category(ITEM_CATEGORY_BODIES)),
+        .quality = {ITEM_QUALITY_WORST, ITEM_QUALITY_BEST},
+        .hit_points = {0, 100},
+        .priority = STOCKPILE_PRIORITY_DEFAULT,
+        .radius = STOCKPILE_RADIUS_DEFAULT};
     clear_bounds(stockpile);
     if (extend(stockpiles, map, index, x0, y0, x1, y1, z, blocked, view) == 0) {
         stockpile->used = false;
@@ -385,7 +385,7 @@ int stockpile_at(const Stockpiles *stockpiles, int x, int y, int z)
 void stockpile_set_allowed(Stockpiles *stockpiles, int index, ItemTypeMask allowed)
 {
     if (is_valid(stockpiles, index)) {
-        stockpiles->list[index].allowed = allowed & item_types_all();
+        stockpiles->list[index].allowed = item_types_common(allowed, item_types_all());
         stockpiles->revision++;
     }
 }
@@ -432,7 +432,7 @@ static bool in_range(IntRange range, int value)
 bool stockpile_accepts(const Stockpile *stockpile, ItemStack stack)
 {
     return stockpile != NULL && stack.type != ITEM_NONE && stack.count > 0 &&
-           (stockpile->allowed & ITEM_TYPE_BIT(stack.type)) &&
+           (item_types_has(stockpile->allowed, stack.type)) &&
            in_range(stockpile->quality, stack.quality) &&
            in_range(stockpile->hit_points, item_stack_hit_points_percent(stack));
 }
@@ -569,7 +569,7 @@ uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
         if (s->used) {
             int32_t fields[9] = {i,
                                  s->number,
-                                 (int32_t)s->allowed,
+                                 (int32_t)s->allowed.words[0],
                                  s->priority,
                                  s->cell_count,
                                  s->quality.min,
@@ -577,10 +577,11 @@ uint64_t stockpiles_hash(const Stockpiles *stockpiles, uint64_t hash)
                                  s->hit_points.min,
                                  s->hit_points.max};
             hash = hash_fnv1a64(hash, fields, sizeof(fields));
-            uint32_t high = (uint32_t)(s->allowed >> 32); /* Only then: as before without. */
+            uint32_t high = (uint32_t)(s->allowed.words[0] >> 32); /* Only then: as before. */
             if (high != 0) {
                 hash = hash_fnv1a64(hash, &high, sizeof(high));
             }
+            hash = item_types_hash_more(s->allowed, hash);
             if (s->forbidden) { /* Hashes of games that forbid nothing stay as they were. */
                 hash = hash_fnv1a64(hash, &s->forbidden, sizeof(s->forbidden));
             }
@@ -600,7 +601,7 @@ void stockpiles_serialize(Serializer *s, Stockpiles *stockpiles)
         Stockpile *pile = &stockpiles->list[i];
         ser_bool(s, &pile->used);
         ser_int(s, &pile->number);
-        ser_u64(s, &pile->allowed);
+        item_types_serialize(s, &pile->allowed);
         ser_int(s, &pile->quality.min);
         ser_int(s, &pile->quality.max);
         ser_int(s, &pile->hit_points.min);

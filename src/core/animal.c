@@ -854,7 +854,8 @@ static bool carcass_edible(ItemType type)
 /* Every type carcass_edible() accepts. */
 static ItemTypeMask carcass_types(void)
 {
-    return item_types_in_category(ITEM_CATEGORY_BODIES) & ~ITEM_TYPE_BIT(ITEM_SETTLER_BODY);
+    return item_types_minus(item_types_in_category(ITEM_CATEGORY_BODIES),
+                            item_types_of(ITEM_SETTLER_BODY));
 }
 
 static bool carcass_on(const Seeker *seeker, const Map *map, int x, int y, int z)
@@ -1335,7 +1336,7 @@ static void eat_carcass(Animals *animals, uint32_t slot, const AnimalContext *co
     ItemStack one = stack;
     one.count = 1;
     float eaten_kg = item_stack_eat(&one, def->bite_kg);
-    items_remove_of(items, food.x, food.y, food.z, ITEM_TYPE_BIT(stack.type), 1);
+    items_remove_of(items, food.x, food.y, food.z, item_types_of(stack.type), 1);
     if (one.type != ITEM_NONE) {
         items_add(items, food.x, food.y, food.z, one);
     }

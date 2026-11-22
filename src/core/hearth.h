@@ -133,8 +133,6 @@ typedef enum HearthIngredient {
     HEARTH_INGREDIENT_COUNT
 } HearthIngredient;
 
-#define HEARTH_KINDLING_TYPES ITEM_TYPE_BIT(ITEM_TWIGS)
-#define HEARTH_BRANCH_TYPES ITEM_TYPE_BIT(ITEM_BRANCHES)
 /* Workstation.laid bits. */
 #define HEARTH_LAID_KINDLING 1u
 #define HEARTH_LAID_BRANCH 2u

@@ -114,7 +114,7 @@ static void test_choosing_the_species(void)
     REQUIRE(items_init(&items, 16, 16, 1));
     items_add(&items, 2, 2, 0, of_wood(ITEM_BRANCHES, 2, OAK));
     items_add(&items, 2, 2, 0, of_wood(ITEM_BRANCHES, 3, BEECH)); /* The newest. */
-    ItemTypeMask branches = ITEM_TYPE_BIT(ITEM_BRANCHES);
+    ItemTypeMask branches = item_types_of(ITEM_BRANCHES);
     CHECK_EQ_INT(items_get_allowed_of_woods(&items, 2, 2, 0, branches, 0).woods, BEECH);
     ItemStack oak = items_get_allowed_of_woods(&items, 2, 2, 0, branches, OAK);
     CHECK_EQ_INT(oak.woods, OAK);

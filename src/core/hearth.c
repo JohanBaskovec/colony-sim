@@ -18,7 +18,7 @@ bool hearth_is(const Workstation *station)
 float hearth_fuel_value(ItemType type)
 {
     const ItemDef *def = item_def(type);
-    if (def == NULL || type == ITEM_NONE || !(HEARTH_FUEL_TYPES & ITEM_TYPE_BIT(type))) {
+    if (def == NULL || type == ITEM_NONE || !(item_types_has(hearth_fuel_types(), type))) {
         return 0.0f;
     }
     return def->weight;
@@ -71,7 +71,7 @@ float hearth_fuel_wanted(const Workstation *station)
 int hearth_fuel_items_wanted(const Workstation *station, ItemType type)
 {
     float value = hearth_fuel_value(type);
-    if (value <= 0.0f || !(station->fuel_types & ITEM_TYPE_BIT(type))) {
+    if (value <= 0.0f || !(item_types_has(station->fuel_types, type))) {
         return 0;
     }
     return (int)floorf(hearth_fuel_wanted(station) / value);
@@ -132,11 +132,23 @@ bool hearth_wants_fuel_to_light(const Workstation *station)
 ItemTypeMask hearth_ingredient_types(HearthIngredient ingredient)
 {
     switch (ingredient) {
-    case HEARTH_TINDER: return ITEM_TINDER_TYPES;
-    case HEARTH_KINDLING: return HEARTH_KINDLING_TYPES;
-    case HEARTH_BRANCH: return HEARTH_BRANCH_TYPES;
-    default: return 0;
+    case HEARTH_TINDER: return item_types_tinder();
+    case HEARTH_KINDLING: return item_types_of(ITEM_TWIGS);
+    case HEARTH_BRANCH: return item_types_of(ITEM_BRANCHES);
+    default: return item_types_none();
     }
+}
+
+ItemTypeMask hearth_default_fuel_types(void)
+{
+    static const ItemType FUELS[] = {ITEM_BRANCHES, ITEM_TWIGS, ITEM_WOOD};
+    return item_types_list(FUELS, (int)COLONY_ARRAY_COUNT(FUELS));
+}
+
+ItemTypeMask hearth_fuel_types(void)
+{
+    return item_types_with(item_types_with(hearth_default_fuel_types(), ITEM_BRACKEN),
+                           ITEM_HEATHER);
 }
 
 static unsigned laid_bit(HearthIngredient ingredient)
@@ -165,7 +177,7 @@ bool hearth_lay(Workstations *workstations, int index, ItemType type)
     Workstation *station = workstation_get(workstations, index);
     HearthIngredient next =
         hearth_is(station) ? hearth_next_to_lay(station) : HEARTH_INGREDIENT_COUNT;
-    if (next == HEARTH_INGREDIENT_COUNT || !(hearth_ingredient_types(next) & ITEM_TYPE_BIT(type))) {
+    if (next == HEARTH_INGREDIENT_COUNT || !item_types_has(hearth_ingredient_types(next), type)) {
         return false;
     }
     station->laid = (uint8_t)(station->laid | laid_bit(next));
@@ -206,9 +218,9 @@ bool hearth_set_fuel_type(Workstations *workstations, int index, ItemType type, 
         return false;
     }
     if (allowed) {
-        station->fuel_types |= ITEM_TYPE_BIT(type);
+        item_types_add(&station->fuel_types, type);
     } else {
-        station->fuel_types &= ~ITEM_TYPE_BIT(type);
+        item_types_remove(&station->fuel_types, type);
     }
     workstations->revision++;
     return true;

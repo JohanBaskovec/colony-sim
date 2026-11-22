@@ -32,11 +32,9 @@ static bool init_flat_game(Game *game)
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->water[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i,
-                            ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) |
-                                ITEM_TYPE_BIT(ITEM_HAZELNUTS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS, ITEM_HAZELNUTS));
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -687,7 +685,7 @@ static void test_tools_speed_up_work(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_rested(&game, 20, 20);
-    const ItemTypeMask any = ~(ItemTypeMask)0;
+    const ItemTypeMask any = item_types_all();
     CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 0.8, 1e-6);
     CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_NONE, any), 1.0, 1e-6);
     colonist_add_tool(colonist, cobble);
@@ -695,7 +693,7 @@ static void test_tools_speed_up_work(void)
     colonist_add_tool(colonist, item_stack_make(ITEM_HAND_AXE, 1, TEST_QUALITY_FINE, 0));
     CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, any), 1.08,
                1e-5); /* Quality 70. */
-    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, ITEM_TYPE_BIT(ITEM_COBBLE)), 0.9,
+    CHECK_NEAR(colonist_tool_factor(colonist, TOOL_USE_BUILDING, item_types_of(ITEM_COBBLE)), 0.9,
                1e-6);
     /* Swapping for another of the same type gives the old one back. */
     ItemStack replaced;
@@ -705,7 +703,7 @@ static void test_tools_speed_up_work(void)
     CHECK_EQ_INT(replaced.quality, ITEM_QUALITY_STANDARD);
     CHECK(colonist_swap_tool(colonist, flake, &replaced)); /* None carried: added. */
     CHECK_EQ_INT(replaced.type, ITEM_NONE);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)) >= 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_FLAKE)) >= 0);
     game_shutdown(&game);
 }
 
@@ -1144,9 +1142,9 @@ static bool init_hill_game(Game *game)
         map->rock[i] = (uint8_t)(z == 0 && hill ? ROCK_EARTH : ROCK_NONE);
         map->pore[i] = (uint16_t)rock_pore_capacity((RockType)map->rock[i]); /* No table. */
         map->slope[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map->slope[map_index(map, 25, 20, 0)] = 1;
@@ -1216,7 +1214,7 @@ static void test_colonist_cuts_a_ramp(void)
     }
     CHECK(map_is_slope(&game.map, 26, 28, 0));
     CHECK(map_is_open(&game.map, 26, 28, 1));
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_DIGGING_STICK)) >= 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_DIGGING_STICK)) >= 0);
     CHECK_EQ_INT(designation_get(&game.designations, 26, 28, 0), DESIGNATION_NONE);
 
     /* Food on the hill: up the new ramp. */
@@ -1455,7 +1453,7 @@ static void test_hungry_colonist_eats_the_rotting_bottom_of_a_heap(void)
     for (int i = 0; i < 3000 && colonist->needs[NEED_FOOD] < 0.5f; i++) {
         game_tick(&game);
     }
-    int left = items_get_of(&game.items, 32, 20, 0, ITEM_TYPE_BIT(ITEM_WILD_CARROTS)).count;
+    int left = items_get_of(&game.items, 32, 20, 0, item_types_of(ITEM_WILD_CARROTS)).count;
     CHECK(left > 0 && left < 40);
     items_soonest_rotting(&game.items, 32, 20, 0, item_types_food(), &hours);
     CHECK(hours > 20.0f * 24.0f * 0.9f); /* Only fresh ones left. */
@@ -1553,7 +1551,7 @@ static void test_reservations_stay_consistent_over_a_long_run(void)
             stockpiles_remove_rect(&game.stockpiles, 14, 10, 16, 15, 0); /* Shrink the storage. */
         }
         if (i == TICKS_PER_DAY / 2) {
-            stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
+            stockpile_set_allowed(&game.stockpiles, pile, item_types_of(ITEM_BLACKBERRIES));
         }
         if (i % 50 == 0) {
             consistent = reservations_consistent(&game);
@@ -2186,7 +2184,7 @@ static void test_gatherer_fetches_a_digging_stick(void)
             game_tick(&game);
         }
         CHECK_EQ_INT((int)game.items.totals[ITEM_CATTAIL_RHIZOMES], rhizomes);
-        CHECK_EQ_INT(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_DIGGING_STICK)) >= 0, stick);
+        CHECK_EQ_INT(colonist_tool_index(colonist, item_types_of(ITEM_DIGGING_STICK)) >= 0, stick);
         CHECK_EQ_INT((int)game.items.totals[ITEM_DIGGING_STICK], 0);
         ticks[stick] = i;
         game_shutdown(&game);

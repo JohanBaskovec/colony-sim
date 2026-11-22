@@ -125,7 +125,7 @@ static void test_bills(void)
     Bill *flakes = &station->bills[bill];
     CHECK_EQ_INT(flakes->mode, BILL_DO_TIMES);
     CHECK_EQ_INT(flakes->target, BILL_TARGET_DEFAULT);
-    CHECK_EQ_UINT(flakes->inputs, ITEM_TYPE_BIT(ITEM_FLINT) | ITEM_TYPE_BIT(ITEM_COBBLE));
+    CHECK(item_types_equal(flakes->inputs, ITEM_TYPES(ITEM_FLINT, ITEM_COBBLE)));
 
     CHECK(workstation_set_bill_target(&stations, knapping, bill, 5000));
     CHECK_EQ_INT(flakes->target, BILL_TARGET_MAX);
@@ -133,7 +133,7 @@ static void test_bills(void)
     CHECK_EQ_INT(flakes->target, BILL_TARGET_MIN);
     CHECK(!workstation_set_bill_target(&stations, knapping, 3, 2));
     CHECK(workstation_set_bill_input(&stations, knapping, bill, ITEM_COBBLE, false));
-    CHECK_EQ_UINT(flakes->inputs, ITEM_TYPE_BIT(ITEM_FLINT));
+    CHECK(item_types_equal(flakes->inputs, item_types_of(ITEM_FLINT)));
     CHECK(!workstation_set_bill_input(&stations, knapping, bill, ITEM_WOOD, true));
     CHECK(workstation_set_bill_mode(&stations, knapping, bill, BILL_UNTIL_STOCK));
     CHECK(!workstation_set_bill_mode(&stations, knapping, bill, BILL_MODE_COUNT));
@@ -268,13 +268,13 @@ static void test_bill_drafts(void)
     CHECK_EQ_INT(bill->done, 0);
     /* Out of range in the draft: a new bill's. */
     draft.input_radius = 60000;
-    draft.inputs = ITEM_TYPE_BIT(ITEM_FLINT) | ITEM_TYPE_BIT(ITEM_BRANCHES);
+    draft.inputs = ITEM_TYPES(ITEM_FLINT, ITEM_BRANCHES);
     draft.worker = BILL_WORKER_COUNT;
     index = workstation_add_bill_from(&stations, crafting, &draft);
     REQUIRE(index == 1);
     bill = &workstation_get_const(&stations, crafting)->bills[index];
     CHECK_EQ_INT(bill->input_radius, BILL_INPUT_RADIUS_MAX);
-    CHECK_EQ_UINT(bill->inputs, ITEM_TYPE_BIT(ITEM_BRANCHES));
+    CHECK(item_types_equal(bill->inputs, item_types_of(ITEM_BRANCHES)));
     CHECK_EQ_INT(bill->worker, BILL_WORKER_ANYONE);
     /* Another kind of station's recipe is refused. */
     REQUIRE(bill_init(&draft, RECIPE_ROAST_CARROTS));
@@ -336,8 +336,8 @@ static void test_crafting_several_ingredients(void)
     int index = workstations_place(&stations, &map, WORKSTATION_CRAFTING_SPOT, 3, 4, 0);
     int bill = workstation_add_bill(&stations, index, RECIPE_BARK_TRAY);
     REQUIRE(bill >= 0);
-    CHECK_EQ_UINT(workstation_get_const(&stations, index)->bills[bill].inputs,
-                  recipe_inputs(RECIPE_BARK_TRAY));
+    CHECK(item_types_equal(workstation_get_const(&stations, index)->bills[bill].inputs,
+                           recipe_inputs(RECIPE_BARK_TRAY)));
     ItemStack bark = item_stack_make(ITEM_BIRCH_BARK, 1, ITEM_QUALITY_STANDARD, 0);
     ItemStack twigs = item_stack_make(ITEM_TWIGS, 2, ITEM_QUALITY_STANDARD, 0);
     CHECK(!workstation_start_craft(&stations, index, RECIPE_BARK_TRAY,
@@ -412,7 +412,7 @@ static void test_crafting_with_a_load(void)
     REQUIRE(workstation_remove_bill(&stations, index, bill, returned) == 1);
     CHECK(returned[0].held == load.held);
     items_drop_load(&items, &map, 3, 5, 0, &returned[0]);
-    CHECK_EQ_INT(items_get_of(&items, 3, 5, 0, ITEM_TYPE_BIT(ITEM_FLINT)).quality,
+    CHECK_EQ_INT(items_get_of(&items, 3, 5, 0, item_types_of(ITEM_FLINT)).quality,
                  TEST_QUALITY_SUPERB);
     CHECK_EQ_INT(items.held_count, 0);
     CHECK_EQ_INT(items_check(&items).problems, 0);
@@ -441,18 +441,18 @@ static void test_bill_inputs_after_tools(void)
                  .target = 1,
                  .inputs = recipe_inputs(RECIPE_CHOPPER)};
     long totals[ITEM_TYPE_COUNT] = {0};
-    ItemTypeMask hammer[RECIPE_TOOL_MAX] = {ITEM_TYPE_BIT(ITEM_COBBLE), 0};
-    ItemTypeMask none[RECIPE_TOOL_MAX] = {0, 0};
+    ItemTypeMask hammer[RECIPE_TOOL_MAX] = {item_types_of(ITEM_COBBLE), item_types_none()};
+    ItemTypeMask none[RECIPE_TOOL_MAX] = {item_types_none(), item_types_none()};
     totals[ITEM_COBBLE] = 1;
     CHECK(bill_has_input(&bill, totals, none));    /* The hammer is already carried. */
     CHECK(!bill_has_input(&bill, totals, hammer)); /* The only cobble is the hammer. */
     totals[ITEM_FLINT] = 1;
     CHECK(bill_has_input(&bill, totals, hammer)); /* Strike the flint with the cobble. */
-    bill.inputs = ITEM_TYPE_BIT(ITEM_COBBLE);
+    bill.inputs = item_types_of(ITEM_COBBLE);
     CHECK(!bill_has_input(&bill, totals, hammer)); /* Flint not allowed. */
     totals[ITEM_COBBLE] = 2;
     CHECK(bill_has_input(&bill, totals, hammer));
-    bill.inputs = 0;
+    bill.inputs = item_types_none();
     CHECK(!bill_has_input(&bill, totals, none));
 }
 

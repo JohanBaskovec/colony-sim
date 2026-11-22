@@ -622,9 +622,9 @@ static void test_settler_weapon_choice(void)
     REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_TWIGS, 1)));
     CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_AXE_CHOP);
     REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
-    int spear = colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
-    int cobble = colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
-    int twigs = colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_TWIGS));
+    int spear = colonist_tool_index(&colonist, item_types_of(ITEM_THRUSTING_SPEAR));
+    int cobble = colonist_tool_index(&colonist, item_types_of(ITEM_COBBLE));
+    int twigs = colonist_tool_index(&colonist, item_types_of(ITEM_TWIGS));
     CHECK_EQ_INT(colonist_weapon(&colonist), spear);
     CHECK_EQ_INT(colonist_attack(&colonist, &skill, &power), ATTACK_SPEAR_THRUST);
     /* The primary weapon, even a worse one; locked on the settler. */
@@ -651,7 +651,7 @@ static void test_settler_weapon_choice(void)
     colonist.tools[cobble] = (ItemStack){.type = ITEM_NONE}; /* Worn out. */
     CHECK_EQ_INT(colonist_primary_weapon(&colonist), -1);
     REQUIRE(colonist_add_tool(&colonist, item_stack_pristine(ITEM_FLINT, 1)));
-    CHECK_EQ_INT(colonist_tool_index(&colonist, ITEM_TYPE_BIT(ITEM_FLINT)), cobble);
+    CHECK_EQ_INT(colonist_tool_index(&colonist, item_types_of(ITEM_FLINT)), cobble);
     CHECK_EQ_INT(colonist_primary_weapon(&colonist), -1);
     /* One arm of no use: no thrusting spear (both hands), the hand axe. */
     health_hurt(&colonist.health, LEFT_ARM, INJURY_CUT, 30.0f);
@@ -963,8 +963,8 @@ static void test_drafted_settler_wields(void)
     EntityId id = game_colonist_id_at(&game, 0);
     REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_HAND_AXE, 1)));
     REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
-    int axe = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_HAND_AXE));
-    int spear = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    int axe = colonist_tool_index(settler, item_types_of(ITEM_HAND_AXE));
+    int spear = colonist_tool_index(settler, item_types_of(ITEM_THRUSTING_SPEAR));
     CHECK_EQ_INT(colonist_wielded(settler), -1);
     /* Kept: a spear in both hands leaves no hand for it, but it is locked. */
     REQUIRE(colonist_set_lock(settler, axe, CARRY_LOCK_KEPT));
@@ -1037,7 +1037,7 @@ static void test_change_weapon(void)
     /* The flint, taken up. */
     settler->attack_cooldown = 0;
     REQUIRE(game_wield(&game, id, choices[2]));
-    int flint = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_FLINT));
+    int flint = colonist_tool_index(settler, item_types_of(ITEM_FLINT));
     REQUIRE(flint >= 0);
     CHECK_EQ_INT(colonist_wielded(settler), flint);
     CHECK_EQ_INT(settler->tool_locks[flint], CARRY_LOCK_KEPT);
@@ -1064,9 +1064,9 @@ static void test_wielding_with_locked_hands(void)
     REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
     REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_HAND_AXE, 1)));
     REQUIRE(colonist_add_tool(settler, item_stack_pristine(ITEM_COBBLE, 1)));
-    int spear = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
-    int axe = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_HAND_AXE));
-    int cobble = colonist_tool_index(settler, ITEM_TYPE_BIT(ITEM_COBBLE));
+    int spear = colonist_tool_index(settler, item_types_of(ITEM_THRUSTING_SPEAR));
+    int axe = colonist_tool_index(settler, item_types_of(ITEM_HAND_AXE));
+    int cobble = colonist_tool_index(settler, item_types_of(ITEM_COBBLE));
     REQUIRE(colonist_set_lock(settler, cobble, CARRY_LOCK_IN_HAND));
     CHECK(!colonist_can_wield(settler, spear));
     CHECK(colonist_can_wield(settler, axe));

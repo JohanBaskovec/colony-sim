@@ -272,7 +272,7 @@ int colonist_tool_index(const Colonist *colonist, ItemTypeMask types)
     int best = -1;
     for (int i = 0; i < COLONIST_TOOL_MAX; i++) {
         ItemStack tool = colonist->tools[i];
-        if (tool.count == 0 || !(types & ITEM_TYPE_BIT(tool.type))) {
+        if (tool.count == 0 || !(item_types_has(types, tool.type))) {
             continue;
         }
         if (best < 0 || tool.quality > colonist->tools[best].quality ||
@@ -410,7 +410,7 @@ static void wear_tool(Colonist *colonist, int index)
  * it (bare hands when none helps), which wears. */
 static float work_with_tool(Colonist *colonist, const ColonistContext *context, ToolUse use)
 {
-    int index = working_tool(colonist, use, ~(ItemTypeMask)0, false);
+    int index = working_tool(colonist, use, item_types_all(), false);
     float factor = index >= 0 ? tool_speed_factor(use, colonist->tools[index])
                               : tool_type_factor(use, ITEM_NONE);
     wear_tool(colonist, index);
@@ -645,7 +645,7 @@ int colonist_make_room(Colonist *colonist, Items *items, const Map *map, ItemTyp
         int fits = arrange_kept(colonist, &set, type, wanted, &arrangement);
         int drop = -1;
         for (int i = 0; i < set.count && drop < 0; i++) {
-            if ((arrangement.left_out & (1u << i)) && !(keep & ITEM_TYPE_BIT(set.types[i])) &&
+            if ((arrangement.left_out & (1u << i)) && !(item_types_has(keep, set.types[i])) &&
                 colonist->tool_locks[set.slots[i]] == CARRY_LOCK_NONE && set.slots[i] != wielded) {
                 drop = set.slots[i];
             }
@@ -653,7 +653,7 @@ int colonist_make_room(Colonist *colonist, Items *items, const Map *map, ItemTyp
         if (drop < 0 && type != ITEM_NONE && fits < wanted) {
             int best = fits;
             for (int i = 0; i < set.count; i++) {
-                if ((keep & ITEM_TYPE_BIT(set.types[i])) ||
+                if ((item_types_has(keep, set.types[i])) ||
                     colonist->tool_locks[set.slots[i]] != CARRY_LOCK_NONE ||
                     set.slots[i] == wielded) {
                     continue; /* What the player wants kept is never set down. */
@@ -842,7 +842,7 @@ static void wield(Colonist *colonist, const ColonistContext *context, int slot, 
     if (ticks > colonist->attack_cooldown) {
         colonist->attack_cooldown = ticks;
     }
-    colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, 0);
+    colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, item_types_none());
 }
 
 /* The weapon goes back where it fits best, its lock as it was. */
@@ -1024,7 +1024,7 @@ int colonist_keep_load_item(Colonist *colonist, const ColonistContext *context, 
         items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z, item);
     }
     load_taken_from(colonist, context);
-    colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, 0);
+    colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, item_types_none());
     return slot;
 }
 
@@ -1128,11 +1128,11 @@ static ColonistAction craft_action(const Colonist *colonist, ItemType *tool)
     if (def == NULL) {
         return COLONIST_ACTION_NONE;
     }
-    int index = colonist_tool_index(colonist, def->tools[0]);
+    int index = colonist_tool_index(colonist, recipe_tool_types(def, 0));
     *tool = index >= 0 ? (ItemType)colonist->tools[index].type : ITEM_NONE;
     /* Stones are knapped with blows of a hammerstone; anything else is cut. */
-    return (def->tools[0] & ITEM_TYPE_BIT(ITEM_COBBLE)) ? COLONIST_ACTION_STRIKE
-                                                        : COLONIST_ACTION_CUT;
+    return (item_types_has(recipe_tool_types(def, 0), ITEM_COBBLE)) ? COLONIST_ACTION_STRIKE
+                                                                    : COLONIST_ACTION_CUT;
 }
 
 ColonistAction colonist_action(const Colonist *colonist, ItemType *tool)
@@ -1582,7 +1582,7 @@ static void take_ordered_item(Colonist *colonist, const ColonistContext *context
         items_drop(context->items, context->map, colonist->x, colonist->y, colonist->z, kept);
         return;
     }
-    colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, 0);
+    colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0, item_types_none());
 }
 
 /* Whether it may stop on the tile (nobody else holds it, core/occupancy.h). */
@@ -2982,7 +2982,7 @@ static ItemStack haul_source_stack(const Colonist *colonist, const ColonistConte
     if (colonist->carried.count > 0) {
         return items_get_group(items, source.x, source.y, source.z, colonist->carried);
     }
-    ItemTypeMask type = ITEM_TYPE_BIT(colonist->haul_type);
+    ItemTypeMask type = item_types_of(colonist->haul_type);
     return colonist->haul_forced ? items_get_of(items, source.x, source.y, source.z, type)
                                  : items_get_allowed_of(items, source.x, source.y, source.z, type);
 }
@@ -3082,7 +3082,7 @@ static void haul(Colonist *colonist, const ColonistContext *context)
                                         colonist->carried.count > 0 ? colonist->carried : stack);
             int total = (int)colonist->carried.count + (colonist->haul_forced ? 1 : stack.count);
             colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
-                               total < room ? total : room, 0);
+                               total < room ? total : room, item_types_none());
         }
         int wanted = haul_room_left(colonist, context, stack);
         if (colonist->haul_forced && colonist->haul_item.slot != UINT32_MAX) {
@@ -3253,7 +3253,7 @@ static TilePos station_tile(const Workstation *station)
 static bool items_exist(const Items *items, ItemTypeMask types, int count)
 {
     for (int type = 1; type < ITEM_TYPE_COUNT; type++) {
-        if ((types & ITEM_TYPE_BIT(type)) && items->totals[type] >= count) {
+        if ((item_types_has(types, type)) && items->totals[type] >= count) {
             return true;
         }
     }
@@ -3273,8 +3273,8 @@ static bool tools_obtainable(const Colonist *colonist, const ColonistContext *co
                              const RecipeDef *def)
 {
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
-        ItemTypeMask types = def->tools[slot];
-        if (types != 0 && colonist_tool_index(colonist, types) < 0 &&
+        ItemTypeMask types = recipe_tool_types(def, slot);
+        if (item_types_any(types) && colonist_tool_index(colonist, types) < 0 &&
             !items_exist(context->plan_items, types, 1)) {
             return false;
         }
@@ -3302,8 +3302,8 @@ static bool ingredients_in_state(const ColonistContext *context, const Bill *bil
         for (int alt = 0; alt < RECIPE_INPUT_ALTERNATIVES && !found; alt++) {
             ItemType type = wanted->types[alt];
             found =
-                type != ITEM_NONE && (bill->inputs & ITEM_TYPE_BIT(type)) &&
-                items_any_chosen(context->plan_items, ITEM_TYPE_BIT(type), bill_choice(bill, type));
+                type != ITEM_NONE && (item_types_has(bill->inputs, type)) &&
+                items_any_chosen(context->plan_items, item_types_of(type), bill_choice(bill, type));
         }
         if (!found) {
             return false;
@@ -3340,8 +3340,9 @@ static int choose_bill(const Colonist *colonist, const ColonistContext *context,
          * knap with): they must leave enough to work on. */
         ItemTypeMask to_fetch[RECIPE_TOOL_MAX] = {0};
         for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
-            if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
-                to_fetch[slot] = def->tools[slot];
+            if (item_types_any(recipe_tool_types(def, slot)) &&
+                colonist_tool_index(colonist, recipe_tool_types(def, slot)) < 0) {
+                to_fetch[slot] = recipe_tool_types(def, slot);
             }
         }
         if (!in_progress &&
@@ -3441,9 +3442,9 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
             return false;
         }
         stack =
-            items_get_allowed_of_woods(search->items, x, y, z, ITEM_TYPE_BIT(type), search->woods);
+            items_get_allowed_of_woods(search->items, x, y, z, item_types_of(type), search->woods);
     }
-    if (stack.type != ITEM_NONE && search->by_item && (search->types & ITEM_TYPE_BIT(stack.type))) {
+    if (stack.type != ITEM_NONE && search->by_item && (item_types_has(search->types, stack.type))) {
         ItemType type = (ItemType)stack.type;
         if (items_count_chosen(search->items, x, y, z, type, search->choice) < search->min_count) {
             return false;
@@ -3456,7 +3457,7 @@ static bool is_fetchable(const Map *map, int x, int y, int z, void *userdata)
         stack.quality = ITEM_QUALITY_BEST; /* Checked item by item. */
         stack.count = UINT16_MAX;
     }
-    return stack.type != ITEM_NONE && (search->types & ITEM_TYPE_BIT(stack.type)) &&
+    return stack.type != ITEM_NONE && (item_types_has(search->types, stack.type)) &&
            stack.quality >= search->min_quality && stack.count >= search->min_count &&
            (search->match.count == 0 || item_stacks_match(stack, search->match)) &&
            item_woods_allowed(stack, search->woods) &&
@@ -3542,7 +3543,7 @@ static float soonest_ingredient(const ColonistContext *context, const Workstatio
         int x1 = station->x + radius < items->width - 1 ? station->x + radius : items->width - 1;
         for (int y = y0; y <= y1; y++) {
             for (int x = x0; x <= x1; x++) {
-                ItemStack stack = items_get_allowed_of(items, x, y, z, ITEM_TYPE_BIT(type));
+                ItemStack stack = items_get_allowed_of(items, x, y, z, item_types_of(type));
                 if (stack.type != type ||
                     reservations_taken_by_other(context->reservations, RESERVATION_HAUL_SOURCE,
                                                 (TilePos){(int16_t)x, (int16_t)y, (int16_t)z},
@@ -3575,10 +3576,10 @@ static bool fetch_input(Colonist *colonist, const ColonistContext *context,
     const RecipeIngredient *wanted = recipe_ingredient((RecipeType)bill->recipe, ingredient);
     for (int i = 0; wanted != NULL && i < RECIPE_INPUT_ALTERNATIVES; i++) {
         ItemType type = wanted->types[i];
-        if (type == ITEM_NONE || !(bill->inputs & ITEM_TYPE_BIT(type))) {
+        if (type == ITEM_NONE || !(item_types_has(bill->inputs, type))) {
             continue;
         }
-        FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(type));
+        FetchSearch search = fetch_search(context, item_types_of(type));
         search.min_count = min_count;
         search.match = colonist->carried;
         search.by_item = true;
@@ -3636,10 +3637,10 @@ static bool fetch_better_tool(Colonist *colonist, const ColonistContext *context
 {
     float best_possible = tool_best_possible_factor(def->tool_use);
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
-        if (def->tools[slot] == 0) {
+        if (!item_types_any(recipe_tool_types(def, slot))) {
             continue;
         }
-        int index = working_tool(colonist, def->tool_use, def->tools[slot], true);
+        int index = working_tool(colonist, def->tool_use, recipe_tool_types(def, slot), true);
         if (index < 0) {
             continue;
         }
@@ -3647,7 +3648,7 @@ static bool fetch_better_tool(Colonist *colonist, const ColonistContext *context
         if (factor >= best_possible) {
             continue;
         }
-        FetchSearch search = fetch_search(context, def->tools[slot]);
+        FetchSearch search = fetch_search(context, recipe_tool_types(def, slot));
         search.use = def->tool_use;
         search.min_factor = factor;
         if (start_fetch(colonist, context, &search, current_tile(colonist),
@@ -3697,14 +3698,14 @@ static bool fetch_job_tool(Colonist *colonist, const ColonistContext *context)
     if (!fetches || context->no_tools) {
         return false;
     }
-    float factor = colonist_tool_factor(colonist, use, ~(ItemTypeMask)0);
+    float factor = colonist_tool_factor(colonist, use, item_types_all());
     if (factor >= tool_best_possible_factor(use)) {
         return false;
     }
-    ItemTypeMask types = 0;
+    ItemTypeMask types = item_types_none();
     for (int type = ITEM_NONE + 1; type < ITEM_TYPE_COUNT; type++) {
         if (tool_type_factor(use, (ItemType)type) > factor) {
-            types |= ITEM_TYPE_BIT(type);
+            item_types_add(&types, type);
         }
     }
     FetchSearch search = fetch_search(context, types);
@@ -3742,7 +3743,7 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
     ItemStack replaced;
     if (colonist->x == colonist->fetch.x && colonist->y == colonist->fetch.y &&
         colonist->z == colonist->fetch.z && stack.type != ITEM_NONE &&
-        tool_speed_factor(use, stack) > colonist_tool_factor(colonist, use, ~(ItemTypeMask)0) &&
+        tool_speed_factor(use, stack) > colonist_tool_factor(colonist, use, item_types_all()) &&
         colonist_swap_tool(colonist, stack, &replaced)) {
         items_take_group(context->items, colonist->x, colonist->y, colonist->z, stack, 1);
         if (replaced.count > 0) {
@@ -3750,7 +3751,7 @@ static void take_job_tool(Colonist *colonist, const ColonistContext *context)
                        replaced);
         }
         colonist_make_room(colonist, context->items, context->map, ITEM_NONE, 0,
-                           ITEM_TYPE_BIT(stack.type));
+                           item_types_of(stack.type));
     }
     reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE, context->worker_id);
     colonist->station_phase = STATION_JOB_GO;
@@ -3820,7 +3821,7 @@ static int carried_ingredient(const Colonist *colonist, const Bill *bill)
     RecipeType recipe = (RecipeType)bill->recipe;
     int ingredient = recipe_ingredient_of(recipe, (ItemType)colonist->carried.type);
     return colonist->carried.count > 0 && ingredient >= 0 &&
-                   (bill->inputs & ITEM_TYPE_BIT(colonist->carried.type)) &&
+                   (item_types_has(bill->inputs, colonist->carried.type)) &&
                    recipe_accepts_ingredient(recipe, ingredient, colonist->carried)
                ? ingredient
                : -1;
@@ -3844,7 +3845,7 @@ static int ingredient_lacking(const Colonist *colonist, const ColonistContext *c
     bool held = carried_ingredient(colonist, bill) == ingredient;
     for (int i = 0; bill->input_radius > 0 && i < RECIPE_INPUT_ALTERNATIVES; i++) {
         ItemType alternative = wanted->types[i];
-        if (alternative == ITEM_NONE || !(bill->inputs & ITEM_TYPE_BIT(alternative))) {
+        if (alternative == ITEM_NONE || !(item_types_has(bill->inputs, alternative))) {
             continue;
         }
         int have = zone_count_of(context, items, station, bill, alternative);
@@ -3883,7 +3884,8 @@ static bool craft_lacks(const Colonist *colonist, const ColonistContext *context
                         const Workstation *station, const RecipeDef *def)
 {
     for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
-        if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
+        if (item_types_any(recipe_tool_types(def, slot)) &&
+            colonist_tool_index(colonist, recipe_tool_types(def, slot)) < 0) {
             return true;
         }
     }
@@ -3913,13 +3915,15 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
     const Items *items = take ? context->items : context->plan_items;
     bool found = false;
     for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
-        if (def->tools[slot] == 0) {
+        if (!item_types_any(recipe_tool_types(def, slot))) {
             continue;
         }
-        bool lacking = colonist_tool_index(colonist, def->tools[slot]) < 0;
+        bool lacking = colonist_tool_index(colonist, recipe_tool_types(def, slot)) < 0;
         /* Lacking: any tool of the kind will do; else only a better one, and not while a
          * craft is under way. */
-        int index = lacking ? -1 : working_tool(colonist, def->tool_use, def->tools[slot], true);
+        int index = lacking
+                        ? -1
+                        : working_tool(colonist, def->tool_use, recipe_tool_types(def, slot), true);
         if (!lacking && (index < 0 || workstation_crafting(station))) {
             continue;
         }
@@ -3934,7 +3938,8 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
                     continue;
                 }
                 ItemStack stack = best_tool_at(items, x, y, station->z, def->tool_use);
-                if (stack.type != ITEM_NONE && (def->tools[slot] & ITEM_TYPE_BIT(stack.type)) &&
+                if (stack.type != ITEM_NONE &&
+                    (item_types_has(recipe_tool_types(def, slot), stack.type)) &&
                     tool_speed_factor(def->tool_use, stack) > better) {
                     best = stack;
                     better = tool_speed_factor(def->tool_use, stack);
@@ -3948,7 +3953,7 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
         if (!take) {
             return true;
         }
-        found |= pick_up_at(colonist, context, at, true, ITEM_TYPE_BIT(best.type));
+        found |= pick_up_at(colonist, context, at, true, item_types_of(best.type));
     }
     /* The ingredients of a craft of several stay in the zone until it starts. */
     if (workstation_crafting(station) || context->free_crafts ||
@@ -3958,7 +3963,7 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
     }
     for (int i = 0; i < RECIPE_INPUT_ALTERNATIVES; i++) {
         ItemType type = def->ingredients[0].types[i];
-        if (type == ITEM_NONE || !(bill->inputs & ITEM_TYPE_BIT(type)) || bill->input_radius == 0) {
+        if (type == ITEM_NONE || !(item_types_has(bill->inputs, type)) || bill->input_radius == 0) {
             continue;
         }
         ItemChoice choice = bill_choice(bill, type);
@@ -3972,7 +3977,7 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
                     continue;
                 }
                 ItemStack stack = items_get_allowed_of_woods(items, x, y, station->z,
-                                                             ITEM_TYPE_BIT(type), bill->woods);
+                                                             item_types_of(type), bill->woods);
                 if (stack.type != type ||
                     (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
                     continue;
@@ -3981,7 +3986,7 @@ static bool zone_take(Colonist *colonist, const ColonistContext *context,
                     return true;
                 }
                 TilePos at = {(int16_t)x, (int16_t)y, station->z};
-                return pick_up_at(colonist, context, at, false, ITEM_TYPE_BIT(type)) || found;
+                return pick_up_at(colonist, context, at, false, item_types_of(type)) || found;
             }
         }
     }
@@ -4006,8 +4011,9 @@ static bool plan_station_job(Colonist *colonist, const ColonistContext *context)
         return go_to_station(colonist, context, station); /* To take it there first. */
     }
     for (int slot = 0; !context->no_tools && slot < RECIPE_TOOL_MAX; slot++) {
-        if (def->tools[slot] != 0 && colonist_tool_index(colonist, def->tools[slot]) < 0) {
-            FetchSearch search = fetch_search(context, def->tools[slot]);
+        if (item_types_any(recipe_tool_types(def, slot)) &&
+            colonist_tool_index(colonist, recipe_tool_types(def, slot)) < 0) {
+            FetchSearch search = fetch_search(context, recipe_tool_types(def, slot));
             return start_fetch(colonist, context, &search, current_tile(colonist),
                                COLONIST_WORK_SEARCH_MAX_COST, true);
         }
@@ -4103,9 +4109,9 @@ static bool try_station_job(Colonist *colonist, const ColonistContext *context)
 /* Every tool a recipe may use. */
 static ItemTypeMask recipe_tools(const RecipeDef *def)
 {
-    ItemTypeMask tools = 0;
+    ItemTypeMask tools = item_types_none();
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
-        tools |= def->tools[slot];
+        tools = item_types_union(tools, recipe_tool_types(def, slot));
     }
     return tools;
 }
@@ -4121,16 +4127,16 @@ static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TileP
         return false;
     }
     const Workstation *station = job_station(colonist, context);
-    ItemTypeMask wanted_types = 0;
+    ItemTypeMask wanted_types = item_types_none();
     if (tool) {
         for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
-            wanted_types |= def->tools[slot];
+            wanted_types = item_types_union(wanted_types, recipe_tool_types(def, slot));
         }
     } else if (colonist->carried.count > 0) {
-        wanted_types = ITEM_TYPE_BIT(colonist->carried.type);
+        wanted_types = item_types_of(colonist->carried.type);
     } else {
         bool billed = station != NULL && colonist->bill < station->bill_count;
-        ItemTypeMask allowed = billed ? station->bills[colonist->bill].inputs : ~(ItemTypeMask)0;
+        ItemTypeMask allowed = billed ? station->bills[colonist->bill].inputs : item_types_all();
         int ingredient = 0;
         if (several_ingredients((RecipeType)colonist->recipe)) {
             /* The first one the work zone still lacks. */
@@ -4140,10 +4146,11 @@ static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TileP
                                                      &station->bills[colonist->bill], &type, &lack)
                                 : -1;
         }
-        wanted_types = recipe_ingredient_types((RecipeType)colonist->recipe, ingredient) & allowed;
+        wanted_types = item_types_common(
+            recipe_ingredient_types((RecipeType)colonist->recipe, ingredient), allowed);
     }
-    if (only != 0) {
-        wanted_types &= only;
+    if (item_types_any(only)) {
+        wanted_types = item_types_common(wanted_types, only);
     }
     ItemStack stack = items_get_allowed_of(context->items, tile.x, tile.y, tile.z, wanted_types);
     if (stack.type == ITEM_NONE) {
@@ -4151,10 +4158,10 @@ static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TileP
     }
     if (tool) {
         ItemTypeMask tools = wanted_types;
-        int carried = colonist_tool_index(colonist, ITEM_TYPE_BIT(stack.type));
+        int carried = colonist_tool_index(colonist, item_types_of(stack.type));
         ToolUse use = def != NULL ? def->tool_use : TOOL_USE_NONE;
         ItemStack replaced;
-        if (!(tools & ITEM_TYPE_BIT(stack.type)) ||
+        if (!(item_types_has(tools, stack.type)) ||
             (carried >= 0 &&
              tool_speed_factor(use, stack) <= tool_speed_factor(use, colonist->tools[carried])) ||
             !colonist_swap_tool(colonist, stack, &replaced)) {
@@ -4190,7 +4197,8 @@ static bool pick_up_at(Colonist *colonist, const ColonistContext *context, TileP
 /* At the stack being fetched: takes a tool, or the input of the craft. */
 static bool pick_up_fetched(Colonist *colonist, const ColonistContext *context)
 {
-    return pick_up_at(colonist, context, current_tile(colonist), colonist->fetch_tool, 0);
+    return pick_up_at(colonist, context, current_tile(colonist), colonist->fetch_tool,
+                      item_types_none());
 }
 
 /*
@@ -4316,10 +4324,10 @@ static float craft_tool_factor(Colonist *colonist, const ColonistContext *contex
     int used[RECIPE_TOOL_MAX];
     for (int slot = 0; slot < RECIPE_TOOL_MAX; slot++) {
         used[slot] = -1;
-        if (recipe->tools[slot] != 0) {
-            used[slot] = slot == 0
-                             ? working_tool(colonist, recipe->tool_use, recipe->tools[slot], true)
-                             : colonist_tool_index(colonist, recipe->tools[slot]);
+        if (item_types_any(recipe_tool_types(recipe, slot))) {
+            used[slot] = slot == 0 ? working_tool(colonist, recipe->tool_use,
+                                                  recipe_tool_types(recipe, slot), true)
+                                   : colonist_tool_index(colonist, recipe_tool_types(recipe, slot));
             if (used[slot] < 0 && !context->no_tools) {
                 return 0.0f;
             }
@@ -4368,8 +4376,8 @@ static void station_job(Colonist *colonist, const ColonistContext *context)
     }
     const RecipeDef *recipe = recipe_def((RecipeType)colonist->recipe);
     /* The tool that shapes the product (core/recipe.h), as it is before this tick's wear. */
-    int shaping = recipe->tools[0] != 0
-                      ? working_tool(colonist, recipe->tool_use, recipe->tools[0], true)
+    int shaping = item_types_any(recipe_tool_types(recipe, 0))
+                      ? working_tool(colonist, recipe->tool_use, recipe_tool_types(recipe, 0), true)
                       : -1;
     ItemStack tool = shaping >= 0 ? colonist->tools[shaping] : (ItemStack){.type = ITEM_NONE};
     float tool_factor = craft_tool_factor(colonist, context, recipe);
@@ -4543,7 +4551,7 @@ static bool plan_construction(Colonist *colonist, const ColonistContext *context
         int room = colonist_carry_capacity(colonist, (ItemType)colonist->carried.type) -
                    colonist->carried.count;
         if (wanted > 0 && room > 0) {
-            FetchSearch search = fetch_search(context, ITEM_TYPE_BIT(colonist->carried.type));
+            FetchSearch search = fetch_search(context, item_types_of(colonist->carried.type));
             search.match = colonist->carried;
             search.by_item = construction_material_dry(site, colonist->supply_slot);
             search.choice.moisture = search.by_item ? ITEM_WANT_DRY : ITEM_WANT_ANY;
@@ -4706,7 +4714,7 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
                              const ConstructionSite *site)
 {
     ItemTypeMask types = colonist->carried.count > 0
-                             ? ITEM_TYPE_BIT(colonist->carried.type)
+                             ? item_types_of(colonist->carried.type)
                              : construction_material_types(site, colonist->supply_slot);
     bool dry = construction_material_dry(site, colonist->supply_slot);
     ItemChoice choice = ITEM_CHOICE_DRY;
@@ -4714,7 +4722,7 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
     if (dry && colonist->carried.count == 0) {
         ItemType type = items_chosen_type(context->items, colonist->x, colonist->y, colonist->z,
                                           types, choice, 1);
-        types = type != ITEM_NONE ? ITEM_TYPE_BIT(type) : 0;
+        types = item_types_of(type); /* None for ITEM_NONE. */
     }
     ItemStack stack =
         colonist->carried.count > 0
@@ -4722,14 +4730,16 @@ static bool pick_up_material(Colonist *colonist, const ColonistContext *context,
             : items_get_allowed_of_woods(context->items, colonist->x, colonist->y, colonist->z,
                                          types, site->wood_choice);
     if (colonist->supply_promised <= 0 ||
-        !(construction_material_types(site, colonist->supply_slot) & ITEM_TYPE_BIT(stack.type)) ||
+        !item_types_has(construction_material_types(site, colonist->supply_slot),
+                        (ItemType)stack.type) ||
         (colonist->carried.count > 0 && !item_stacks_match(stack, colonist->carried))) {
         return false;
     }
-    int building = working_tool(colonist, TOOL_USE_BUILDING, ~(ItemTypeMask)0, false);
+    int building = working_tool(colonist, TOOL_USE_BUILDING, item_types_all(), false);
     colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
                        colonist->supply_promised,
-                       building >= 0 ? ITEM_TYPE_BIT(colonist->tools[building].type) : 0);
+                       building >= 0 ? item_types_of((ItemType)colonist->tools[building].type)
+                                     : item_types_none());
     int wanted = colonist->supply_promised - colonist->carried.count;
     int room = colonist_carry_capacity(colonist, (ItemType)stack.type) - colonist->carried.count;
     wanted = wanted < room ? wanted : room;
@@ -5129,10 +5139,10 @@ static bool wants_fuel(const Workstation *station)
 /* Fuel types the hearth takes now. */
 static ItemTypeMask fuel_wanted_types(const Workstation *station)
 {
-    ItemTypeMask types = 0;
+    ItemTypeMask types = item_types_none();
     for (int type = 1; type < ITEM_TYPE_COUNT; type++) {
         if (hearth_fuel_items_wanted(station, (ItemType)type) > 0) {
-            types |= ITEM_TYPE_BIT(type);
+            item_types_add(&types, type);
         }
     }
     return types;
@@ -5198,14 +5208,14 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
                                                colonist->z, station->fuel_types);
         float value = hearth_fuel_value((ItemType)stack.type);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y || value <= 0.0f ||
-            !(station->fuel_types & ITEM_TYPE_BIT(stack.type))) {
+            !(item_types_has(station->fuel_types, stack.type))) {
             set_idle(colonist, context, 0);
             return;
         }
         float others = station->fuel_promised - colonist->fuel_promised;
         int count = (int)floorf((HEARTH_FUEL_CAPACITY - station->fuel - others) / value);
         colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
-                           count < stack.count ? count : stack.count, 0);
+                           count < stack.count ? count : stack.count, item_types_none());
         int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
         count = count < capacity ? count : capacity;
         count = count < stack.count ? count : stack.count;
@@ -5214,7 +5224,7 @@ static void refuel(Colonist *colonist, const ColonistContext *context)
             return;
         }
         items_pick_up_of(context->items, colonist->x, colonist->y, colonist->z,
-                         ITEM_TYPE_BIT(stack.type), count, &colonist->carried);
+                         item_types_of(stack.type), count, &colonist->carried);
         /* What is promised now is what is in hand. */
         release_fuel(colonist, context);
         colonist->fuel_promised = value * (float)count;
@@ -5322,14 +5332,14 @@ static bool pick_up_ingredient(Colonist *colonist, const ColonistContext *contex
                                                          ITEM_CHOICE_DRY, &colonist->carried) > 0;
     }
     ItemStack stack = items_get_allowed_of(context->items, x, y, z, types);
-    return (types & ITEM_TYPE_BIT(stack.type)) &&
-           items_pick_up_of(context->items, x, y, z, ITEM_TYPE_BIT(stack.type), 1,
+    return (item_types_has(types, stack.type)) &&
+           items_pick_up_of(context->items, x, y, z, item_types_of(stack.type), 1,
                             &colonist->carried) > 0;
 }
 
 static bool carries_tinder(const Colonist *colonist)
 {
-    return (ITEM_TINDER_TYPES & ITEM_TYPE_BIT(colonist->carried.type)) &&
+    return (item_types_has(item_types_tinder(), colonist->carried.type)) &&
            colonist->carried.count > 0;
 }
 
@@ -5338,7 +5348,7 @@ static bool carries_fuel(const Colonist *colonist, const Workstation *station)
 {
     return colonist->carried.count > 0 &&
            hearth_fuel_value((ItemType)colonist->carried.type) > 0.0f &&
-           (station->fuel_types & ITEM_TYPE_BIT(colonist->carried.type)) != 0;
+           (item_types_has(station->fuel_types, colonist->carried.type)) != 0;
 }
 
 /* Whether the colonist holds what the hearth still needs laid in it. */
@@ -5346,7 +5356,7 @@ static bool carries_to_lay(const Colonist *colonist, const Workstation *station)
 {
     HearthIngredient next = hearth_next_to_lay(station);
     return colonist->carried.count > 0 && next != HEARTH_INGREDIENT_COUNT &&
-           (hearth_ingredient_types(next) & ITEM_TYPE_BIT(colonist->carried.type)) != 0;
+           item_types_has(hearth_ingredient_types(next), (ItemType)colonist->carried.type);
 }
 
 /* Next step of lighting: the fire laid (dry twigs, a branch), fuel for a hearth with little, then
@@ -5401,11 +5411,11 @@ static bool plan_lighting(Colonist *colonist, const ColonistContext *context)
         colonist->light_step = LIGHT_TO_SOURCE;
         return go_next_to(colonist, context, source);
     }
-    FetchSearch tinder = fetch_search(context, ITEM_TINDER_TYPES);
+    FetchSearch tinder = fetch_search(context, item_types_tinder());
     tinder.by_item = true; /* Only dry tinder takes a spark. */
     tinder.choice.moisture = ITEM_WANT_DRY;
     colonist->light_step = LIGHT_FETCH_TINDER;
-    if (!items_exist(context->plan_items, ITEM_TINDER_TYPES, 1)) {
+    if (!items_exist(context->plan_items, item_types_tinder(), 1)) {
         return false; /* None anywhere. */
     }
     return start_fetch(colonist, context, &tinder, hearth, COLONIST_WORK_SEARCH_MAX_COST, false);
@@ -5472,13 +5482,13 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
                                                colonist->z, station->fuel_types);
         float value = hearth_fuel_value((ItemType)stack.type);
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y || value <= 0.0f ||
-            !(station->fuel_types & ITEM_TYPE_BIT(stack.type))) {
+            !(item_types_has(station->fuel_types, stack.type))) {
             set_idle(colonist, context, 0);
             return;
         }
         int count = (int)floorf((HEARTH_FUEL_CAPACITY - station->fuel) / value);
         colonist_make_room(colonist, context->items, context->map, (ItemType)stack.type,
-                           count < stack.count ? count : stack.count, 0);
+                           count < stack.count ? count : stack.count, item_types_none());
         int capacity = colonist_carry_capacity(colonist, (ItemType)stack.type);
         count = count < capacity ? count : capacity;
         count = count < stack.count ? count : stack.count;
@@ -5487,7 +5497,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
             return;
         }
         items_pick_up_of(context->items, colonist->x, colonist->y, colonist->z,
-                         ITEM_TYPE_BIT(stack.type), count, &colonist->carried);
+                         item_types_of(stack.type), count, &colonist->carried);
         reservations_release_kind(context->reservations, RESERVATION_HAUL_SOURCE,
                                   context->worker_id);
         break; /* Then to the hearth. */
@@ -5530,7 +5540,7 @@ static void light_job(Colonist *colonist, const ColonistContext *context)
         break; /* Laid: the next one, or the flame. */
     case LIGHT_FETCH_TINDER: {
         if (colonist->x != colonist->fetch.x || colonist->y != colonist->fetch.y ||
-            !pick_up_ingredient(colonist, context, ITEM_TINDER_TYPES, true)) {
+            !pick_up_ingredient(colonist, context, item_types_tinder(), true)) {
             set_idle(colonist, context, 0);
             return;
         }
@@ -6745,23 +6755,24 @@ static unsigned action_tools(const Colonist *colonist, const ColonistContext *co
         if (colonist->gathering) {
             const GatherJobDef *def = gather_job_def((GatherJob)colonist->work_type);
             slot =
-                def != NULL ? working_tool(colonist, def->tool_use, ~(ItemTypeMask)0, false) : -1;
+                def != NULL ? working_tool(colonist, def->tool_use, item_types_all(), false) : -1;
         } else {
             TilePos target = colonist->target;
             ToolUse use = designation_tool_use_at(context->map, target.x, target.y, target.z,
                                                   (DesignationType)colonist->work_type);
-            slot = working_tool(colonist, use, ~(ItemTypeMask)0, false);
+            slot = working_tool(colonist, use, item_types_all(), false);
         }
         break;
     case TASK_CONSTRUCT:
-        slot = working_tool(colonist, TOOL_USE_BUILDING, ~(ItemTypeMask)0, false);
+        slot = working_tool(colonist, TOOL_USE_BUILDING, item_types_all(), false);
         break;
     case TASK_CRAFT: {
         const RecipeDef *def = recipe_def((RecipeType)colonist->recipe);
         for (int i = 0; def != NULL && i < RECIPE_TOOL_MAX; i++) {
-            int used = def->tools[i] == 0 ? -1
-                       : i == 0 ? working_tool(colonist, def->tool_use, def->tools[i], true)
-                                : colonist_tool_index(colonist, def->tools[i]);
+            int used = !item_types_any(recipe_tool_types(def, i)) ? -1
+                       : i == 0
+                           ? working_tool(colonist, def->tool_use, recipe_tool_types(def, i), true)
+                           : colonist_tool_index(colonist, recipe_tool_types(def, i));
             tools |= used >= 0 ? 1u << used : 0u;
         }
         break;

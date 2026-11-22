@@ -121,7 +121,7 @@ static void item_tooltip(App *app, ItemType type)
     lines[count] = texts[count];
     count++;
     if (item_def(type)->nutrition > 0.0f) {
-        food_days_text(app, ITEM_TYPE_BIT(type), texts[count], sizeof(texts[count]));
+        food_days_text(app, item_types_of(type), texts[count], sizeof(texts[count]));
         lines[count] = texts[count];
         count++;
     }

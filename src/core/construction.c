@@ -394,13 +394,13 @@ ItemTypeMask construction_material_types(const ConstructionSite *site, int slot)
 {
     ItemType material = construction_material(site, slot);
     if (material == ITEM_NONE) {
-        return 0;
+        return item_types_none();
     }
     if (site->delivered[slot].count > 0) {
-        return ITEM_TYPE_BIT(site->delivered[slot].type);
+        return item_types_of(site->delivered[slot].type);
     }
     if (site->workstation != 0) {
-        return ITEM_TYPE_BIT(material);
+        return item_types_of(material);
     }
     return structure_material_types((StructureType)site->type, material);
 }
@@ -550,7 +550,7 @@ static int delivery_slot(const ConstructionSite *site, ItemType type, int *missi
 {
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         *missing = construction_missing(site, slot);
-        if ((construction_material_types(site, slot) & ITEM_TYPE_BIT(type)) && *missing > 0) {
+        if (item_types_has(construction_material_types(site, slot), type) && *missing > 0) {
             return slot;
         }
     }
@@ -596,7 +596,7 @@ int construction_deliver(Constructions *constructions, int index, ItemStack stac
     }
     for (int slot = 0; slot < STRUCTURE_MATERIAL_SLOTS; slot++) {
         int missing = construction_missing(site, slot);
-        if (!(construction_material_types(site, slot) & ITEM_TYPE_BIT(stack.type)) ||
+        if (!item_types_has(construction_material_types(site, slot), (ItemType)stack.type) ||
             missing <= 0) {
             continue;
         }

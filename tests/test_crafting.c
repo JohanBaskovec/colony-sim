@@ -30,9 +30,9 @@ static bool init_flat_game(Game *game)
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->water[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -99,11 +99,11 @@ static void test_carried_tools(void)
     REQUIRE(init_flat_game(&game));
     Colonist *colonist = spawn_worker(&game, 10, 10);
     REQUIRE(colonist != NULL);
-    CHECK_EQ_INT(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)), -1);
+    CHECK_EQ_INT(colonist_tool_index(colonist, item_types_of(ITEM_FLAKE)), -1);
     CHECK(!colonist_add_tool(colonist, (ItemStack){.type = ITEM_NONE, .count = 1}));
     ItemStack flake = item_stack_make(ITEM_FLAKE, 4, TEST_QUALITY_FINE, 15);
     REQUIRE(colonist_add_tool(colonist, flake));
-    int index = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE));
+    int index = colonist_tool_index(colonist, item_types_of(ITEM_FLAKE));
     REQUIRE(index >= 0);
     CHECK_EQ_INT(colonist->tools[index].count, 1); /* One per type. */
     CHECK(!colonist_add_tool(colonist, flake));    /* Already has one. */
@@ -116,7 +116,7 @@ static void test_carried_tools(void)
 
     /* The best of several matching tools. */
     CHECK(colonist_add_tool(colonist, item_stack_make(ITEM_HAND_AXE, 1, TEST_QUALITY_SUPERB, 120)));
-    ItemTypeMask cutting = ITEM_TYPE_BIT(ITEM_FLAKE) | ITEM_TYPE_BIT(ITEM_HAND_AXE);
+    ItemTypeMask cutting = ITEM_TYPES(ITEM_FLAKE, ITEM_HAND_AXE);
     CHECK_EQ_INT(colonist->tools[colonist_tool_index(colonist, cutting)].type, ITEM_HAND_AXE);
 
     colonist_drop_tools(colonist, &game.items, &game.map);
@@ -331,7 +331,8 @@ static void test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes(void)
     int flakes = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     workstation_set_bill_target(&game.workstations, index, flakes, 2);
     CHECK(game_recipe_known(&game, RECIPE_FLAKES));
-    CHECK_EQ_UINT(game_recipe_missing_tools(&game, RECIPE_FLAKES), ITEM_TYPE_BIT(ITEM_COBBLE));
+    CHECK(item_types_equal(game_recipe_missing_tools(&game, RECIPE_FLAKES),
+                           item_types_of(ITEM_COBBLE)));
 
     /* No cobble to strike with: the flakes cannot be struck yet. */
     run_ticks(&game, 600);
@@ -341,7 +342,7 @@ static void test_knapper_takes_a_cobble_as_hammer_then_strikes_flakes(void)
     items_add(&game.items, 18, 10, 0, stones(ITEM_COBBLE, 1, TEST_QUALITY_FINE));
     run_ticks(&game, 3000);
     /* The cobble is carried as a hammer, and kept. */
-    int tool = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
+    int tool = colonist_tool_index(colonist, item_types_of(ITEM_COBBLE));
     REQUIRE(tool >= 0);
     CHECK_EQ_INT(colonist->tools[tool].quality, TEST_QUALITY_FINE);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 0);
@@ -407,19 +408,19 @@ static void test_crafting_sets_tools_down_at_the_station(void)
         working = colonist->task == TASK_CRAFT && colonist->work_hands > 0;
     }
     REQUIRE(working);
-    int hammer = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
-    int flake = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE));
+    int hammer = colonist_tool_index(colonist, item_types_of(ITEM_COBBLE));
+    int flake = colonist_tool_index(colonist, item_types_of(ITEM_FLAKE));
     REQUIRE(hammer >= 0);
     REQUIRE(flake >= 0);
     CHECK_EQ_UINT(colonist->work_tools, 1u << hammer);
     CHECK_EQ_UINT(colonist->aside, 1u << flake);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)) < 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER)) < 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_CHOPPER], 1);
-    CHECK_EQ_INT(items_get_of(&game.items, 14, 10, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
-                     items_get_of(&game.items, 13, 10, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
-                     items_get_of(&game.items, 15, 10, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
-                     items_get_of(&game.items, 14, 9, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count +
-                     items_get_of(&game.items, 14, 11, 0, ITEM_TYPE_BIT(ITEM_CHOPPER)).count,
+    CHECK_EQ_INT(items_get_of(&game.items, 14, 10, 0, item_types_of(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 13, 10, 0, item_types_of(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 15, 10, 0, item_types_of(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 14, 9, 0, item_types_of(ITEM_CHOPPER)).count +
+                     items_get_of(&game.items, 14, 11, 0, item_types_of(ITEM_CHOPPER)).count,
                  1);
     CarryArrangement arrangement;
     int slots[COLONIST_TOOL_MAX];
@@ -475,7 +476,7 @@ static void test_tools_wear_and_break(void)
     REQUIRE(bill >= 0);
     workstation_set_bill_mode(&game.workstations, index, bill, BILL_FOREVER);
     /* An hour of work takes a hit point: here the hour is nearly over. */
-    int tool = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
+    int tool = colonist_tool_index(colonist, item_types_of(ITEM_COBBLE));
     colonist->tool_wear[tool] = TOOL_WEAR_TICKS - 50;
     run_ticks(&game, 20); /* Walking to the flint: no wear. */
     CHECK_EQ_INT(colonist->tools[tool].hit_points, 2);
@@ -486,7 +487,7 @@ static void test_tools_wear_and_break(void)
     /* At the end of the next hour, the hammer breaks: the craft waits. */
     colonist->tool_wear[tool] = TOOL_WEAR_TICKS - 1;
     run_ticks(&game, 1);
-    CHECK_EQ_INT(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)), -1);
+    CHECK_EQ_INT(colonist_tool_index(colonist, item_types_of(ITEM_COBBLE)), -1);
     CHECK_EQ_INT(colonist->tools_broken, 1);
     run_ticks(&game, 1);
     float progress = workstation_get_const(&game.workstations, index)->work_progress;
@@ -497,7 +498,7 @@ static void test_tools_wear_and_break(void)
     /* A new cobble: fetched, and the craft resumes where it was. */
     items_add(&game.items, 17, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     run_ticks(&game, 400);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)) >= 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_COBBLE)) >= 0);
     CHECK(workstation_get_const(&game.workstations, index)->work_progress > progress);
     game_shutdown(&game);
 }
@@ -515,7 +516,7 @@ static void test_better_tool_close_by_is_swapped(void)
     items_add(&game.items, 14, 45, 0, stones(ITEM_COBBLE, 1, TEST_QUALITY_SUPERB));
     workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     run_ticks(&game, 300);
-    int tool = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE));
+    int tool = colonist_tool_index(colonist, item_types_of(ITEM_COBBLE));
     REQUIRE(tool >= 0);
     CHECK_EQ_INT(colonist->tools[tool].quality, TEST_QUALITY_FINE);
     /* The crude one is left where the fine one lay. */
@@ -544,13 +545,13 @@ static void test_knapping_cobbles_takes_two(void)
     items_add(&game.items, 18, 10, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     CHECK(!game_bill_has_input(&game, chopper));
     run_ticks(&game, 600);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)) < 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_COBBLE)) < 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 1);
     /* A second one: one to strike with, one to knap. */
     items_add(&game.items, 18, 12, 0, stones(ITEM_COBBLE, 1, ITEM_QUALITY_STANDARD));
     CHECK(game_bill_has_input(&game, chopper));
     run_ticks(&game, 2000);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_COBBLE)) >= 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_COBBLE)) >= 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_COBBLE], 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_CHOPPER], 1);
     game_shutdown(&game);
@@ -590,7 +591,7 @@ static void test_bill_until_in_storage(void)
     items_add(&game.items, 16, 10, 0, stones(ITEM_FLINT, 10, TEST_QUALITY_FINE));
     int stockpile = stockpile_create(&game.stockpiles, &game.map, 10, 14, 12, 16, 0);
     REQUIRE(stockpile != STOCKPILE_NONE);
-    stockpile_set_allowed(&game.stockpiles, stockpile, ITEM_TYPE_BIT(ITEM_FLAKE));
+    stockpile_set_allowed(&game.stockpiles, stockpile, item_types_of(ITEM_FLAKE));
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_FLAKES);
     workstation_set_bill_mode(&game.workstations, index, bill, BILL_UNTIL_STOCK);
     workstation_set_bill_target(&game.workstations, index, bill, 5);
@@ -656,7 +657,7 @@ static void test_spears_need_a_cutting_tool_and_straight_branches(void)
     CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 1);
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 3);
     /* The flake was fetched and kept. */
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)) >= 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_FLAKE)) >= 0);
     CHECK_EQ_INT((int)game.items.totals[ITEM_FLAKE], 0);
     game_shutdown(&game);
 }
@@ -681,7 +682,7 @@ static void test_the_work_zone_is_used_without_walking(void)
     }
     CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 1);
     CHECK(!fetched);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)) >= 0); /* Taken as a tool. */
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_FLAKE)) >= 0); /* Taken as a tool. */
     CHECK_EQ_INT((int)game.items.totals[ITEM_BRANCHES], 0);
     game_shutdown(&game);
 }
@@ -722,8 +723,7 @@ static void test_the_work_zone_gives_a_better_tool_not_forbidden_things(void)
     items_add(&game.items, 13, 10, 0, item_stack_make(ITEM_HAND_AXE, 1, TEST_QUALITY_SUPERB, 120));
     run_ticks(&game, 3000);
     /* The axe was taken up and is the tool used; the branch is forbidden: no spear. */
-    int cutting =
-        colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE) | ITEM_TYPE_BIT(ITEM_HAND_AXE));
+    int cutting = colonist_tool_index(colonist, ITEM_TYPES(ITEM_FLAKE, ITEM_HAND_AXE));
     REQUIRE(cutting >= 0);
     CHECK_EQ_INT(colonist->tools[cutting].type, ITEM_HAND_AXE);
     CHECK_EQ_INT((int)game.items.totals[ITEM_THROWING_SPEAR], 0);
@@ -765,7 +765,7 @@ static void test_bills_choose_the_wood(void)
     ItemStack spear = {.type = ITEM_NONE};
     for (int y = 0; y < game.map.height && spear.type == ITEM_NONE; y++) {
         for (int x = 0; x < game.map.width && spear.type == ITEM_NONE; x++) {
-            spear = items_get_of(&game.items, x, y, 0, ITEM_TYPE_BIT(ITEM_THROWING_SPEAR));
+            spear = items_get_of(&game.items, x, y, 0, item_types_of(ITEM_THROWING_SPEAR));
         }
     }
     CHECK_EQ_INT(spear.type, ITEM_THROWING_SPEAR);
@@ -972,13 +972,15 @@ static void test_missing_tools_and_inputs_are_reported(void)
     int bill = workstation_add_bill(&game.workstations, index, RECIPE_THRUSTING_SPEAR);
     REQUIRE(bill >= 0);
     const Bill *spear = &workstation_get(&game.workstations, index)->bills[bill];
-    ItemTypeMask axe = ITEM_TYPE_BIT(ITEM_HAND_AXE), flake = ITEM_TYPE_BIT(ITEM_FLAKE);
-    CHECK_EQ_UINT(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR), axe | flake);
+    ItemTypeMask axe = item_types_of(ITEM_HAND_AXE), flake = item_types_of(ITEM_FLAKE);
+    CHECK(item_types_equal(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR),
+                           item_types_union(axe, flake)));
     /* A tool counts whether it lies somewhere or is carried. */
     items_add(&game.items, 30, 30, 0, item_stack_pristine(ITEM_HAND_AXE, 1));
-    CHECK_EQ_UINT(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR), flake);
+    CHECK(item_types_equal(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR), flake));
     colonist_add_tool(colonist, item_stack_pristine(ITEM_FLAKE, 1));
-    CHECK_EQ_UINT(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR), 0);
+    CHECK(item_types_equal(game_recipe_missing_tools(&game, RECIPE_THRUSTING_SPEAR),
+                           item_types_none()));
 
     /* Two branches are needed, of a type the bill allows. */
     CHECK(!game_bill_has_input(&game, spear));
@@ -1158,7 +1160,7 @@ static void test_stock_counts_what_lies_in_stockpiles_and_work_zones(void)
     int index = built_station(&game, WORKSTATION_CRAFTING_SPOT, 14, 10);
     int pile = stockpile_create(&game.stockpiles, &game.map, 20, 20, 22, 22, 0);
     REQUIRE(index != WORKSTATION_NONE && pile != STOCKPILE_NONE);
-    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_FLAKE));
+    stockpile_set_allowed(&game.stockpiles, pile, item_types_of(ITEM_FLAKE));
     items_add(&game.items, 20, 20, 0, item_stack_pristine(ITEM_FLAKE, 2));  /* Stored. */
     items_add(&game.items, 21, 21, 0, item_stack_pristine(ITEM_COBBLE, 5)); /* Not accepted. */
     items_add(&game.items, 14, 10, 0, item_stack_pristine(ITEM_FLAKE, 3));  /* Just made. */

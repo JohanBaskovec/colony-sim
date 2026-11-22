@@ -18,7 +18,10 @@
 #define CUT_GRASS_ARMFUL_WORK 50.0f
 #define CLEAR_SHRUB_WORK 500.0f /* Pulling up a shrub by hand. */
 
-#define ONE(type) ITEM_TYPE_BIT(type)
+#define ONE(type)                                                                                  \
+    {                                                                                              \
+        type                                                                                       \
+    }
 
 #define WOOD GATHER_GROUP_WOOD
 #define FOOD GATHER_GROUP_FOOD
@@ -142,6 +145,11 @@ _Static_assert(GATHER_RESOURCE_COUNT <= 32 && GATHER_JOB_COUNT < 255, "masks and
 const GatherResourceDef *gather_resource_def(GatherResource resource)
 {
     return (unsigned)resource < GATHER_RESOURCE_COUNT ? &RESOURCE_DEFS[resource] : NULL;
+}
+
+ItemTypeMask gather_resource_counted(const GatherResourceDef *def)
+{
+    return def != NULL ? item_types_list(def->counted, GATHER_COUNTED_MAX) : item_types_none();
 }
 
 const GatherJobDef *gather_job_def(GatherJob job)
@@ -945,7 +953,7 @@ long gather_resource_count(GatherResource resource, const long totals[ITEM_TYPE_
     const GatherResourceDef *def = gather_resource_def(resource);
     long count = 0;
     for (int type = 0; def != NULL && type < ITEM_TYPE_COUNT; type++) {
-        if (def->counted & ITEM_TYPE_BIT(type)) {
+        if (item_types_has(gather_resource_counted(def), type)) {
             count += totals[type];
         }
     }
@@ -975,7 +983,7 @@ long gather_food_days(ItemTypeMask counted, const long totals[ITEM_TYPE_COUNT], 
     }
     double nutrition = 0.0;
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
-        if ((counted & ITEM_TYPE_BIT(type)) && item_is_food((ItemType)type)) {
+        if ((item_types_has(counted, type)) && item_is_food((ItemType)type)) {
             nutrition += (double)totals[type] * (double)item_def((ItemType)type)->nutrition;
         }
     }
@@ -987,7 +995,7 @@ long gather_resource_food_days(GatherResource resource, const long totals[ITEM_T
                                float daily_food)
 {
     const GatherResourceDef *def = gather_resource_def(resource);
-    return def != NULL ? gather_food_days(def->counted, totals, daily_food) : 0;
+    return def != NULL ? gather_food_days(gather_resource_counted(def), totals, daily_food) : 0;
 }
 
 long gather_group_food_days(GatherGroup group, const long totals[ITEM_TYPE_COUNT], float daily_food)
@@ -995,10 +1003,10 @@ long gather_group_food_days(GatherGroup group, const long totals[ITEM_TYPE_COUNT
     if ((unsigned)group >= GATHER_GROUP_COUNT || !GROUP_DEFS[group].food) {
         return 0;
     }
-    ItemTypeMask all_food = 0;
+    ItemTypeMask all_food = item_types_none();
     for (int type = 0; type < ITEM_TYPE_COUNT; type++) {
         if (item_is_food((ItemType)type)) {
-            all_food |= ITEM_TYPE_BIT(type);
+            item_types_add(&all_food, type);
         }
     }
     return gather_food_days(all_food, totals, daily_food);
@@ -1304,11 +1312,11 @@ static bool pickable_from_ground(const Map *map, int x, int y, int z)
 /* The items the picked resources among `resources` are. */
 static ItemTypeMask picked_items(GatherResourceMask resources)
 {
-    ItemTypeMask items = 0;
+    ItemTypeMask items = item_types_none();
     resources &= JOB_DEFS[GATHER_JOB_PICK].resources;
     for (int r = 0; r < GATHER_RESOURCE_COUNT; r++) {
         if (resources & GATHER_RESOURCE_BIT(r)) {
-            items |= ITEM_TYPE_BIT(RESOURCE_DEFS[r].item);
+            item_types_add(&items, RESOURCE_DEFS[r].item);
         }
     }
     return items;
@@ -1326,7 +1334,8 @@ static bool crown_forbidden(const Map *map, int x, int y, int z)
 static int crown_fruit(const Map *map, int x, int y, int z, GatherResourceMask resources)
 {
     ItemTypeMask items = picked_items(resources);
-    return map->crowns != NULL && items != 0 ? crowns_count(map->crowns, x, y, z, items) : 0;
+    return map->crowns != NULL && item_types_any(items) ? crowns_count(map->crowns, x, y, z, items)
+                                                        : 0;
 }
 
 /* Whether a block of foliage holds fruit its crown zone wants picked. */

@@ -40,9 +40,9 @@ static bool init_raised_game(Game *game)
         map->pore[i] = (uint16_t)rock_pore_capacity((RockType)map->rock[i]); /* No table. */
         map->slope[i] = 0;
         map->water[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
     map->slope[map_index(map, PLATEAU_X - 1, 20, LOW)] = 1;

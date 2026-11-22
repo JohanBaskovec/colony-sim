@@ -32,9 +32,9 @@ static bool init_flat_game(Game *game)
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->water[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
     }
@@ -136,10 +136,10 @@ static void test_fuel(void)
     CHECK(hearth_fuel_value(ITEM_HEATHER) > 0.0f);
     CHECK_NEAR(hearth_fuel_value(ITEM_REEDS), 0.0, 1e-9);
     CHECK_NEAR(hearth_fuel_value(ITEM_MOSS), 0.0, 1e-9);
-    CHECK(!(HEARTH_DEFAULT_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_BRACKEN)));
-    CHECK(!(HEARTH_DEFAULT_FUEL_TYPES & ITEM_TYPE_BIT(ITEM_HEATHER)));
-    CHECK((ITEM_TINDER_TYPES & ITEM_TYPE_BIT(ITEM_GRASS)) &&
-          (ITEM_TINDER_TYPES & ITEM_TYPE_BIT(ITEM_MOSS)));
+    CHECK(!(item_types_has(hearth_default_fuel_types(), ITEM_BRACKEN)));
+    CHECK(!(item_types_has(hearth_default_fuel_types(), ITEM_HEATHER)));
+    CHECK((item_types_has(item_types_tinder(), ITEM_GRASS)) &&
+          (item_types_has(item_types_tinder(), ITEM_MOSS)));
     CHECK_NEAR(hearth_fuel_value(ITEM_COBBLE), 0.0, 1e-9);
     CHECK_NEAR(hearth_fuel_value(ITEM_NONE), 0.0, 1e-9);
     /* Wet fuel burns worse: green logs give about half what seasoned ones do,
@@ -165,7 +165,7 @@ static void test_fuel(void)
     CHECK(hearth_is(station));
     CHECK(!station->burning);
     CHECK(station->keep_burning);
-    CHECK_EQ_UINT(station->fuel_types, HEARTH_DEFAULT_FUEL_TYPES);
+    CHECK(item_types_equal(station->fuel_types, hearth_default_fuel_types()));
     CHECK_NEAR(hearth_fuel_wanted(station), HEARTH_FUEL_CAPACITY, 1e-6);
     CHECK(!hearth_needs_lighting(station)); /* Nothing to burn. */
     CHECK(!hearth_light(workstations, index));
@@ -355,7 +355,7 @@ static void test_hearth_is_built_from_six_stones(void)
     const Workstation *station = hearth(&game, index);
     CHECK(hearth_is(station));
     CHECK(station->keep_burning);
-    CHECK_EQ_UINT(station->fuel_types, HEARTH_DEFAULT_FUEL_TYPES);
+    CHECK(item_types_equal(station->fuel_types, hearth_default_fuel_types()));
     CHECK_NEAR(station->fuel, 0.0, 1e-9);
     game_shutdown(&game);
 }
@@ -519,7 +519,7 @@ static void test_laying_the_fire(void)
     CHECK(hearth_lay(stations, index, ITEM_BRANCHES));
     CHECK_EQ_INT(hearth_next_to_lay(station), HEARTH_INGREDIENT_COUNT);
     CHECK(!hearth_lay(stations, index, ITEM_BRANCHES));
-    CHECK(hearth_ingredient_types(HEARTH_TINDER) & ITEM_TYPE_BIT(ITEM_GRASS));
+    CHECK(item_types_has(hearth_ingredient_types(HEARTH_TINDER), ITEM_GRASS));
     /* It catches: laid again next time. */
     CHECK(hearth_light(stations, index));
     CHECK_EQ_UINT(station->laid, 0);
@@ -792,7 +792,7 @@ static void add_carrots(Game *game, int x, int y, int count, int quality, int pe
 /* Carrots of the quality left on a tile (raw ones). */
 static int carrots_left(const Game *game, int x, int y)
 {
-    return items_get_of(&game->items, x, y, 0, ITEM_TYPE_BIT(ITEM_WILD_CARROTS)).count;
+    return items_get_of(&game->items, x, y, 0, item_types_of(ITEM_WILD_CARROTS)).count;
 }
 
 /* A bill only takes ingredients within its quality range, item by item. */
@@ -859,7 +859,7 @@ static void test_cooking_takes_what_rots_first(void)
                      (cook->carried.type == ITEM_ROASTED_CARROTS ? cook->carried.count : 0),
                  4);
     CHECK_EQ_INT(carrots_left(&game, 30, 12), 0);
-    CHECK_EQ_INT(items_get_of(&game.items, 30, 12, 0, ITEM_TYPE_BIT(ITEM_COBBLE)).count, 3);
+    CHECK_EQ_INT(items_get_of(&game.items, 30, 12, 0, item_types_of(ITEM_COBBLE)).count, 3);
     CHECK_EQ_INT(carrots_left(&game, 16, 12), 4);
     CHECK_EQ_INT(carrots_left(&game, 24, 12), 4);
     game_shutdown(&game);

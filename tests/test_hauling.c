@@ -33,9 +33,9 @@ static bool init_flat_game(Game *game)
     for (size_t i = 0; i < map_level_tile_count(map); i++) { /* The ground level. */
         map->terrain[i] = TERRAIN_SOIL;
         map->water[i] = 0;
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_COBBLE));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_FLINT));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, item_types_of(ITEM_COBBLE));
+        map_clear_litter_at(map, i, item_types_of(ITEM_FLINT));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
         map->rock[i] = ROCK_NONE;
         map->plants[i].type = PLANT_NONE;
         map->plants[i].growth = 0.0f;
@@ -88,7 +88,7 @@ static HaulWorld world_of(Game *game)
 
 static int count_at(const Game *game, int x, int y, ItemType type)
 {
-    return items_get_of(&game->items, x, y, 0, ITEM_TYPE_BIT(type)).count;
+    return items_get_of(&game->items, x, y, 0, item_types_of(type)).count;
 }
 
 /* Items of `type` inside a rectangle. */
@@ -144,7 +144,7 @@ static void test_hauled_out_of_a_heap(void)
     REQUIRE(items_mixed(&game.items, 10, 10, 0));
     int pile = stockpile_create(&game.stockpiles, &game.map, 20, 10, 20, 10, 0);
     REQUIRE(pile != STOCKPILE_NONE);
-    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_WOOD));
+    stockpile_set_allowed(&game.stockpiles, pile, item_types_of(ITEM_WOOD));
     HaulWorld world = world_of(&game);
     HaulJob job;
     CHECK(haul_any_job_possible(&world));
@@ -156,7 +156,7 @@ static void test_hauled_out_of_a_heap(void)
     REQUIRE(colonist != NULL);
     run_ticks(&game, 800);
     CHECK_EQ_INT(count_at(&game, 20, 10, ITEM_WOOD), 6);
-    CHECK_EQ_INT(items_get_of(&game.items, 20, 10, 0, ITEM_TYPE_BIT(ITEM_WOOD)).quality, 80);
+    CHECK_EQ_INT(items_get_of(&game.items, 20, 10, 0, item_types_of(ITEM_WOOD)).quality, 80);
     CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_BLACKBERRIES), 20); /* Left: nowhere to go. */
     CHECK_EQ_INT(count_at(&game, 10, 10, ITEM_WOOD), 0);
 
@@ -178,7 +178,7 @@ static void test_no_job_without_stockpile(void)
 
     /* A stockpile that refuses wood does not help either. */
     int pile = stockpile_create(&game.stockpiles, &game.map, 10, 10, 12, 12, 0);
-    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_STONE_BLOCK));
+    stockpile_set_allowed(&game.stockpiles, pile, item_types_of(ITEM_STONE_BLOCK));
     CHECK(!haul_any_job_possible(&world));
     CHECK(!haul_find_job(&world, (TilePos){5, 6, 0}, PATH_NO_COST_LIMIT, &job));
     game_shutdown(&game);
@@ -244,7 +244,7 @@ static void test_stored_items_move_only_to_better_storage(void)
 
     /* A stockpile that stops accepting its items makes them haulable to any storage. */
     stockpile_set_priority(&game.stockpiles, other, STOCKPILE_PRIORITY_LOWEST);
-    stockpile_set_allowed(&game.stockpiles, low, ITEM_TYPE_BIT(ITEM_STONE_BLOCK));
+    stockpile_set_allowed(&game.stockpiles, low, item_types_of(ITEM_STONE_BLOCK));
     REQUIRE(haul_find_job(&world, (TilePos){5, 5, 0}, PATH_NO_COST_LIMIT, &job));
     CHECK_EQ_INT(job.destination.x, 15);
     game_shutdown(&game);
@@ -329,27 +329,31 @@ static void test_tools_in_the_way_are_set_down(void)
     /* Both tools go in the armful: five cobbles of the eight it could carry. */
     CHECK_EQ_INT(colonist_carry_capacity(colonist, ITEM_COBBLE), 5);
     /* Enough room already: nothing set down. */
-    CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_COBBLE, 5, 0), 0);
+    CHECK_EQ_INT(
+        colonist_make_room(colonist, &game.items, &game.map, ITEM_COBBLE, 5, item_types_none()), 0);
     /* The hand axe is the job's: only the chopper goes. */
     CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_COBBLE, 8,
-                                    ITEM_TYPE_BIT(ITEM_HAND_AXE)),
+                                    item_types_of(ITEM_HAND_AXE)),
                  1);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_HAND_AXE)) >= 0);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)) < 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_HAND_AXE)) >= 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER)) < 0);
     CHECK_EQ_INT(count_in(&game, 8, 8, 12, 12, ITEM_CHOPPER), 1);
     CHECK_EQ_INT(colonist_carry_capacity(colonist, ITEM_COBBLE), 7);
     /* Nothing kept: the hand axe goes too, and all eight fit. */
-    CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_COBBLE, 8, 0), 1);
+    CHECK_EQ_INT(
+        colonist_make_room(colonist, &game.items, &game.map, ITEM_COBBLE, 8, item_types_none()), 1);
     CHECK_EQ_INT(colonist_carry_capacity(colonist, ITEM_COBBLE), 8);
     /* A setting down that gains nothing is not done: logs fit beside a flake. */
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_FLAKE, 1)));
-    CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_WOOD, 10, 0), 0);
+    CHECK_EQ_INT(
+        colonist_make_room(colonist, &game.items, &game.map, ITEM_WOOD, 10, item_types_none()), 0);
 
     /* Short tools fit in the hands only: of three, one fits nowhere and is set
      * down without a load. */
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_HAND_AXE, 1)));
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
-    CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_NONE, 0, 0), 1);
+    CHECK_EQ_INT(
+        colonist_make_room(colonist, &game.items, &game.map, ITEM_NONE, 0, item_types_none()), 1);
     CarryArrangement arrangement;
     colonist_carry_arrangement(colonist, &arrangement, NULL);
     CHECK_EQ_INT((int)arrangement.left_out, 0);
@@ -364,16 +368,17 @@ static void test_locked_items_stay_on_the_settler(void)
     REQUIRE(colonist != NULL);
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_HAND_AXE, 1)));
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
-    int axe = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_HAND_AXE));
-    int chopper = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER));
+    int axe = colonist_tool_index(colonist, item_types_of(ITEM_HAND_AXE));
+    int chopper = colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER));
     /* Locks: an empty slot or a lock out of range is refused. */
     CHECK(!colonist_set_lock(colonist, COLONIST_TOOL_MAX - 1, CARRY_LOCK_KEPT));
     CHECK(!colonist_set_lock(colonist, axe, CARRY_LOCK_COUNT));
     CHECK(colonist_set_lock(colonist, axe, CARRY_LOCK_KEPT));
     /* Room for eight cobbles: the locked hand axe stays, the chopper goes. */
-    CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_COBBLE, 8, 0), 1);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_HAND_AXE)) == axe);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)) < 0);
+    CHECK_EQ_INT(
+        colonist_make_room(colonist, &game.items, &game.map, ITEM_COBBLE, 8, item_types_none()), 1);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_HAND_AXE)) == axe);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER)) < 0);
     CHECK_EQ_INT(colonist->tool_locks[axe], CARRY_LOCK_KEPT);
     CHECK_EQ_INT(colonist_hands_locked(colonist), 0);
 
@@ -402,17 +407,18 @@ static void test_locked_items_stay_on_the_settler(void)
     CHECK(colonist_can_keep(colonist, ITEM_CHOPPER, 1, CARRY_LOCK_KEPT));
     /* A second short tool in the other hand; a third finds no hand. */
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
-    chopper = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER));
+    chopper = colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER));
     CHECK(colonist_set_lock(colonist, chopper, CARRY_LOCK_IN_HAND));
     CHECK_EQ_INT(colonist_hands_locked(colonist), 2);
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_FLAKE, 1)));
-    int flake = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE));
+    int flake = colonist_tool_index(colonist, item_types_of(ITEM_FLAKE));
     CHECK(!colonist_set_lock(colonist, flake, CARRY_LOCK_IN_HAND));
     CHECK(!colonist_can_keep(colonist, ITEM_COBBLE, 1,
                              CARRY_LOCK_KEPT)); /* No hand left for a cobble. */
     /* The free flake fits nowhere beside them: set down. */
-    CHECK_EQ_INT(colonist_make_room(colonist, &game.items, &game.map, ITEM_NONE, 0, 0), 1);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)) < 0);
+    CHECK_EQ_INT(
+        colonist_make_room(colonist, &game.items, &game.map, ITEM_NONE, 0, item_types_none()), 1);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_FLAKE)) < 0);
 
     /* Put down: at its feet, unlocked. */
     CHECK(!colonist_put_down(colonist, &game.items, &game.map, flake));
@@ -436,7 +442,7 @@ static void test_a_settler_with_something_in_hand_only_hauls(void)
     REQUIRE(colonist != NULL);
     colonist->work_priorities[WORK_GATHERING] = WORK_PRIORITY_DEFAULT;
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
-    int spear = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    int spear = colonist_tool_index(colonist, item_types_of(ITEM_THRUSTING_SPEAR));
     REQUIRE(colonist_set_lock(colonist, spear, CARRY_LOCK_IN_HAND));
     run_ticks(&game, 5);
     CHECK(colonist->task != TASK_WORK); /* The spear in hand: no gathering. */
@@ -445,7 +451,7 @@ static void test_a_settler_with_something_in_hand_only_hauls(void)
     stockpile_create(&game.stockpiles, &game.map, 14, 10, 14, 10, 0);
     run_ticks(&game, 600);
     CHECK_EQ_INT(count_at(&game, 14, 10, ITEM_WOOD), 2);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR)) == spear);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_THRUSTING_SPEAR)) == spear);
     /* Kept on the settler only: it gathers again, the spear with it. */
     REQUIRE(game_set_carry_lock(&game, game_colonist_id_at(&game, 0), spear, CARRY_LOCK_KEPT));
     bool gathers = false;
@@ -454,7 +460,7 @@ static void test_a_settler_with_something_in_hand_only_hauls(void)
         gathers = colonist->task == TASK_WORK;
     }
     CHECK(gathers);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR)) == spear);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_THRUSTING_SPEAR)) == spear);
     game_shutdown(&game);
 }
 
@@ -477,9 +483,9 @@ static void test_work_sets_things_aside(void)
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_FLAKE, 1)));
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_THRUSTING_SPEAR, 1)));
-    int flake = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE));
-    int chopper = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER));
-    int spear = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    int flake = colonist_tool_index(colonist, item_types_of(ITEM_FLAKE));
+    int chopper = colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER));
+    int spear = colonist_tool_index(colonist, item_types_of(ITEM_THRUSTING_SPEAR));
     REQUIRE(colonist_set_lock(colonist, chopper, CARRY_LOCK_KEPT));
     CHECK_EQ_INT(colonist_hands_needed(colonist), 0);
     bool working = false;
@@ -514,9 +520,9 @@ static void test_work_sets_things_aside(void)
     game_tick(&game); /* Its next tick. */
     CHECK_EQ_INT(colonist->work_hands, 0);
     CHECK_EQ_INT(colonist->aside, 0);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_FLAKE)) == flake);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)) == chopper);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR)) == spear);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_FLAKE)) == flake);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER)) == chopper);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_THRUSTING_SPEAR)) == spear);
     colonist_carry_arrangement(colonist, &arrangement, NULL);
     CHECK_EQ_UINT(arrangement.working, 0u);
 
@@ -551,11 +557,11 @@ static void test_a_carry_order_fetches_and_locks(void)
     REQUIRE(game_order_carry(&game, id, spear));
     CHECK(colonist->task == TASK_MOVE);
     run_ticks(&game, 600);
-    int index = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_THRUSTING_SPEAR));
+    int index = colonist_tool_index(colonist, item_types_of(ITEM_THRUSTING_SPEAR));
     REQUIRE(index >= 0);
     CHECK_EQ_INT(colonist->tool_locks[index], CARRY_LOCK_KEPT);
     CHECK_EQ_INT(count_at(&game, 15, 10, ITEM_THRUSTING_SPEAR), 0);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)) >= 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER)) >= 0);
     CHECK(colonist->take_item.slot == ITEM_ID_NONE.slot);
 
     /* A second of the same type: kept too, locked as well. */
@@ -580,7 +586,7 @@ static void test_a_carry_order_fetches_and_locks(void)
     REQUIRE(game_order_carry(&game, id, items_id(&game.items, lying)));
     items_take_group(&game.items, 20, 14, 0, item_stack_pristine(ITEM_HAND_AXE, 1), 1);
     run_ticks(&game, 900);
-    CHECK(colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_HAND_AXE)) < 0);
+    CHECK(colonist_tool_index(colonist, item_types_of(ITEM_HAND_AXE)) < 0);
     CHECK(colonist->task != TASK_MOVE);
     game_shutdown(&game);
 }
@@ -603,9 +609,9 @@ static void test_carry_refusals(void)
     /* Both hands kept: no hand left for a cobble. */
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_HAND_AXE, 1)));
     REQUIRE(colonist_add_tool(colonist, item_stack_pristine(ITEM_CHOPPER, 1)));
-    REQUIRE(colonist_set_lock(colonist, colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_HAND_AXE)),
+    REQUIRE(colonist_set_lock(colonist, colonist_tool_index(colonist, item_types_of(ITEM_HAND_AXE)),
                               CARRY_LOCK_IN_HAND));
-    REQUIRE(colonist_set_lock(colonist, colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_CHOPPER)),
+    REQUIRE(colonist_set_lock(colonist, colonist_tool_index(colonist, item_types_of(ITEM_CHOPPER)),
                               CARRY_LOCK_IN_HAND));
     CHECK_EQ_INT(game_carry_refusal(&game, id, cobble), CARRY_REFUSAL_NO_ROOM);
     CHECK(!game_order_carry(&game, id, cobble));
@@ -663,7 +669,7 @@ static void test_items_of_the_load_can_be_kept_or_dropped(void)
     REQUIRE(game_keep_load_item(&game, id, 1, CARRY_LOCK_KEPT) >= 0);
     CHECK_EQ_INT(colonist->carried.count, 2);
     CHECK(colonist->task == TASK_HAUL);
-    int log = colonist_tool_index(colonist, ITEM_TYPE_BIT(ITEM_WOOD));
+    int log = colonist_tool_index(colonist, item_types_of(ITEM_WOOD));
     REQUIRE(log >= 0);
     CHECK_EQ_INT(colonist->tool_locks[log], CARRY_LOCK_KEPT);
     CHECK_EQ_INT(colonist->tools[log].hit_points, hit_points);
@@ -871,7 +877,7 @@ static void test_destination_gone_without_alternative_drops_items(void)
     run_ticks(&game, 60);
     REQUIRE(colonist->carried.count == 15);
 
-    stockpile_set_allowed(&game.stockpiles, pile, 0);
+    stockpile_set_allowed(&game.stockpiles, pile, item_types_none());
     run_ticks(&game, 120);
     CHECK_EQ_INT(colonist->carried.count, 0);
     CHECK(colonist->task != TASK_HAUL);
@@ -1292,7 +1298,7 @@ static void test_any_job_possible_is_exact(void)
     Game game;
     REQUIRE(init_flat_game(&game));
     int pile = stockpile_create(&game.stockpiles, &game.map, 20, 5, 20, 5, 0);
-    stockpile_set_allowed(&game.stockpiles, pile, ITEM_TYPE_BIT(ITEM_WOOD));
+    stockpile_set_allowed(&game.stockpiles, pile, item_types_of(ITEM_WOOD));
     /* A stored stack of wood with room left: berries lie about. */
     items_add(&game.items, 20, 5, 0, item_stack_make(ITEM_WOOD, 5, TEST_QUALITY_FINE, 100));
     items_add(&game.items, 5, 5, 0, item_stack_make(ITEM_BLACKBERRIES, 10, TEST_QUALITY_ROUGH, 10));

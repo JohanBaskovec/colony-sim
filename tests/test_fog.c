@@ -184,10 +184,8 @@ static bool walled_plain(Game *game)
         map->rock[i] = (uint8_t)(z < ground ? ROCK_EARTH : ROCK_NONE);
         map->slope[i] = 0;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
-        map_clear_litter_at(map, i,
-                            ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS) |
-                                ITEM_TYPE_BIT(ITEM_COBBLE) | ITEM_TYPE_BIT(ITEM_FLINT) |
-                                ITEM_TYPE_BIT(ITEM_HAZELNUTS));
+        map_clear_litter_at(
+            map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS, ITEM_COBBLE, ITEM_FLINT, ITEM_HAZELNUTS));
     }
     map->slope_count = 0;
     map->top_ground_level = ground + 1;
@@ -749,7 +747,7 @@ static bool apple_tree(Game *game, int x, int y, int z, int apples, TilePos *blo
 
 static int known_apples(const Game *game, TilePos at)
 {
-    return crowns_count(game_view_map(game)->crowns, at.x, at.y, at.z, ITEM_TYPE_BIT(ITEM_APPLES));
+    return crowns_count(game_view_map(game)->crowns, at.x, at.y, at.z, item_types_of(ITEM_APPLES));
 }
 
 /* What hangs in the crowns is known as it was last seen, as the items are
@@ -789,7 +787,7 @@ static void test_remembers_what_hangs_in_the_crowns(void)
     CHECK(!game_tile_seen(&game, hidden.x, hidden.y, hidden.z));
     CHECK_EQ_INT(known_apples(&game, hidden), 0);
     CHECK_EQ_INT(
-        crowns_count(&game.crowns, hidden.x, hidden.y, hidden.z, ITEM_TYPE_BIT(ITEM_APPLES)), 2);
+        crowns_count(&game.crowns, hidden.x, hidden.y, hidden.z, item_types_of(ITEM_APPLES)), 2);
     CHECK(crowns_check(&game.known.crowns));
 
     /* A zone over both: the gatherer picks the apples it knows of only. */
@@ -814,10 +812,10 @@ static void test_remembers_what_hangs_in_the_crowns(void)
         }
         game_tick(&game);
     }
-    CHECK_EQ_INT(crowns_count(&game.crowns, seen.x, seen.y, seen.z, ITEM_TYPE_BIT(ITEM_APPLES)), 0);
+    CHECK_EQ_INT(crowns_count(&game.crowns, seen.x, seen.y, seen.z, item_types_of(ITEM_APPLES)), 0);
     CHECK_EQ_INT(known_apples(&game, seen), 0);
     CHECK_EQ_INT(
-        crowns_count(&game.crowns, hidden.x, hidden.y, hidden.z, ITEM_TYPE_BIT(ITEM_APPLES)), 2);
+        crowns_count(&game.crowns, hidden.x, hidden.y, hidden.z, item_types_of(ITEM_APPLES)), 2);
     game_shutdown(&game);
 }
 

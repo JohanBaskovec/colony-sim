@@ -913,18 +913,19 @@ static void test_fibres_stand_in_for_grass(void)
     const ConstructionSite *bed_site = construction_get(&constructions, bed);
     ItemTypeMask wall_grass = construction_material_types(wall_site, 1);
     ItemTypeMask bed_grass = construction_material_types(bed_site, 0);
-    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_GRASS));
-    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_REEDS));
-    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_HEATHER));
-    CHECK(wall_grass & ITEM_TYPE_BIT(ITEM_BRACKEN));
-    CHECK(!(wall_grass & ITEM_TYPE_BIT(ITEM_MOSS))); /* No wall of moss. */
-    CHECK(bed_grass & ITEM_TYPE_BIT(ITEM_MOSS));
-    CHECK(!(wall_grass & ITEM_TYPE_BIT(ITEM_WOOD)));
-    CHECK_EQ_UINT(construction_material_types(wall_site, 0), ITEM_TYPE_BIT(ITEM_BRANCHES));
+    CHECK(item_types_has(wall_grass, ITEM_GRASS));
+    CHECK(item_types_has(wall_grass, ITEM_REEDS));
+    CHECK(item_types_has(wall_grass, ITEM_HEATHER));
+    CHECK(item_types_has(wall_grass, ITEM_BRACKEN));
+    CHECK(!(item_types_has(wall_grass, ITEM_MOSS))); /* No wall of moss. */
+    CHECK(item_types_has(bed_grass, ITEM_MOSS));
+    CHECK(!(item_types_has(wall_grass, ITEM_WOOD)));
+    CHECK(
+        item_types_equal(construction_material_types(wall_site, 0), item_types_of(ITEM_BRANCHES)));
 
     CHECK_EQ_INT(construction_deliver(&constructions, wall, item_stack_pristine(ITEM_REEDS, 10)),
                  10);
-    CHECK_EQ_UINT(construction_material_types(wall_site, 1), ITEM_TYPE_BIT(ITEM_REEDS));
+    CHECK(item_types_equal(construction_material_types(wall_site, 1), item_types_of(ITEM_REEDS)));
     CHECK_EQ_INT(construction_deliver(&constructions, wall, item_stack_pristine(ITEM_GRASS, 4)),
                  0); /* Not mixed with the reeds in. */
     CHECK_EQ_INT(construction_deliver(&constructions, wall, item_stack_pristine(ITEM_REEDS, 20)),

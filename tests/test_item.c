@@ -85,21 +85,68 @@ static void test_stack_limits_follow_bulk(void)
 static void test_categories(void)
 {
     ItemTypeMask all = item_types_all();
-    ItemTypeMask covered = 0;
+    ItemTypeMask covered = item_types_none();
     for (int category = 0; category < ITEM_CATEGORY_COUNT; category++) {
         CHECK(i18n_is_valid_key(item_category_name_key((ItemCategory)category)));
         ItemTypeMask mask = item_types_in_category((ItemCategory)category);
-        CHECK(mask != 0);
-        CHECK((covered & mask) == 0); /* Each type belongs to one category. */
-        covered |= mask;
+        CHECK(item_types_any(mask));
+        CHECK(!item_types_meet(covered, mask)); /* Each type belongs to one category. */
+        covered = item_types_union(covered, mask);
     }
-    CHECK_EQ_UINT(covered, all);
-    CHECK(!(all & ITEM_TYPE_BIT(ITEM_NONE)));
-    CHECK(item_types_in_category(ITEM_CATEGORY_FOOD) & ITEM_TYPE_BIT(ITEM_BLACKBERRIES));
-    CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_WOOD));
-    CHECK(item_types_in_category(ITEM_CATEGORY_RESOURCES) & ITEM_TYPE_BIT(ITEM_STONE_BLOCK));
+    CHECK(item_types_equal(covered, all));
+    CHECK(!(item_types_has(all, ITEM_NONE)));
+    CHECK(item_types_has(item_types_in_category(ITEM_CATEGORY_FOOD), ITEM_BLACKBERRIES));
+    CHECK(item_types_has(item_types_in_category(ITEM_CATEGORY_RESOURCES), ITEM_WOOD));
+    CHECK(item_types_has(item_types_in_category(ITEM_CATEGORY_RESOURCES), ITEM_STONE_BLOCK));
     CHECK(item_category_name_key(ITEM_CATEGORY_COUNT) == NULL);
-    CHECK_EQ_UINT(item_types_in_category(ITEM_CATEGORY_COUNT), 0);
+    CHECK(item_types_equal(item_types_in_category(ITEM_CATEGORY_COUNT), item_types_none()));
+}
+
+/* Sets of item types (as many words as the types take): built, combined,
+ * compared, saved, whatever the types' number. */
+static void test_type_sets(void)
+{
+    CHECK_EQ_INT((int)ITEM_TYPE_WORDS, (ITEM_TYPE_COUNT + 63) / 64);
+    ItemType last = (ItemType)(ITEM_TYPE_COUNT - 1);
+    ItemTypeMask none = item_types_none();
+    CHECK(!item_types_any(none));
+    CHECK(!item_types_any(item_types_of(ITEM_NONE))); /* Never a type of its own. */
+    CHECK(!item_types_any(item_types_of(ITEM_TYPE_COUNT)));
+    ItemTypeMask some = ITEM_TYPES(ITEM_FLINT, ITEM_WOOD, last);
+    CHECK_EQ_INT(item_types_count(some), 3);
+    CHECK(item_types_has(some, ITEM_FLINT) && item_types_has(some, last));
+    CHECK(!item_types_has(some, ITEM_COBBLE));
+    CHECK(!item_types_has(some, ITEM_TYPE_COUNT));
+    ItemTypeMask other = item_types_with(item_types_of(ITEM_COBBLE), ITEM_WOOD);
+    CHECK(item_types_equal(item_types_common(some, other), item_types_of(ITEM_WOOD)));
+    CHECK(item_types_equal(item_types_union(some, other),
+                           ITEM_TYPES(ITEM_FLINT, ITEM_WOOD, ITEM_COBBLE, last)));
+    CHECK(item_types_equal(item_types_minus(some, other), ITEM_TYPES(ITEM_FLINT, last)));
+    CHECK(item_types_meet(some, other));
+    CHECK(!item_types_meet(item_types_minus(some, other), other));
+    item_types_remove(&some, last);
+    item_types_add(&some, ITEM_NONE); /* Ignored. */
+    CHECK(item_types_equal(some, ITEM_TYPES(ITEM_FLINT, ITEM_WOOD)));
+    CHECK_EQ_INT(item_types_count(item_types_all()), ITEM_TYPE_COUNT - 1);
+
+    /* Saved and read back as it was; the hash of the first word alone. */
+    ItemTypeMask saved = ITEM_TYPES(ITEM_COBBLE, last), read = item_types_none();
+    Serializer writer;
+    ser_writer_init(&writer);
+    item_types_serialize(&writer, &saved);
+    size_t size = 0;
+    uint8_t *data = ser_release(&writer, &size);
+    REQUIRE(data != NULL);
+    CHECK_EQ_INT((int)size, (int)(ITEM_TYPE_WORDS * sizeof(uint64_t)));
+    Serializer reader;
+    ser_reader_init(&reader, data, size);
+    item_types_serialize(&reader, &read);
+    CHECK(ser_ok(&reader));
+    CHECK(item_types_equal(read, saved));
+    ser_free(&reader);
+    free(data);
+    ItemTypeMask first = ITEM_TYPES(ITEM_COBBLE, ITEM_FLINT);
+    CHECK(item_types_hash_more(first, 12345) == 12345);
 }
 
 static void test_additions_counter(void)
@@ -343,9 +390,9 @@ static void test_soonest_rotting(void)
     items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_MUSHROOMS, 9));
     items_add(&items, 2, 2, 0, item_stack_pristine(ITEM_WILD_CARROTS, 5));
     CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, item_types_food(), NULL), ITEM_MUSHROOMS);
-    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_WILD_CARROTS), &hours),
+    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, item_types_of(ITEM_WILD_CARROTS), &hours),
                  ITEM_WILD_CARROTS);
-    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_HAZELNUTS), &hours),
+    CHECK_EQ_INT(items_soonest_rotting(&items, 2, 2, 0, item_types_of(ITEM_HAZELNUTS), &hours),
                  ITEM_NONE); /* None there. */
     CHECK_EQ_INT(items_soonest_rotting(&items, -1, 2, 0, item_types_food(), &hours), ITEM_NONE);
     items_free(&items);
@@ -558,7 +605,7 @@ static void test_types_share_a_tile(void)
     Items items;
     REQUIRE(map_init(&map, 16, 16, 1));
     REQUIRE(items_init(&items, 16, 16, 1));
-    ItemTypeMask wood = ITEM_TYPE_BIT(ITEM_WOOD), branches = ITEM_TYPE_BIT(ITEM_BRANCHES);
+    ItemTypeMask wood = item_types_of(ITEM_WOOD), branches = item_types_of(ITEM_BRANCHES);
     items_add(&items, 8, 8, 0, item_stack_make(ITEM_WOOD, 1, TEST_QUALITY_SUPERB, 60));
     CHECK(!items_mixed(&items, 8, 8, 0));
     ItemStack crude = item_stack_make(ITEM_BRANCHES, 4, TEST_QUALITY_CRUDE, 10);
@@ -572,8 +619,9 @@ static void test_types_share_a_tile(void)
     CHECK_EQ_INT(stack.type, ITEM_WOOD);
     CHECK_EQ_INT(stack.count, 1);
     CHECK_EQ_INT(stack.quality, TEST_QUALITY_SUPERB);
-    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, wood | branches).type, ITEM_BRANCHES);
-    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, ITEM_TYPE_BIT(ITEM_FLINT)).type, ITEM_NONE);
+    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, item_types_union(wood, branches)).type,
+                 ITEM_BRANCHES);
+    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, item_types_of(ITEM_FLINT)).type, ITEM_NONE);
     CHECK_EQ_INT(items_get_group(&items, 8, 8, 0, item_stack_pristine(ITEM_WOOD, 1)).count, 1);
     ItemStack groups[4];
     REQUIRE(items_groups(&items, 8, 8, 0, groups, 4) == 2);
@@ -593,7 +641,7 @@ static void test_types_share_a_tile(void)
     CHECK_EQ_INT(items_add(&items, 8, 8, 0, item_stack_pristine(ITEM_STONE_BLOCK, 100)), 44);
     CHECK_EQ_INT(items_room(&items, 8, 8, 0, item_stack_pristine(ITEM_BLACKBERRIES, 1)), 0);
     CHECK_EQ_INT(items_drop(&items, &map, 8, 8, 0, item_stack_pristine(ITEM_BLACKBERRIES, 2)), 2);
-    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, ITEM_TYPE_BIT(ITEM_BLACKBERRIES)).count, 0);
+    CHECK_EQ_INT(items_get_of(&items, 8, 8, 0, item_types_of(ITEM_BLACKBERRIES)).count, 0);
 
     /* Taking and picking up by type. */
     CHECK_EQ_INT(items_remove_of(&items, 8, 8, 0, wood, 1), 1);
@@ -629,7 +677,7 @@ static void test_check_finds_inconsistencies(void)
     REQUIRE(items_add_natural(&items, 3, 3, 0, ITEM_TWIGS, 3) == 3);
     items_set_forbidden(&items, 5, 5, 1, true);
     ItemStack load = {.type = ITEM_NONE};
-    REQUIRE(items_pick_up_of(&items, 3, 3, 0, ITEM_TYPE_BIT(ITEM_WOOD), 3, &load) == 3);
+    REQUIRE(items_pick_up_of(&items, 3, 3, 0, item_types_of(ITEM_WOOD), 3, &load) == 3);
     ItemsCheck check = items_check(&items);
     CHECK_EQ_INT(check.problems, 0);
     CHECK(check.first == NULL);
@@ -690,8 +738,8 @@ static void test_tile_moved_and_cleared(void)
     CHECK_EQ_INT(items_move_all(&items, &map, 4, 4, 0, 10, 10, 0, false), 10);
     CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 0);
     CHECK_EQ_INT(items_count_type(&items, 10, 10, 0, ITEM_TWIGS), 2);
-    CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, ITEM_TYPE_BIT(ITEM_WOOD)).quality, 80);
-    CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, ITEM_TYPE_BIT(ITEM_FLINT)).count, 5);
+    CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, item_types_of(ITEM_WOOD)).quality, 80);
+    CHECK_EQ_INT(items_get_of(&items, 10, 10, 0, item_types_of(ITEM_FLINT)).count, 5);
     /* No room around: what does not fit stays when kept. */
     for (int y = 0; y < 16; y++) {
         for (int x = 0; x < 16; x++) {
@@ -702,7 +750,7 @@ static void test_tile_moved_and_cleared(void)
     }
     items_add(&items, 4, 4, 0, item_stack_pristine(ITEM_WOOD, 2));
     CHECK_EQ_INT(items_move_all(&items, &map, 4, 4, 0, 5, 4, 0, true), 0);
-    CHECK_EQ_INT(items_get_of(&items, 4, 4, 0, ITEM_TYPE_BIT(ITEM_WOOD)).count, 2);
+    CHECK_EQ_INT(items_get_of(&items, 4, 4, 0, item_types_of(ITEM_WOOD)).count, 2);
     items_clear(&items, 4, 4, 0);
     CHECK_EQ_INT(items_get(&items, 4, 4, 0).type, ITEM_NONE);
     CHECK_EQ_INT(items_count_at(&items, 4, 4, 0, ITEM_NONE), 0);
@@ -748,12 +796,12 @@ static void test_rot_definitions(void)
     CHECK(item_def(ITEM_BLACKBERRIES)->rot_days > item_def(ITEM_NETTLES)->rot_days);
     /* Bodies rot too; a big one lies alone on its tile. */
     ItemTypeMask bodies = item_types_in_category(ITEM_CATEGORY_BODIES);
-    CHECK(bodies & ITEM_TYPE_BIT(ITEM_SETTLER_BODY));
-    CHECK(bodies & ITEM_TYPE_BIT(ITEM_HARE_CARCASS));
+    CHECK(item_types_has(bodies, ITEM_SETTLER_BODY));
+    CHECK(item_types_has(bodies, ITEM_HARE_CARCASS));
     CHECK(item_rots(ITEM_SETTLER_BODY) && !item_is_food(ITEM_SETTLER_BODY));
     CHECK_EQ_INT(item_stack_limit(ITEM_SETTLER_BODY), 1);
     CHECK(item_stack_limit(ITEM_HARE_CARCASS) > 1);
-    CHECK(item_types_all() & ITEM_TYPE_BIT(ITEM_TYPE_COUNT - 1));
+    CHECK(item_types_has(item_types_all(), ITEM_TYPE_COUNT - 1));
     /* Roasting gives more food. */
     CHECK(item_def(ITEM_ROASTED_RHIZOMES)->nutrition > item_def(ITEM_CATTAIL_RHIZOMES)->nutrition);
     CHECK(item_def(ITEM_ROASTED_CARROTS)->nutrition > item_def(ITEM_WILD_CARROTS)->nutrition);
@@ -1032,7 +1080,8 @@ static void test_twigs_get_wet_in_the_rain_and_dry_again(void)
     CHECK_EQ_INT(items_count_chosen(&items, 1, 1, 0, ITEM_TWIGS, ITEM_CHOICE_DRY), 0);
     ItemStack load = {.type = ITEM_NONE};
     CHECK_EQ_INT(items_pick_up_chosen(&items, 1, 1, 0, ITEM_TWIGS, 1, ITEM_CHOICE_DRY, &load), 0);
-    CHECK_EQ_INT(items_chosen_type(&items, 1, 1, 0, ITEM_TINDER_TYPES | ITEM_TYPE_BIT(ITEM_TWIGS),
+    CHECK_EQ_INT(items_chosen_type(&items, 1, 1, 0,
+                                   item_types_with(item_types_tinder(), ITEM_TWIGS),
                                    ITEM_CHOICE_DRY, 1),
                  ITEM_NONE);
     CHECK_EQ_INT(items_get(&items, 1, 1, 0).count, 3); /* Still twigs. */
@@ -1455,14 +1504,14 @@ static void test_items_forbidden_one_by_one(void)
     ItemStack allowed = items_get_allowed(&items, 2, 2, 0);
     CHECK_EQ_INT(allowed.count, 3);
     CHECK(!allowed.forbidden);
-    CHECK_EQ_INT(items_get_allowed_of(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_COBBLE)).count, 3);
+    CHECK_EQ_INT(items_get_allowed_of(&items, 2, 2, 0, item_types_of(ITEM_COBBLE)).count, 3);
     CHECK_EQ_INT(items_count_chosen(&items, 2, 2, 0, ITEM_COBBLE, ITEM_CHOICE_ANY), 3);
     CHECK_EQ_INT(items_check(&items).problems, 0);
     /* Settlers take only the allowed ones. */
     ItemStack load = {.type = ITEM_NONE};
-    CHECK_EQ_INT(items_pick_up_of(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_COBBLE), 10, &load), 3);
+    CHECK_EQ_INT(items_pick_up_of(&items, 2, 2, 0, item_types_of(ITEM_COBBLE), 10, &load), 3);
     CHECK(!load.forbidden);
-    CHECK_EQ_INT(items_pick_up_of(&items, 2, 2, 0, ITEM_TYPE_BIT(ITEM_COBBLE), 10, &load), 0);
+    CHECK_EQ_INT(items_pick_up_of(&items, 2, 2, 0, item_types_of(ITEM_COBBLE), 10, &load), 0);
     CHECK(items_forbidden(&items, 2, 2, 0)); /* Only the forbidden one is left. */
     CHECK_EQ_INT(items_get_allowed(&items, 2, 2, 0).type, ITEM_NONE);
     /* Nothing is added beside forbidden items when spread; put down, the
@@ -1721,6 +1770,7 @@ int main(void)
     RUN_TEST(test_shapes);
     RUN_TEST(test_stack_limits_follow_bulk);
     RUN_TEST(test_categories);
+    RUN_TEST(test_type_sets);
     RUN_TEST(test_additions_counter);
     RUN_TEST(test_add_and_remove);
     RUN_TEST(test_stacks_per_level);

@@ -394,9 +394,10 @@ rods and the pack basket; then the net bag.
      containers have one (C4). Cordage and Basketry are rolled from a stream of
      their own (`GAME_LATER_KNOWLEDGE_SEED`), so that adding them changed nothing
      else in a game.
-   - *Found on the way*: `ItemTypeMask` is 64 bits and the game has 50 item types
-     now; the items of C2–C7 (about 14) bring it to the limit: widen the mask
-     (two words, or a type list) before C5.
+   - *Found on the way*: `ItemTypeMask` was 64 bits and the game had 50 item types;
+     the items of C2–C7 (about 14) would have brought it to the limit. *Done*: a set
+     takes as many 64-bit words as the types need (`ITEM_TYPE_WORDS`), static tables
+     list types (recipe tools, counted resources), so the number of types has no limit.
 2. **C2 Nettle cord**: nettle stems (a second product, cut whole, its season),
    drying (existing), retting (progress, dew, shallow water, over retting),
    the wooden scraper, nettle fibre, nettle cord; raw quality from the

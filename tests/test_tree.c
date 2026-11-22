@@ -61,7 +61,7 @@ static int count_on_line(const Items *items, int x, int y, int z, int dx, int dy
 {
     int count = 0;
     for (int i = from; i <= to; i++) {
-        count += items_get_of(items, x + dx * i, y + dy * i, z, ITEM_TYPE_BIT(type)).count;
+        count += items_get_of(items, x + dx * i, y + dy * i, z, item_types_of(type)).count;
     }
     return count;
 }
@@ -1052,7 +1052,7 @@ static bool init_flat_game(Game *game)
         map->terrain[i] = ground ? TERRAIN_SOIL : TERRAIN_OPEN;
         map->rock[i] = ROCK_NONE;
         memset(&map->plants[i], 0, sizeof(map->plants[i]));
-        map_clear_litter_at(map, i, ITEM_TYPE_BIT(ITEM_BRANCHES) | ITEM_TYPE_BIT(ITEM_TWIGS));
+        map_clear_litter_at(map, i, ITEM_TYPES(ITEM_BRANCHES, ITEM_TWIGS));
     }
     map_topology_changed(map);
     return true;
@@ -1178,13 +1178,13 @@ static void test_fell(void)
     CHECK(map_is_open(&map, 11, 2, 1));
     /* The trunk on its foot and the first tiles, the crown at the far end. */
     CHECK_EQ_INT(count_on_line(&items, 10, 2, 0, 0, 1, 0, 6, ITEM_WOOD), 24);
-    CHECK_EQ_INT(items_get_of(&items, 10, 2, 0, ITEM_TYPE_BIT(ITEM_WOOD)).count, 4);
+    CHECK_EQ_INT(items_get_of(&items, 10, 2, 0, item_types_of(ITEM_WOOD)).count, 4);
     CHECK_EQ_INT(count_on_line(&items, 10, 2, 0, 0, 1, 7, 8, ITEM_BRANCHES), branches);
     /* The twigs with the branches, or beside them when the tiles are full. */
     int near_crown = 0;
     for (int y = 8; y <= 12; y++) {
         for (int x = 9; x <= 11; x++) {
-            near_crown += items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_TWIGS)).count;
+            near_crown += items_get_of(&items, x, y, 0, item_types_of(ITEM_TWIGS)).count;
         }
     }
     CHECK_EQ_INT(near_crown, twigs);
@@ -1198,7 +1198,7 @@ static void test_fell(void)
     fall = tree_fell(&map, &items, 3, 3, 0, item_stack_pristine(ITEM_WOOD, 2));
     CHECK_EQ_INT(fall.length, 0);
     CHECK_EQ_INT(map.plants[map_index(&map, 3, 3, 0)].type, PLANT_NONE);
-    CHECK_EQ_INT(items_get_of(&items, 3, 3, 0, ITEM_TYPE_BIT(ITEM_WOOD)).count, 2);
+    CHECK_EQ_INT(items_get_of(&items, 3, 3, 0, item_types_of(ITEM_WOOD)).count, 2);
     items_free(&items);
     map_free(&map);
 }
@@ -1526,7 +1526,7 @@ static void test_shedding_hangs_in_the_crown(void)
     for (int z = 0; z < DEPTH; z++) {
         for (int y = 0; y < SIZE; y++) {
             for (int x = 0; x < SIZE; x++) {
-                int apples = crowns_count(&crowns, x, y, z, ITEM_TYPE_BIT(ITEM_APPLES));
+                int apples = crowns_count(&crowns, x, y, z, item_types_of(ITEM_APPLES));
                 int dx = x > 8 ? x - 8 : 8 - x, dy = y > 8 ? y - 8 : 8 - y;
                 int distance = dx > dy ? dx : dy;
                 near += distance <= 1 ? apples : 0;
@@ -1562,8 +1562,8 @@ static void test_wood_keeps_the_species(void)
     int logs = 0, branches = 0;
     for (int y = 0; y < SIZE; y++) {
         for (int x = 0; x < SIZE; x++) {
-            ItemStack wood = items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_WOOD));
-            ItemStack branch = items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_BRANCHES));
+            ItemStack wood = items_get_of(&items, x, y, 0, item_types_of(ITEM_WOOD));
+            ItemStack branch = items_get_of(&items, x, y, 0, item_types_of(ITEM_BRANCHES));
             CHECK(wood.count == 0 || wood.woods == wood_bit(PLANT_BEECH));
             CHECK(branch.count == 0 || branch.woods == wood_bit(PLANT_BEECH));
             logs += wood.count;
@@ -1592,7 +1592,7 @@ static void test_wood_keeps_the_species(void)
     int shed = 0;
     for (int y = 0; y < SIZE; y++) {
         for (int x = 0; x < SIZE; x++) {
-            ItemStack branch = items_get_of(&litter, x, y, 0, ITEM_TYPE_BIT(ITEM_BRANCHES));
+            ItemStack branch = items_get_of(&litter, x, y, 0, item_types_of(ITEM_BRANCHES));
             if (branch.count > 0 && (x != 15 || y != 15)) {
                 CHECK_EQ_INT(branch.woods, wood_bit(PLANT_ASH));
                 shed += branch.count;
@@ -1672,7 +1672,7 @@ static void test_gathering_on_trees(void)
     int green = 0; /* Green wood: fresh, not seasoned. */
     for (int y = 0; y < SIZE; y++) {
         for (int x = 0; x < SIZE; x++) {
-            ItemStack twigs = items_get_of(&items, x, y, 0, ITEM_TYPE_BIT(ITEM_TWIGS));
+            ItemStack twigs = items_get_of(&items, x, y, 0, item_types_of(ITEM_TWIGS));
             if (twigs.type == ITEM_TWIGS) {
                 CHECK_NEAR(item_stack_moisture(twigs), item_fresh_moisture(ITEM_TWIGS), 1e-3);
                 green += twigs.count;
@@ -1709,7 +1709,7 @@ static void test_hauler_climbs_for_nuts_on_the_foliage(void)
         int pile = stockpile_create(&game.stockpiles, map, 8, 16, 8, 16, 0);
         REQUIRE(pile != STOCKPILE_NONE);
         stockpile_set_allowed(&game.stockpiles, pile,
-                              wanted ? ITEM_TYPE_BIT(ITEM_HAZELNUTS) : ITEM_TYPE_BIT(ITEM_WOOD));
+                              wanted ? item_types_of(ITEM_HAZELNUTS) : item_types_of(ITEM_WOOD));
         EntityId id = game_spawn_colonist(&game, 10, 16, 0);
         Colonist *colonist = game_colonist(&game, id);
         REQUIRE(colonist != NULL);
@@ -1812,7 +1812,7 @@ static void test_settlers_pick_in_the_crowns(void)
         for (int z = 1; z < map->depth; z++) {
             for (int y = 10; y < 23; y++) {
                 for (int x = 10; x < 23; x++) {
-                    int apples = crowns_count(&game.crowns, x, y, z, ITEM_TYPE_BIT(ITEM_APPLES));
+                    int apples = crowns_count(&game.crowns, x, y, z, item_types_of(ITEM_APPLES));
                     if (over_the_ground(map, x, y, z)) {
                         low_left += apples;
                     } else {
