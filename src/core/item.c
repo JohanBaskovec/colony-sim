@@ -250,6 +250,20 @@ static const ItemDef ITEM_DEFS[ITEM_TYPE_COUNT] = {
     [ITEM_FLINT_BORER] = {DEF("flint_borer", N_("item.flint_borer"), ITEM_CATEGORY_TOOLS, 0.02f,
                               0.1f, 0.0f, 20, true, true),
                           .length_cm = 5, .form = ITEM_FORM_RIGID},
+    /* Cut whole after flowering; dried, retted in the dew or in water, then
+     * broken and scraped for their fibre (docs/CONTAINERS.md §4.1). */
+    [ITEM_NETTLE_STEMS] = {DEF("nettle_stems", N_("item.nettle_stems"), ITEM_CATEGORY_RESOURCES,
+                               0.6f, 6.0f, 0.0f, 20, true, true),
+                           .length_cm = 120, .form = ITEM_FORM_BUNDLE,
+                           WATER(0.75f, 0.85f, 1.0f, 48.0f, 0.2f)},
+    [ITEM_NETTLE_FIBRE] = {DEF("nettle_fibre", N_("item.nettle_fibre"), ITEM_CATEGORY_RESOURCES,
+                               0.02f, 0.5f, 0.0f, 20, true, true),
+                           .length_cm = 60, .form = ITEM_FORM_LIMP,
+                           WATER(0.12f, 0.8f, 1.0f, 24.0f, 0.25f)},
+    [ITEM_NETTLE_CORD] = {DEF("nettle_cord", N_("item.nettle_cord"), ITEM_CATEGORY_RESOURCES, 0.03f,
+                              0.4f, 0.0f, 40, true, true),
+                          .length_cm = 15, .form = ITEM_FORM_LIMP, /* A hank wound up. */
+                          WATER(0.12f, 0.6f, 1.0f, 24.0f, 0.25f)},
     /* Holds about 2 litres; a container to carry in from step C4 of
      * docs/CONTAINERS.md (a tool until then). */
     [ITEM_BARK_TRAY] = {DEF("bark_tray", N_("item.bark_tray"), ITEM_CATEGORY_TOOLS, 0.1f, 5.0f,

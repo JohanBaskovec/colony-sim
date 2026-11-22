@@ -96,6 +96,9 @@ typedef enum ItemType {
     ITEM_WOODEN_SCRAPER, /* A dull wooden edge that cleans fibre without cutting it. */
     ITEM_FLINT_BORER,    /* A flake retouched to a point, to pierce bark. */
     ITEM_BARK_TRAY,      /* A sheet of bark folded into a tray, pinned with twigs. */
+    ITEM_NETTLE_STEMS,   /* A bundle of about 20 stems cut whole, to dry and ret. */
+    ITEM_NETTLE_FIBRE,   /* A handful of fibre scraped from the stems (about 20 g). */
+    ITEM_NETTLE_CORD,    /* A hank of two-ply cord, about 5 m. */
     /* Bodies (docs/HEALTH.md §8): a settler's, an animal's carcass by species. */
     ITEM_SETTLER_BODY,
     ITEM_ROE_DEER_CARCASS,

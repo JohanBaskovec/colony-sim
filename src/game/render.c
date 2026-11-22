@@ -186,6 +186,9 @@ static const SDL_Color PATH_COLOR = {255, 255, 255, 140};
 static const SDL_Color HARDENED_SPEAR_COLOR = {128, 88, 52, 255};
 static const SDL_Color BIRCH_BARK_COLOR = {232, 226, 212, 255}; /* Its white outer side. */
 static const SDL_Color BIRCH_BARK_INNER_COLOR = {196, 132, 84, 255};
+static const SDL_Color NETTLE_STEM_COLOR = {118, 132, 70, 255};   /* Stems drying, grey green. */
+static const SDL_Color NETTLE_FIBRE_COLOR = {214, 206, 170, 255}; /* Pale, silky. */
+static const SDL_Color NETTLE_CORD_COLOR = {176, 158, 112, 255};
 static const SDL_Color PIT_COLOR = {46, 38, 34, 255};
 static const SDL_Color ASH_COLOR = {98, 94, 90, 255};
 static const SDL_Color FLAME_COLOR = {240, 118, 34, 255};
@@ -1667,6 +1670,41 @@ static void render_item_stack(SDL_Renderer *renderer, const SDL_FRect *tile, Ite
                 batch_quad(renderer, (SDL_Color){60, 56, 52, 255}, &mark);
             }
         }
+        break;
+    }
+    case ITEM_NETTLE_STEMS: {
+        /* A long bundle of thin stems lying across the tile, tied in the middle. */
+        float stem = SDL_max(1.0f, floorf(h * 0.05f));
+        for (int i = 0; i < 4; i++) {
+            float y = tile->y + floorf(h * (0.42f + 0.07f * (float)i));
+            batch_bar(renderer, shade(NETTLE_STEM_COLOR, (i % 2) * 14), tile->x + floorf(w * 0.1f),
+                      y + (float)(i % 2), tile->x + floorf(w * 0.9f), y, stem);
+        }
+        SDL_FRect tie = {tile->x + floorf(w * 0.47f), tile->y + floorf(h * 0.38f),
+                         SDL_max(1.0f, floorf(w * 0.06f)), floorf(h * 0.34f)};
+        batch_quad(renderer, TWIG_COLOR, &tie);
+        break;
+    }
+    case ITEM_NETTLE_FIBRE: {
+        /* A loose twist of pale fibre, its ends fraying. */
+        float strand = SDL_max(1.0f, floorf(h * 0.06f));
+        for (int i = 0; i < 3; i++) {
+            float y = tile->y + floorf(h * (0.46f + 0.06f * (float)i));
+            batch_bar(renderer, shade(NETTLE_FIBRE_COLOR, -i * 10), tile->x + floorf(w * 0.2f),
+                      y - (float)i, tile->x + floorf(w * 0.8f), y + (float)i, strand);
+        }
+        break;
+    }
+    case ITEM_NETTLE_CORD: {
+        /* A hank: the cord wound in a ring, its end hanging. */
+        float ring = SDL_max(1.0f, floorf(w * 0.07f));
+        float cx = tile->x + w * 0.5f, cy = tile->y + h * 0.55f, r = w * 0.2f;
+        for (int i = 0; i < 8; i++) {
+            float a0 = (float)i * 0.785398f, a1 = (float)(i + 1) * 0.785398f;
+            batch_bar(renderer, shade(NETTLE_CORD_COLOR, (i % 2) * 12), cx + r * cosf(a0),
+                      cy + r * 0.6f * sinf(a0), cx + r * cosf(a1), cy + r * 0.6f * sinf(a1), ring);
+        }
+        batch_bar(renderer, NETTLE_CORD_COLOR, cx + r, cy, cx + r * 1.5f, cy + r, ring);
         break;
     }
     case ITEM_BARK_TRAY: {
